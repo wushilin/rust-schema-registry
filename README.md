@@ -11,6 +11,47 @@ cargo build --release
 ./target/release/schema-registry hash-password 's3cret'   # bcrypt for the config file
 ```
 
+## Why this exists
+
+Confluent's Schema Registry keeps its schemas in a Kafka topic, so running a
+registry means running and operating Kafka. For what is, in the end, a small
+validated key-value store, that is a lot of machinery: two JVMs and about
+1.1 GB of memory in the measurement below, plus a broker to keep alive,
+before a single schema is registered. That weight is felt most in the places
+a registry is least interesting: CI pipelines, development laptops, edge and
+single-tenant deployments, and small clusters that need a registry but do not
+otherwise need Kafka's durability story for it.
+
+It also sits in a hot path. Every producer and consumer resolves schemas at
+startup and on cache misses, and a serializer that cannot reach the registry
+does not serialize. Latency and restart time are worth something here.
+
+This server is one binary with RocksDB underneath: no JVM, no Kafka, no
+cluster. On the same host, against Confluent 7.9.0 with single-node Kafka:
+
+| | Confluent | this server |
+|---|---:|---:|
+| reads (by id) | 29,237 req/s, 6.85 ms p99 | **131,724 req/s, 0.99 ms p99** |
+| repeat registrations | 12,191 req/s | **101,593 req/s** |
+| new registrations (fsync per write) | 3,017 req/s | **7,127 req/s** |
+| memory, 20k subjects | 1.1 GB (two JVMs) | **283 MB** |
+| restart with 20k subjects | Kafka log replay | **317 ms, 171 MB** |
+
+Full method and the rest of the workloads are in [Benchmark](#benchmark).
+
+The trade is deliberate: a single node, so no replication and no failover.
+Schemas live in RocksDB on local disk, fsynced per write by default, and the
+usual answer to durability is a file backup rather than a quorum.
+
+None of that matters if clients have to change, so compatibility is treated
+as the hard requirement: the REST behaviour is recorded from a real Confluent
+7.9.0 and replayed as a test, and Confluent's own Java and Python clients,
+the `confluent` CLI and its console producers and consumers all run against
+this server unchanged. Where behaviour deliberately differs, it is
+[listed](#deliberate-differences-from-confluent). Moving an existing registry
+over is `schema-registry migrate`, which copies subjects, ids, versions, soft
+deletes, configs and modes out of a Confluent.
+
 ## What's supported
 
 | Area | Endpoints |
@@ -350,6 +391,8 @@ per write; Kafka does not fsync per write).
 
 Memory after the same run (20,000 subjects registered): this server 283 MB,
 Confluent 1.1 GB across its two JVMs (Schema Registry 475 MB, Kafka 663 MB).
+Restarting on that data reads the metadata snapshot in 317 ms and settles at
+171 MB.
 
 Reads were about 20% faster before the REST behavior was ported endpoint by
 endpoint against a live Confluent; matching it exactly costs a little work per

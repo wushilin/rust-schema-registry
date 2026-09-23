@@ -1,0 +1,43 @@
+# rust-schema-registry configuration. Every key is optional.
+
+listen = "0.0.0.0:8081"
+data_dir = "./data"
+
+# Used when no global/context/subject compatibility is configured.
+default_compatibility = "BACKWARD"
+
+# Reported by /v1/metadata/id and used as the AUTO exporter context name.
+# Generated (and persisted) on first start when unset.
+# cluster_id = "sr-prod-1"
+
+# Normalize schemas so logically equal spellings share an id (Confluent's default is false).
+normalize = true
+
+# fsync the WAL on every write. Off = faster writes, may lose the last few on power loss.
+sync_writes = true
+
+# Max entries per in-memory schema cache (bodies, parsed stored schemas, parsed
+# request schemas). All ids/subjects/versions/config are always in memory.
+cache_max_entries = 20000
+
+max_body_bytes = 16777216
+exporter_poll_seconds = 10
+
+[auth]
+enabled = false
+realm = "SchemaRegistry"
+
+# [[auth.users]]
+# username = "admin"
+# password = "$2b$12$..."        # schema-registry hash-password '...'
+# roles = ["admin"]
+#
+# [[auth.users]]
+# username = "ci"
+# password = "$2b$12$..."
+# roles = ["write"]
+#
+# [[auth.users]]
+# username = "app"
+# password = "$2b$12$..."
+# roles = ["readonly"]

@@ -1,0 +1,12 @@
+<project xmlns="http://maven.apache.org/POM/4.0.0">
+  <modelVersion>4.0.0</modelVersion>
+  <groupId>t</groupId><artifactId>srtest</artifactId><version>1</version>
+  <properties><maven.compiler.release>17</maven.compiler.release><cp.version>7.9.0</cp.version></properties>
+  <repositories><repository><id>confluent</id><url>https://packages.confluent.io/maven/</url></repository></repositories>
+  <dependencies>
+    <dependency><groupId>io.confluent</groupId><artifactId>kafka-avro-serializer</artifactId><version>${cp.version}</version></dependency>
+    <dependency><groupId>io.confluent</groupId><artifactId>kafka-protobuf-serializer</artifactId><version>${cp.version}</version></dependency>
+    <dependency><groupId>io.confluent</groupId><artifactId>kafka-json-schema-serializer</artifactId><version>${cp.version}</version></dependency>
+    <dependency><groupId>org.slf4j</groupId><artifactId>slf4j-nop</artifactId><version>1.7.36</version></dependency>
+  </dependencies>
+</project>

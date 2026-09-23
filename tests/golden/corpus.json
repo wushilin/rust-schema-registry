@@ -1,0 +1,2757 @@
+{
+ "schemas": [
+  {
+   "id": "avro-prim-string",
+   "type": "AVRO",
+   "schema": "\"string\"",
+   "refs": []
+  },
+  {
+   "id": "avro-prim-object",
+   "type": "AVRO",
+   "schema": "{\"type\": \"string\"}",
+   "refs": []
+  },
+  {
+   "id": "avro-prim-spaces",
+   "type": "AVRO",
+   "schema": "  \"long\"  ",
+   "refs": []
+  },
+  {
+   "id": "avro-prim-logical",
+   "type": "AVRO",
+   "schema": "{\"type\": \"int\", \"logicalType\": \"date\"}",
+   "refs": []
+  },
+  {
+   "id": "avro-prim-unknown-logical",
+   "type": "AVRO",
+   "schema": "{\"type\": \"string\", \"logicalType\": \"my-thing\"}",
+   "refs": []
+  },
+  {
+   "id": "avro-record-pretty",
+   "type": "AVRO",
+   "schema": "{\n    \"type\": \"record\",\n    \"name\": \"R\",\n    \"fields\": [\n        {\n            \"name\": \"a\",\n            \"type\": \"int\"\n        }\n    ]\n}",
+   "refs": []
+  },
+  {
+   "id": "avro-record-key-order",
+   "type": "AVRO",
+   "schema": "{\"fields\":[{\"type\":\"int\",\"name\":\"a\"}],\"name\":\"R\",\"type\":\"record\"}",
+   "refs": []
+  },
+  {
+   "id": "avro-record-namespace",
+   "type": "AVRO",
+   "schema": "{\"type\": \"record\", \"name\": \"R\", \"fields\": [{\"name\": \"a\", \"type\": \"int\"}], \"namespace\": \"com.acme\"}",
+   "refs": []
+  },
+  {
+   "id": "avro-record-fullname",
+   "type": "AVRO",
+   "schema": "{\"type\": \"record\", \"name\": \"com.acme.R\", \"fields\": [{\"name\": \"a\", \"type\": \"int\"}]}",
+   "refs": []
+  },
+  {
+   "id": "avro-record-fullname-and-namespace",
+   "type": "AVRO",
+   "schema": "{\"type\": \"record\", \"name\": \"com.acme.R\", \"fields\": [{\"name\": \"a\", \"type\": \"int\"}], \"namespace\": \"org.other\"}",
+   "refs": []
+  },
+  {
+   "id": "avro-nested-inherits-namespace",
+   "type": "AVRO",
+   "schema": "{\"type\": \"record\", \"name\": \"Outer\", \"fields\": [{\"name\": \"inner\", \"type\": {\"type\": \"record\", \"name\": \"Inner\", \"fields\": [{\"name\": \"x\", \"type\": \"int\"}]}}], \"namespace\": \"a.b\"}",
+   "refs": []
+  },
+  {
+   "id": "avro-nested-other-namespace",
+   "type": "AVRO",
+   "schema": "{\"type\": \"record\", \"name\": \"Outer\", \"fields\": [{\"name\": \"inner\", \"type\": {\"type\": \"record\", \"name\": \"Inner\", \"fields\": [{\"name\": \"x\", \"type\": \"int\"}], \"namespace\": \"c.d\"}}], \"namespace\": \"a.b\"}",
+   "refs": []
+  },
+  {
+   "id": "avro-nested-reuse-by-name",
+   "type": "AVRO",
+   "schema": "{\"type\": \"record\", \"name\": \"Outer\", \"fields\": [{\"name\": \"a\", \"type\": {\"type\": \"record\", \"name\": \"Inner\", \"fields\": [{\"name\": \"x\", \"type\": \"int\"}]}}, {\"name\": \"b\", \"type\": \"Inner\"}], \"namespace\": \"n\"}",
+   "refs": []
+  },
+  {
+   "id": "avro-doc-aliases-order",
+   "type": "AVRO",
+   "schema": "{\"type\": \"record\", \"name\": \"R\", \"fields\": [{\"name\": \"a\", \"type\": \"int\", \"doc\": \"field doc\", \"aliases\": [\"old_a\"], \"order\": \"descending\"}], \"doc\": \"record doc\", \"aliases\": [\"OldR\"]}",
+   "refs": []
+  },
+  {
+   "id": "avro-defaults",
+   "type": "AVRO",
+   "schema": "{\"type\": \"record\", \"name\": \"R\", \"fields\": [{\"name\": \"i\", \"type\": \"int\", \"default\": 1}, {\"name\": \"s\", \"type\": \"string\", \"default\": \"x\"}, {\"name\": \"n\", \"type\": [\"null\", \"string\"], \"default\": null}, {\"name\": \"arr\", \"type\": {\"type\": \"array\", \"items\": \"int\"}, \"default\": [1, 2]}, {\"name\": \"m\", \"type\": {\"type\": \"map\", \"values\": \"long\"}, \"default\": {\"k\": 1}}, {\"name\": \"b\", \"type\": \"bytes\", \"default\": \"\\u00ff\"}, {\"name\": \"d\", \"type\": \"double\", \"default\": 1.5}, {\"name\": \"bo\", \"type\": \"boolean\", \"default\": true}]}",
+   "refs": []
+  },
+  {
+   "id": "avro-record-default",
+   "type": "AVRO",
+   "schema": "{\"type\": \"record\", \"name\": \"R\", \"fields\": [{\"name\": \"inner\", \"type\": {\"type\": \"record\", \"name\": \"I\", \"fields\": [{\"name\": \"x\", \"type\": \"int\"}]}, \"default\": {\"x\": 3}}]}",
+   "refs": []
+  },
+  {
+   "id": "avro-custom-props",
+   "type": "AVRO",
+   "schema": "{\"type\": \"record\", \"name\": \"R\", \"fields\": [{\"name\": \"a\", \"type\": \"int\", \"x-prop\": \"v\", \"connect.name\": \"z\"}], \"custom\": {\"k\": [1, 2]}}",
+   "refs": []
+  },
+  {
+   "id": "avro-enum",
+   "type": "AVRO",
+   "schema": "{\"type\": \"enum\", \"name\": \"E\", \"symbols\": [\"A\", \"B\"], \"doc\": \"d\", \"default\": \"A\"}",
+   "refs": []
+  },
+  {
+   "id": "avro-fixed",
+   "type": "AVRO",
+   "schema": "{\"type\": \"fixed\", \"name\": \"F\", \"size\": 16, \"namespace\": \"n\"}",
+   "refs": []
+  },
+  {
+   "id": "avro-array-map",
+   "type": "AVRO",
+   "schema": "{\"type\": \"array\", \"items\": {\"type\": \"map\", \"values\": [\"null\", \"int\"]}}",
+   "refs": []
+  },
+  {
+   "id": "avro-union-top",
+   "type": "AVRO",
+   "schema": "[\"null\", \"string\", {\"type\": \"record\", \"name\": \"R\", \"fields\": [{\"name\": \"a\", \"type\": \"int\"}]}]",
+   "refs": []
+  },
+  {
+   "id": "avro-decimal-bytes",
+   "type": "AVRO",
+   "schema": "{\"type\": \"bytes\", \"logicalType\": \"decimal\", \"precision\": 10, \"scale\": 2}",
+   "refs": []
+  },
+  {
+   "id": "avro-decimal-fixed",
+   "type": "AVRO",
+   "schema": "{\"type\": \"fixed\", \"name\": \"Dec\", \"size\": 8, \"logicalType\": \"decimal\", \"precision\": 18, \"scale\": 4}",
+   "refs": []
+  },
+  {
+   "id": "avro-uuid",
+   "type": "AVRO",
+   "schema": "{\"type\": \"string\", \"logicalType\": \"uuid\"}",
+   "refs": []
+  },
+  {
+   "id": "avro-timestamps",
+   "type": "AVRO",
+   "schema": "{\"type\": \"record\", \"name\": \"T\", \"fields\": [{\"name\": \"a\", \"type\": {\"type\": \"long\", \"logicalType\": \"timestamp-millis\"}}, {\"name\": \"b\", \"type\": {\"type\": \"long\", \"logicalType\": \"local-timestamp-micros\"}}, {\"name\": \"c\", \"type\": {\"type\": \"int\", \"logicalType\": \"time-millis\"}}]}",
+   "refs": []
+  },
+  {
+   "id": "avro-duration",
+   "type": "AVRO",
+   "schema": "{\"type\": \"fixed\", \"name\": \"Dur\", \"size\": 12, \"logicalType\": \"duration\"}",
+   "refs": []
+  },
+  {
+   "id": "avro-recursive",
+   "type": "AVRO",
+   "schema": "{\"type\": \"record\", \"name\": \"Node\", \"fields\": [{\"name\": \"v\", \"type\": \"int\"}, {\"name\": \"next\", \"type\": [\"null\", \"Node\"], \"default\": null}]}",
+   "refs": []
+  },
+  {
+   "id": "avro-unicode",
+   "type": "AVRO",
+   "schema": "{\"type\": \"record\", \"name\": \"R\", \"fields\": [{\"name\": \"a\", \"type\": \"string\", \"doc\": \"caf\\u00e9 \\u2603\"}]}",
+   "refs": []
+  },
+  {
+   "id": "avro-number-formats",
+   "type": "AVRO",
+   "schema": "{\"type\": \"record\", \"name\": \"R\", \"fields\": [{\"name\": \"d\", \"type\": \"double\", \"default\": 1.0}, {\"name\": \"l\", \"type\": \"long\", \"default\": 10000000000}]}",
+   "refs": []
+  },
+  {
+   "id": "avro-bad-json",
+   "type": "AVRO",
+   "schema": "{\"type\":",
+   "refs": []
+  },
+  {
+   "id": "avro-unknown-type",
+   "type": "AVRO",
+   "schema": "\"nosuchtype\"",
+   "refs": []
+  },
+  {
+   "id": "avro-dup-field",
+   "type": "AVRO",
+   "schema": "{\"type\": \"record\", \"name\": \"R\", \"fields\": [{\"name\": \"a\", \"type\": \"int\"}, {\"name\": \"a\", \"type\": \"string\"}]}",
+   "refs": []
+  },
+  {
+   "id": "avro-bad-enum-symbol",
+   "type": "AVRO",
+   "schema": "{\"type\": \"enum\", \"name\": \"E\", \"symbols\": [\"1A\"]}",
+   "refs": []
+  },
+  {
+   "id": "avro-dup-enum-symbol",
+   "type": "AVRO",
+   "schema": "{\"type\": \"enum\", \"name\": \"E\", \"symbols\": [\"A\", \"A\"]}",
+   "refs": []
+  },
+  {
+   "id": "avro-bad-default-int",
+   "type": "AVRO",
+   "schema": "{\"type\": \"record\", \"name\": \"R\", \"fields\": [{\"name\": \"a\", \"type\": \"int\", \"default\": \"x\"}]}",
+   "refs": []
+  },
+  {
+   "id": "avro-bad-default-union",
+   "type": "AVRO",
+   "schema": "{\"type\": \"record\", \"name\": \"R\", \"fields\": [{\"name\": \"a\", \"type\": [\"null\", \"int\"], \"default\": 1}]}",
+   "refs": []
+  },
+  {
+   "id": "avro-union-dup",
+   "type": "AVRO",
+   "schema": "[\"int\", \"int\"]",
+   "refs": []
+  },
+  {
+   "id": "avro-union-nested",
+   "type": "AVRO",
+   "schema": "[\"null\", [\"int\"]]",
+   "refs": []
+  },
+  {
+   "id": "avro-record-no-name",
+   "type": "AVRO",
+   "schema": "{\"type\": \"record\", \"fields\": []}",
+   "refs": []
+  },
+  {
+   "id": "avro-fields-not-array",
+   "type": "AVRO",
+   "schema": "{\"type\": \"record\", \"name\": \"R\", \"fields\": {}}",
+   "refs": []
+  },
+  {
+   "id": "avro-bad-name",
+   "type": "AVRO",
+   "schema": "{\"type\": \"record\", \"name\": \"1R\", \"fields\": [{\"name\": \"a\", \"type\": \"int\"}]}",
+   "refs": []
+  },
+  {
+   "id": "avro-fixed-no-size",
+   "type": "AVRO",
+   "schema": "{\"type\": \"fixed\", \"name\": \"F\"}",
+   "refs": []
+  },
+  {
+   "id": "avro-redefine-name",
+   "type": "AVRO",
+   "schema": "{\"type\": \"record\", \"name\": \"R\", \"fields\": [{\"name\": \"a\", \"type\": {\"type\": \"record\", \"name\": \"X\", \"fields\": []}}, {\"name\": \"b\", \"type\": {\"type\": \"record\", \"name\": \"X\", \"fields\": []}}]}",
+   "refs": []
+  },
+  {
+   "id": "avro-unknown-ref",
+   "type": "AVRO",
+   "schema": "{\"type\": \"record\", \"name\": \"R\", \"fields\": [{\"name\": \"a\", \"type\": \"Missing\"}]}",
+   "refs": []
+  },
+  {
+   "id": "avro-enum-bad-default",
+   "type": "AVRO",
+   "schema": "{\"type\": \"enum\", \"name\": \"E\", \"symbols\": [\"A\"], \"default\": \"Z\"}",
+   "refs": []
+  },
+  {
+   "id": "avro-empty-record",
+   "type": "AVRO",
+   "schema": "{\"type\": \"record\", \"name\": \"R\", \"fields\": []}",
+   "refs": []
+  },
+  {
+   "id": "avro-bad-decimal",
+   "type": "AVRO",
+   "schema": "{\"type\": \"bytes\", \"logicalType\": \"decimal\", \"precision\": 2, \"scale\": 5}",
+   "refs": []
+  },
+  {
+   "id": "avro-with-ref",
+   "type": "AVRO",
+   "schema": "{\"type\": \"record\", \"name\": \"P\", \"fields\": [{\"name\": \"addr\", \"type\": \"com.acme.Address\"}], \"namespace\": \"com.acme\"}",
+   "refs": [
+    {
+     "name": "com.acme.Address",
+     "subject": "addr",
+     "version": 1,
+     "schema": "{\"type\": \"record\", \"name\": \"Address\", \"fields\": [{\"name\": \"street\", \"type\": \"string\"}], \"namespace\": \"com.acme\"}"
+    }
+   ]
+  },
+  {
+   "id": "json-pretty",
+   "type": "JSON",
+   "schema": "{\n  \"type\": \"object\",\n  \"properties\": {\n    \"a\": {\n      \"type\": \"string\"\n    }\n  }\n}",
+   "refs": []
+  },
+  {
+   "id": "json-key-order",
+   "type": "JSON",
+   "schema": "{\"properties\":{\"b\":{\"type\":\"integer\"},\"a\":{\"type\":\"string\"}},\"type\":\"object\"}",
+   "refs": []
+  },
+  {
+   "id": "json-draft7",
+   "type": "JSON",
+   "schema": "{\"$schema\": \"http://json-schema.org/draft-07/schema#\", \"title\": \"T\", \"type\": \"object\", \"properties\": {\"a\": {\"type\": \"string\"}}}",
+   "refs": []
+  },
+  {
+   "id": "json-2020",
+   "type": "JSON",
+   "schema": "{\"$schema\": \"https://json-schema.org/draft/2020-12/schema\", \"type\": \"object\", \"properties\": {\"a\": {\"type\": \"string\"}}}",
+   "refs": []
+  },
+  {
+   "id": "json-numbers",
+   "type": "JSON",
+   "schema": "{\"type\": \"number\", \"minimum\": 1.0, \"maximum\": 1000.0, \"multipleOf\": 0.5}",
+   "refs": []
+  },
+  {
+   "id": "json-unicode",
+   "type": "JSON",
+   "schema": "{\"type\": \"string\", \"description\": \"caf\\u00e9\"}",
+   "refs": []
+  },
+  {
+   "id": "json-boolean-true",
+   "type": "JSON",
+   "schema": "true",
+   "refs": []
+  },
+  {
+   "id": "json-empty",
+   "type": "JSON",
+   "schema": "{}",
+   "refs": []
+  },
+  {
+   "id": "json-defs-ref",
+   "type": "JSON",
+   "schema": "{\"definitions\": {\"x\": {\"type\": \"string\"}}, \"type\": \"object\", \"properties\": {\"a\": {\"$ref\": \"#/definitions/x\"}}}",
+   "refs": []
+  },
+  {
+   "id": "json-bad-json",
+   "type": "JSON",
+   "schema": "{\"type\":",
+   "refs": []
+  },
+  {
+   "id": "json-bad-type",
+   "type": "JSON",
+   "schema": "{\"type\": \"nosuchtype\"}",
+   "refs": []
+  },
+  {
+   "id": "json-bad-required",
+   "type": "JSON",
+   "schema": "{\"type\": \"object\", \"required\": \"a\"}",
+   "refs": []
+  },
+  {
+   "id": "json-bad-ref",
+   "type": "JSON",
+   "schema": "{\"type\": \"object\", \"properties\": {\"a\": {\"$ref\": \"#/definitions/missing\"}}}",
+   "refs": []
+  },
+  {
+   "id": "json-array-schema",
+   "type": "JSON",
+   "schema": "[1,2]",
+   "refs": []
+  },
+  {
+   "id": "json-number",
+   "type": "JSON",
+   "schema": "5",
+   "refs": []
+  },
+  {
+   "id": "json-string",
+   "type": "JSON",
+   "schema": "\"x\"",
+   "refs": []
+  },
+  {
+   "id": "json-null",
+   "type": "JSON",
+   "schema": "null",
+   "refs": []
+  },
+  {
+   "id": "json-false",
+   "type": "JSON",
+   "schema": "false",
+   "refs": []
+  },
+  {
+   "id": "json-bad-external-ref",
+   "type": "JSON",
+   "schema": "{\"type\": \"object\", \"properties\": {\"a\": {\"$ref\": \"http://example.invalid/nope.json\"}}}",
+   "refs": []
+  },
+  {
+   "id": "json-bad-pattern",
+   "type": "JSON",
+   "schema": "{\"type\": \"string\", \"pattern\": \"(\"}",
+   "refs": []
+  },
+  {
+   "id": "json-bad-min-type",
+   "type": "JSON",
+   "schema": "{\"type\": \"string\", \"minLength\": \"x\"}",
+   "refs": []
+  },
+  {
+   "id": "json-unknown-keyword",
+   "type": "JSON",
+   "schema": "{\"type\": \"string\", \"x-custom\": 1}",
+   "refs": []
+  },
+  {
+   "id": "json-draft4",
+   "type": "JSON",
+   "schema": "{\"$schema\": \"http://json-schema.org/draft-04/schema#\", \"type\": \"number\", \"maximum\": 5, \"exclusiveMaximum\": true}",
+   "refs": []
+  },
+  {
+   "id": "json-unknown-format",
+   "type": "JSON",
+   "schema": "{\"type\": \"string\", \"format\": \"my-format\"}",
+   "refs": []
+  },
+  {
+   "id": "json-prop-not-schema",
+   "type": "JSON",
+   "schema": "{\"type\": \"object\", \"properties\": {\"a\": 5}}",
+   "refs": []
+  },
+  {
+   "id": "json-items-not-schema",
+   "type": "JSON",
+   "schema": "{\"type\": \"array\", \"items\": 5}",
+   "refs": []
+  },
+  {
+   "id": "json-allof-empty",
+   "type": "JSON",
+   "schema": "{\"allOf\": []}",
+   "refs": []
+  },
+  {
+   "id": "json-oneof-not-array",
+   "type": "JSON",
+   "schema": "{\"oneOf\": {\"type\": \"string\"}}",
+   "refs": []
+  },
+  {
+   "id": "json-enum-not-array",
+   "type": "JSON",
+   "schema": "{\"enum\": \"a\"}",
+   "refs": []
+  },
+  {
+   "id": "json-deps-bad",
+   "type": "JSON",
+   "schema": "{\"type\": \"object\", \"dependencies\": {\"a\": [1]}}",
+   "refs": []
+  },
+  {
+   "id": "json-defs2019-ref",
+   "type": "JSON",
+   "schema": "{\"$defs\": {\"x\": {\"type\": \"string\"}}, \"type\": \"object\", \"properties\": {\"a\": {\"$ref\": \"#/$defs/x\"}}}",
+   "refs": []
+  },
+  {
+   "id": "json-id-ref",
+   "type": "JSON",
+   "schema": "{\"$id\": \"http://example.com/root.json\", \"definitions\": {\"x\": {\"$id\": \"#foo\", \"type\": \"string\"}}, \"type\": \"object\", \"properties\": {\"a\": {\"$ref\": \"#foo\"}}}",
+   "refs": []
+  },
+  {
+   "id": "json-lookahead-pattern",
+   "type": "JSON",
+   "schema": "{\"type\": \"string\", \"pattern\": \"^(?!x).*$\"}",
+   "refs": []
+  },
+  {
+   "id": "json-min-float",
+   "type": "JSON",
+   "schema": "{\"type\": \"string\", \"minLength\": 1.5}",
+   "refs": []
+  },
+  {
+   "id": "json-multipleof-zero",
+   "type": "JSON",
+   "schema": "{\"type\": \"number\", \"multipleOf\": 0}",
+   "refs": []
+  },
+  {
+   "id": "json-required-not-strings",
+   "type": "JSON",
+   "schema": "{\"type\": \"object\", \"required\": [1]}",
+   "refs": []
+  },
+  {
+   "id": "json-additional-bad",
+   "type": "JSON",
+   "schema": "{\"type\": \"object\", \"additionalProperties\": 5}",
+   "refs": []
+  },
+  {
+   "id": "json-type-array-bad",
+   "type": "JSON",
+   "schema": "{\"type\": [\"string\", \"nope\"]}",
+   "refs": []
+  },
+  {
+   "id": "json-uniqueitems-bad",
+   "type": "JSON",
+   "schema": "{\"type\": \"array\", \"uniqueItems\": \"yes\"}",
+   "refs": []
+  },
+  {
+   "id": "json-ref-sibling",
+   "type": "JSON",
+   "schema": "{\"definitions\": {\"x\": {\"type\": \"string\"}}, \"type\": \"object\", \"properties\": {\"a\": {\"$ref\": \"#/definitions/x\", \"maxLength\": 3}}}",
+   "refs": []
+  },
+  {
+   "id": "json-with-ref",
+   "type": "JSON",
+   "schema": "{\"type\": \"object\", \"properties\": {\"c\": {\"$ref\": \"customer.json\"}}}",
+   "refs": [
+    {
+     "name": "customer.json",
+     "subject": "customer",
+     "version": 1,
+     "schema": "{\"type\": \"object\", \"properties\": {\"id\": {\"type\": \"integer\"}}}"
+    }
+   ]
+  },
+  {
+   "id": "proto-basic",
+   "type": "PROTOBUF",
+   "schema": "syntax = \"proto3\";\npackage acme;\n\nmessage Order {\n  string id = 1;\n  int32 qty = 2;\n}\n",
+   "refs": []
+  },
+  {
+   "id": "proto-compact",
+   "type": "PROTOBUF",
+   "schema": "syntax=\"proto3\";package acme;message Order{string id=1;int32 qty=2;}",
+   "refs": []
+  },
+  {
+   "id": "proto-comments",
+   "type": "PROTOBUF",
+   "schema": "syntax = \"proto3\";\n// leading\npackage acme;\n/* block */\nmessage A { // trailing\n  string a = 1; /* x */\n}\n",
+   "refs": []
+  },
+  {
+   "id": "proto-no-package",
+   "type": "PROTOBUF",
+   "schema": "syntax = \"proto3\";\nmessage A { string a = 1; }\n",
+   "refs": []
+  },
+  {
+   "id": "proto-proto2",
+   "type": "PROTOBUF",
+   "schema": "syntax = \"proto2\";\npackage p;\nmessage A {\n  required string a = 1;\n  optional int32 b = 2 [default = 5];\n  repeated string c = 3;\n  optional string d = 4 [default = \"x\"];\n}\n",
+   "refs": []
+  },
+  {
+   "id": "proto-no-syntax",
+   "type": "PROTOBUF",
+   "schema": "package p;\nmessage A { optional string a = 1; }\n",
+   "refs": []
+  },
+  {
+   "id": "proto-nested",
+   "type": "PROTOBUF",
+   "schema": "syntax = \"proto3\";\npackage p;\nmessage A {\n  message B { string x = 1; }\n  enum K { K0 = 0; K1 = 1; }\n  B b = 1;\n  K k = 2;\n}\n",
+   "refs": []
+  },
+  {
+   "id": "proto-enum-top",
+   "type": "PROTOBUF",
+   "schema": "syntax = \"proto3\";\npackage p;\nenum Color { RED = 0; GREEN = 1; }\nmessage A { Color c = 1; }\n",
+   "refs": []
+  },
+  {
+   "id": "proto-enum-alias",
+   "type": "PROTOBUF",
+   "schema": "syntax = \"proto3\";\nenum E {\n  option allow_alias = true;\n  A = 0;\n  B = 0;\n}\n",
+   "refs": []
+  },
+  {
+   "id": "proto-oneof",
+   "type": "PROTOBUF",
+   "schema": "syntax = \"proto3\";\nmessage A {\n  oneof k {\n    string s = 1;\n    int64 n = 2;\n  }\n  string other = 3;\n}\n",
+   "refs": []
+  },
+  {
+   "id": "proto-map",
+   "type": "PROTOBUF",
+   "schema": "syntax = \"proto3\";\nmessage A {\n  map<string, int64> m = 1;\n  map<int32, B> mb = 2;\n}\nmessage B { string x = 1; }\n",
+   "refs": []
+  },
+  {
+   "id": "proto-optional3",
+   "type": "PROTOBUF",
+   "schema": "syntax = \"proto3\";\nmessage A {\n  optional string a = 1;\n  string b = 2;\n}\n",
+   "refs": []
+  },
+  {
+   "id": "proto-reserved",
+   "type": "PROTOBUF",
+   "schema": "syntax = \"proto3\";\nmessage A {\n  reserved 2, 15, 9 to 11;\n  reserved \"foo\", \"bar\";\n  string a = 1;\n}\n",
+   "refs": []
+  },
+  {
+   "id": "proto-options",
+   "type": "PROTOBUF",
+   "schema": "syntax = \"proto3\";\npackage p;\noption java_package = \"com.acme\";\noption java_multiple_files = true;\noption go_package = \"acme/p\";\nmessage A {\n  option deprecated = true;\n  string a = 1 [deprecated = true];\n  repeated int32 b = 2 [packed = false];\n  string c = 3 [json_name = \"cee\"];\n}\n",
+   "refs": []
+  },
+  {
+   "id": "proto-service",
+   "type": "PROTOBUF",
+   "schema": "syntax = \"proto3\";\npackage p;\nmessage Req { string q = 1; }\nmessage Resp { string r = 1; }\nservice S {\n  rpc Get(Req) returns (Resp);\n  rpc Stream(stream Req) returns (stream Resp);\n}\n",
+   "refs": []
+  },
+  {
+   "id": "proto-wkt",
+   "type": "PROTOBUF",
+   "schema": "syntax = \"proto3\";\nimport \"google/protobuf/timestamp.proto\";\nimport \"google/protobuf/wrappers.proto\";\nmessage A {\n  google.protobuf.Timestamp ts = 1;\n  google.protobuf.StringValue s = 2;\n}\n",
+   "refs": []
+  },
+  {
+   "id": "proto-confluent-meta",
+   "type": "PROTOBUF",
+   "schema": "syntax = \"proto3\";\nimport \"confluent/meta.proto\";\nmessage A {\n  string ssn = 1 [(confluent.field_meta) = { tags: \"PII\" }];\n}\n",
+   "refs": []
+  },
+  {
+   "id": "proto-decimal",
+   "type": "PROTOBUF",
+   "schema": "syntax = \"proto3\";\nimport \"confluent/type/decimal.proto\";\nmessage A {\n  confluent.type.Decimal amount = 1 [(confluent.field_meta) = { params: [ { key: \"precision\" value: \"8\" } ] }];\n}\n",
+   "refs": []
+  },
+  {
+   "id": "proto-extensions",
+   "type": "PROTOBUF",
+   "schema": "syntax = \"proto2\";\npackage p;\nmessage A {\n  extensions 100 to 199;\n  optional string a = 1;\n}\nextend A {\n  optional int32 x = 100;\n}\n",
+   "refs": []
+  },
+  {
+   "id": "proto-explicit-map-entry",
+   "type": "PROTOBUF",
+   "schema": "syntax = \"proto3\";\nmessage A {\n  repeated MEntry m = 1;\n  message MEntry {\n    option map_entry = true;\n    string key = 1;\n    int32 value = 2;\n  }\n}\n",
+   "refs": []
+  },
+  {
+   "id": "proto-fq-types",
+   "type": "PROTOBUF",
+   "schema": "syntax = \"proto3\";\npackage a.b;\nmessage X { .a.b.Y y = 1; }\nmessage Y { string s = 1; }\n",
+   "refs": []
+  },
+  {
+   "id": "proto-google-type-date",
+   "type": "PROTOBUF",
+   "schema": "syntax = \"proto3\";\nimport \"google/type/date.proto\";\nimport \"google/type/money.proto\";\nmessage A {\n  google.type.Date d = 1;\n  google.type.Money m = 2;\n}\n",
+   "refs": []
+  },
+  {
+   "id": "proto-unknown-option",
+   "type": "PROTOBUF",
+   "schema": "syntax = \"proto3\";\nmessage A {\n  string a = 1 [(foo.bar) = 3];\n}\n",
+   "refs": []
+  },
+  {
+   "id": "proto-unknown-file-option",
+   "type": "PROTOBUF",
+   "schema": "syntax = \"proto3\";\noption (foo.bar) = \"x\";\nmessage A { string a = 1; }\n",
+   "refs": []
+  },
+  {
+   "id": "proto-meta-without-import",
+   "type": "PROTOBUF",
+   "schema": "syntax = \"proto3\";\nmessage A {\n  string ssn = 1 [(confluent.field_meta) = { tags: \"PII\" }];\n}\n",
+   "refs": []
+  },
+  {
+   "id": "proto-missing-import-used",
+   "type": "PROTOBUF",
+   "schema": "syntax = \"proto3\";\nimport \"nope.proto\";\nmessage A { nope.X x = 1; }\n",
+   "refs": []
+  },
+  {
+   "id": "proto-nested-enum-first",
+   "type": "PROTOBUF",
+   "schema": "syntax = \"proto3\";\nmessage A {\n  enum K { K0 = 0; }\n  message B { string x = 1; }\n  K k = 1;\n  B b = 2;\n}\nenum Top { T0 = 0; }\nmessage C { string c = 1; }\n",
+   "refs": []
+  },
+  {
+   "id": "proto-options-order",
+   "type": "PROTOBUF",
+   "schema": "syntax = \"proto3\";\npackage p;\nimport \"google/protobuf/timestamp.proto\";\noption java_package = \"x\";\nmessage A {\n  reserved 5;\n  option deprecated = true;\n  oneof k { string s = 1; }\n  string a = 2 [deprecated = true, json_name = \"aa\"];\n  message N { string n = 1; }\n}\nservice S { rpc M (A) returns (A) { option deprecated = true; } }\n",
+   "refs": []
+  },
+  {
+   "id": "proto-norm-order",
+   "type": "PROTOBUF",
+   "schema": "syntax = \"proto3\";\npackage p;\noption java_package = \"x\";\nmessage Z {\n  option deprecated = true;\n  option (foo.bar) = 1;\n  int32 b = 2 [json_name = \"bb\", deprecated = true];\n  string a = 1;\n  reserved \"zz\", \"aa\";\n  reserved 20, 10;\n  oneof o { string y = 4; string x = 3; }\n  message Y { string y = 1; }\n  message X { string x = 1; }\n  enum E { option allow_alias = true; E1 = 1; E0 = 0; E2 = 1; }\n}\nmessage A { Z z = 1; }\nenum Q { Q1 = 1; Q0 = 0; }\nservice S { rpc B (A) returns (A); rpc A (A) returns (A); }\n",
+   "refs": []
+  },
+  {
+   "id": "proto-norm-list-options",
+   "type": "PROTOBUF",
+   "schema": "syntax = \"proto3\";\nimport \"confluent/meta.proto\";\nmessage A {\n  string a = 1 [(confluent.field_meta) = { tags: [\"x\", \"y\"], params: [ { key: \"k1\" value: \"v1\" }, { key: \"k2\" value: \"v2\" } ] }];\n}\n",
+   "refs": []
+  },
+  {
+   "id": "proto-norm-public-import",
+   "type": "PROTOBUF",
+   "schema": "syntax = \"proto3\";\nimport public \"google/protobuf/timestamp.proto\";\nimport \"google/protobuf/duration.proto\";\nmessage A { google.protobuf.Timestamp t = 1; google.protobuf.Duration d = 2; }\n",
+   "refs": []
+  },
+  {
+   "id": "proto-norm-options-imports",
+   "type": "PROTOBUF",
+   "schema": "syntax = \"proto3\";\nimport \"google/protobuf/wrappers.proto\";\nimport \"google/protobuf/duration.proto\";\noption java_package = \"x\";\noption (zed.opt) = 1;\noption cc_enable_arenas = true;\nmessage A {\n  option (zz.m) = 2;\n  option deprecated = true;\n  option (aa.m) = 3;\n  google.protobuf.Duration d = 1 [json_name = \"dd\", (x.y) = 1, deprecated = true];\n  google.protobuf.StringValue s = 2;\n}\n",
+   "refs": []
+  },
+  {
+   "id": "proto-bad-syntax",
+   "type": "PROTOBUF",
+   "schema": "message {",
+   "refs": []
+  },
+  {
+   "id": "proto-bad-type",
+   "type": "PROTOBUF",
+   "schema": "syntax = \"proto3\";\nmessage A { Missing m = 1; }\n",
+   "refs": []
+  },
+  {
+   "id": "proto-dup-number",
+   "type": "PROTOBUF",
+   "schema": "syntax = \"proto3\";\nmessage A { string a = 1; string b = 1; }\n",
+   "refs": []
+  },
+  {
+   "id": "proto-missing-import",
+   "type": "PROTOBUF",
+   "schema": "syntax = \"proto3\";\nimport \"nope.proto\";\nmessage A { string a = 1; }\n",
+   "refs": []
+  },
+  {
+   "id": "proto3-required",
+   "type": "PROTOBUF",
+   "schema": "syntax = \"proto3\";\nmessage A { required string a = 1; }\n",
+   "refs": []
+  },
+  {
+   "id": "proto-with-ref",
+   "type": "PROTOBUF",
+   "schema": "syntax = \"proto3\";\npackage m;\nimport \"dep.proto\";\nmessage M { d.D d = 1; }\n",
+   "refs": [
+    {
+     "name": "dep.proto",
+     "subject": "dep",
+     "version": 1,
+     "schema": "syntax = \"proto3\";\npackage d;\nmessage D { string x = 1; }\n"
+    }
+   ]
+  }
+ ],
+ "compat": [
+  {
+   "id": "avro-add-field-default",
+   "type": "AVRO",
+   "old": "{\"type\": \"record\", \"name\": \"R\", \"fields\": [{\"name\": \"a\", \"type\": \"int\"}, {\"name\": \"b\", \"type\": \"string\"}]}",
+   "new": "{\"type\": \"record\", \"name\": \"R\", \"fields\": [{\"name\": \"a\", \"type\": \"int\"}, {\"name\": \"b\", \"type\": \"string\"}, {\"name\": \"c\", \"type\": \"int\", \"default\": 0}]}",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "avro-add-field-nodefault",
+   "type": "AVRO",
+   "old": "{\"type\": \"record\", \"name\": \"R\", \"fields\": [{\"name\": \"a\", \"type\": \"int\"}, {\"name\": \"b\", \"type\": \"string\"}]}",
+   "new": "{\"type\": \"record\", \"name\": \"R\", \"fields\": [{\"name\": \"a\", \"type\": \"int\"}, {\"name\": \"b\", \"type\": \"string\"}, {\"name\": \"c\", \"type\": \"int\"}]}",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "avro-add-field-null-union",
+   "type": "AVRO",
+   "old": "{\"type\": \"record\", \"name\": \"R\", \"fields\": [{\"name\": \"a\", \"type\": \"int\"}, {\"name\": \"b\", \"type\": \"string\"}]}",
+   "new": "{\"type\": \"record\", \"name\": \"R\", \"fields\": [{\"name\": \"a\", \"type\": \"int\"}, {\"name\": \"b\", \"type\": \"string\"}, {\"name\": \"c\", \"type\": [\"null\", \"int\"], \"default\": null}]}",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "avro-remove-field-had-default",
+   "type": "AVRO",
+   "old": "{\"type\": \"record\", \"name\": \"R\", \"fields\": [{\"name\": \"a\", \"type\": \"int\"}, {\"name\": \"b\", \"type\": \"string\", \"default\": \"x\"}]}",
+   "new": "{\"type\": \"record\", \"name\": \"R\", \"fields\": [{\"name\": \"a\", \"type\": \"int\"}]}",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "avro-remove-field-nodefault",
+   "type": "AVRO",
+   "old": "{\"type\": \"record\", \"name\": \"R\", \"fields\": [{\"name\": \"a\", \"type\": \"int\"}, {\"name\": \"b\", \"type\": \"string\"}]}",
+   "new": "{\"type\": \"record\", \"name\": \"R\", \"fields\": [{\"name\": \"a\", \"type\": \"int\"}]}",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "avro-field-order",
+   "type": "AVRO",
+   "old": "{\"type\": \"record\", \"name\": \"R\", \"fields\": [{\"name\": \"a\", \"type\": \"int\"}, {\"name\": \"b\", \"type\": \"string\"}]}",
+   "new": "{\"type\": \"record\", \"name\": \"R\", \"fields\": [{\"name\": \"b\", \"type\": \"string\"}, {\"name\": \"a\", \"type\": \"int\"}]}",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "avro-doc-only",
+   "type": "AVRO",
+   "old": "{\"type\": \"record\", \"name\": \"R\", \"fields\": [{\"name\": \"a\", \"type\": \"int\"}, {\"name\": \"b\", \"type\": \"string\"}]}",
+   "new": "{\"type\": \"record\", \"name\": \"R\", \"fields\": [{\"name\": \"a\", \"type\": \"int\", \"doc\": \"x\"}, {\"name\": \"b\", \"type\": \"string\"}], \"doc\": \"y\"}",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "avro-default-change",
+   "type": "AVRO",
+   "old": "{\"type\": \"record\", \"name\": \"R\", \"fields\": [{\"name\": \"a\", \"type\": \"int\", \"default\": 1}]}",
+   "new": "{\"type\": \"record\", \"name\": \"R\", \"fields\": [{\"name\": \"a\", \"type\": \"int\", \"default\": 2}]}",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "avro-prom-int-long",
+   "type": "AVRO",
+   "old": "{\"type\": \"record\", \"name\": \"R\", \"fields\": [{\"name\": \"a\", \"type\": \"int\"}]}",
+   "new": "{\"type\": \"record\", \"name\": \"R\", \"fields\": [{\"name\": \"a\", \"type\": \"long\"}]}",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "avro-prom-long-int",
+   "type": "AVRO",
+   "old": "{\"type\": \"record\", \"name\": \"R\", \"fields\": [{\"name\": \"a\", \"type\": \"long\"}]}",
+   "new": "{\"type\": \"record\", \"name\": \"R\", \"fields\": [{\"name\": \"a\", \"type\": \"int\"}]}",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "avro-prom-int-float",
+   "type": "AVRO",
+   "old": "{\"type\": \"record\", \"name\": \"R\", \"fields\": [{\"name\": \"a\", \"type\": \"int\"}]}",
+   "new": "{\"type\": \"record\", \"name\": \"R\", \"fields\": [{\"name\": \"a\", \"type\": \"float\"}]}",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "avro-prom-int-double",
+   "type": "AVRO",
+   "old": "{\"type\": \"record\", \"name\": \"R\", \"fields\": [{\"name\": \"a\", \"type\": \"int\"}]}",
+   "new": "{\"type\": \"record\", \"name\": \"R\", \"fields\": [{\"name\": \"a\", \"type\": \"double\"}]}",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "avro-prom-long-float",
+   "type": "AVRO",
+   "old": "{\"type\": \"record\", \"name\": \"R\", \"fields\": [{\"name\": \"a\", \"type\": \"long\"}]}",
+   "new": "{\"type\": \"record\", \"name\": \"R\", \"fields\": [{\"name\": \"a\", \"type\": \"float\"}]}",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "avro-prom-long-double",
+   "type": "AVRO",
+   "old": "{\"type\": \"record\", \"name\": \"R\", \"fields\": [{\"name\": \"a\", \"type\": \"long\"}]}",
+   "new": "{\"type\": \"record\", \"name\": \"R\", \"fields\": [{\"name\": \"a\", \"type\": \"double\"}]}",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "avro-prom-float-double",
+   "type": "AVRO",
+   "old": "{\"type\": \"record\", \"name\": \"R\", \"fields\": [{\"name\": \"a\", \"type\": \"float\"}]}",
+   "new": "{\"type\": \"record\", \"name\": \"R\", \"fields\": [{\"name\": \"a\", \"type\": \"double\"}]}",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "avro-prom-double-float",
+   "type": "AVRO",
+   "old": "{\"type\": \"record\", \"name\": \"R\", \"fields\": [{\"name\": \"a\", \"type\": \"double\"}]}",
+   "new": "{\"type\": \"record\", \"name\": \"R\", \"fields\": [{\"name\": \"a\", \"type\": \"float\"}]}",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "avro-prom-string-bytes",
+   "type": "AVRO",
+   "old": "{\"type\": \"record\", \"name\": \"R\", \"fields\": [{\"name\": \"a\", \"type\": \"string\"}]}",
+   "new": "{\"type\": \"record\", \"name\": \"R\", \"fields\": [{\"name\": \"a\", \"type\": \"bytes\"}]}",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "avro-prom-bytes-string",
+   "type": "AVRO",
+   "old": "{\"type\": \"record\", \"name\": \"R\", \"fields\": [{\"name\": \"a\", \"type\": \"bytes\"}]}",
+   "new": "{\"type\": \"record\", \"name\": \"R\", \"fields\": [{\"name\": \"a\", \"type\": \"string\"}]}",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "avro-prom-int-string",
+   "type": "AVRO",
+   "old": "{\"type\": \"record\", \"name\": \"R\", \"fields\": [{\"name\": \"a\", \"type\": \"int\"}]}",
+   "new": "{\"type\": \"record\", \"name\": \"R\", \"fields\": [{\"name\": \"a\", \"type\": \"string\"}]}",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "avro-prom-boolean-int",
+   "type": "AVRO",
+   "old": "{\"type\": \"record\", \"name\": \"R\", \"fields\": [{\"name\": \"a\", \"type\": \"boolean\"}]}",
+   "new": "{\"type\": \"record\", \"name\": \"R\", \"fields\": [{\"name\": \"a\", \"type\": \"int\"}]}",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "avro-prom-null-int",
+   "type": "AVRO",
+   "old": "{\"type\": \"record\", \"name\": \"R\", \"fields\": [{\"name\": \"a\", \"type\": \"null\"}]}",
+   "new": "{\"type\": \"record\", \"name\": \"R\", \"fields\": [{\"name\": \"a\", \"type\": \"int\"}]}",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "avro-rename-field-alias",
+   "type": "AVRO",
+   "old": "{\"type\": \"record\", \"name\": \"R\", \"fields\": [{\"name\": \"a\", \"type\": \"int\"}]}",
+   "new": "{\"type\": \"record\", \"name\": \"R\", \"fields\": [{\"name\": \"z\", \"type\": \"int\", \"aliases\": [\"a\"]}]}",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "avro-rename-field-noalias",
+   "type": "AVRO",
+   "old": "{\"type\": \"record\", \"name\": \"R\", \"fields\": [{\"name\": \"a\", \"type\": \"int\"}]}",
+   "new": "{\"type\": \"record\", \"name\": \"R\", \"fields\": [{\"name\": \"z\", \"type\": \"int\"}]}",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "avro-rename-record",
+   "type": "AVRO",
+   "old": "{\"type\": \"record\", \"name\": \"R\", \"fields\": [{\"name\": \"a\", \"type\": \"int\"}]}",
+   "new": "{\"type\": \"record\", \"name\": \"S\", \"fields\": [{\"name\": \"a\", \"type\": \"int\"}]}",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "avro-rename-record-alias",
+   "type": "AVRO",
+   "old": "{\"type\": \"record\", \"name\": \"R\", \"fields\": [{\"name\": \"a\", \"type\": \"int\"}]}",
+   "new": "{\"type\": \"record\", \"name\": \"S\", \"fields\": [{\"name\": \"a\", \"type\": \"int\"}], \"aliases\": [\"R\"]}",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "avro-change-namespace",
+   "type": "AVRO",
+   "old": "{\"type\": \"record\", \"name\": \"R\", \"fields\": [{\"name\": \"a\", \"type\": \"int\"}], \"namespace\": \"x\"}",
+   "new": "{\"type\": \"record\", \"name\": \"R\", \"fields\": [{\"name\": \"a\", \"type\": \"int\"}], \"namespace\": \"y\"}",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "avro-enum-add",
+   "type": "AVRO",
+   "old": "{\"type\": \"record\", \"name\": \"R\", \"fields\": [{\"name\": \"e\", \"type\": {\"type\": \"enum\", \"name\": \"E\", \"symbols\": [\"A\", \"B\"]}}]}",
+   "new": "{\"type\": \"record\", \"name\": \"R\", \"fields\": [{\"name\": \"e\", \"type\": {\"type\": \"enum\", \"name\": \"E\", \"symbols\": [\"A\", \"B\", \"C\"]}}]}",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "avro-enum-remove",
+   "type": "AVRO",
+   "old": "{\"type\": \"record\", \"name\": \"R\", \"fields\": [{\"name\": \"e\", \"type\": {\"type\": \"enum\", \"name\": \"E\", \"symbols\": [\"A\", \"B\"]}}]}",
+   "new": "{\"type\": \"record\", \"name\": \"R\", \"fields\": [{\"name\": \"e\", \"type\": {\"type\": \"enum\", \"name\": \"E\", \"symbols\": [\"A\"]}}]}",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "avro-enum-remove-default",
+   "type": "AVRO",
+   "old": "{\"type\": \"record\", \"name\": \"R\", \"fields\": [{\"name\": \"e\", \"type\": {\"type\": \"enum\", \"name\": \"E\", \"symbols\": [\"A\", \"B\"]}}]}",
+   "new": "{\"type\": \"record\", \"name\": \"R\", \"fields\": [{\"name\": \"e\", \"type\": {\"type\": \"enum\", \"name\": \"E\", \"symbols\": [\"A\"], \"default\": \"A\"}}]}",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "avro-enum-reorder",
+   "type": "AVRO",
+   "old": "{\"type\": \"record\", \"name\": \"R\", \"fields\": [{\"name\": \"e\", \"type\": {\"type\": \"enum\", \"name\": \"E\", \"symbols\": [\"A\", \"B\"]}}]}",
+   "new": "{\"type\": \"record\", \"name\": \"R\", \"fields\": [{\"name\": \"e\", \"type\": {\"type\": \"enum\", \"name\": \"E\", \"symbols\": [\"B\", \"A\"]}}]}",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "avro-enum-top-remove",
+   "type": "AVRO",
+   "old": "{\"type\": \"enum\", \"name\": \"E\", \"symbols\": [\"A\", \"B\"]}",
+   "new": "{\"type\": \"enum\", \"name\": \"E\", \"symbols\": [\"A\"]}",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "avro-fixed-size",
+   "type": "AVRO",
+   "old": "{\"type\": \"record\", \"name\": \"R\", \"fields\": [{\"name\": \"x\", \"type\": {\"type\": \"fixed\", \"name\": \"F\", \"size\": 4}}]}",
+   "new": "{\"type\": \"record\", \"name\": \"R\", \"fields\": [{\"name\": \"x\", \"type\": {\"type\": \"fixed\", \"name\": \"F\", \"size\": 8}}]}",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "avro-fixed-rename",
+   "type": "AVRO",
+   "old": "{\"type\": \"record\", \"name\": \"R\", \"fields\": [{\"name\": \"x\", \"type\": {\"type\": \"fixed\", \"name\": \"F\", \"size\": 4}}]}",
+   "new": "{\"type\": \"record\", \"name\": \"R\", \"fields\": [{\"name\": \"x\", \"type\": {\"type\": \"fixed\", \"name\": \"G\", \"size\": 4}}]}",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "avro-fixed-to-bytes",
+   "type": "AVRO",
+   "old": "{\"type\": \"record\", \"name\": \"R\", \"fields\": [{\"name\": \"x\", \"type\": {\"type\": \"fixed\", \"name\": \"F\", \"size\": 4}}]}",
+   "new": "{\"type\": \"record\", \"name\": \"R\", \"fields\": [{\"name\": \"x\", \"type\": \"bytes\"}]}",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "avro-union-add-branch",
+   "type": "AVRO",
+   "old": "{\"type\": \"record\", \"name\": \"R\", \"fields\": [{\"name\": \"u\", \"type\": [\"int\", \"string\"]}]}",
+   "new": "{\"type\": \"record\", \"name\": \"R\", \"fields\": [{\"name\": \"u\", \"type\": [\"int\", \"string\", \"long\"]}]}",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "avro-union-remove-branch",
+   "type": "AVRO",
+   "old": "{\"type\": \"record\", \"name\": \"R\", \"fields\": [{\"name\": \"u\", \"type\": [\"int\", \"string\"]}]}",
+   "new": "{\"type\": \"record\", \"name\": \"R\", \"fields\": [{\"name\": \"u\", \"type\": [\"int\"]}]}",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "avro-to-nullable",
+   "type": "AVRO",
+   "old": "{\"type\": \"record\", \"name\": \"R\", \"fields\": [{\"name\": \"u\", \"type\": \"int\"}]}",
+   "new": "{\"type\": \"record\", \"name\": \"R\", \"fields\": [{\"name\": \"u\", \"type\": [\"null\", \"int\"]}]}",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "avro-from-nullable",
+   "type": "AVRO",
+   "old": "{\"type\": \"record\", \"name\": \"R\", \"fields\": [{\"name\": \"u\", \"type\": [\"null\", \"int\"]}]}",
+   "new": "{\"type\": \"record\", \"name\": \"R\", \"fields\": [{\"name\": \"u\", \"type\": \"int\"}]}",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "avro-union-reorder",
+   "type": "AVRO",
+   "old": "{\"type\": \"record\", \"name\": \"R\", \"fields\": [{\"name\": \"u\", \"type\": [\"int\", \"string\"]}]}",
+   "new": "{\"type\": \"record\", \"name\": \"R\", \"fields\": [{\"name\": \"u\", \"type\": [\"string\", \"int\"]}]}",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "avro-union-promote",
+   "type": "AVRO",
+   "old": "{\"type\": \"record\", \"name\": \"R\", \"fields\": [{\"name\": \"u\", \"type\": [\"null\", \"int\"]}]}",
+   "new": "{\"type\": \"record\", \"name\": \"R\", \"fields\": [{\"name\": \"u\", \"type\": [\"null\", \"long\"]}]}",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "avro-union-to-single-member",
+   "type": "AVRO",
+   "old": "{\"type\": \"record\", \"name\": \"R\", \"fields\": [{\"name\": \"u\", \"type\": [\"string\"]}]}",
+   "new": "{\"type\": \"record\", \"name\": \"R\", \"fields\": [{\"name\": \"u\", \"type\": \"string\"}]}",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "avro-top-union-add",
+   "type": "AVRO",
+   "old": "[\"int\", \"string\"]",
+   "new": "[\"int\", \"string\", \"null\"]",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "avro-top-union-remove",
+   "type": "AVRO",
+   "old": "[\"int\", \"string\"]",
+   "new": "[\"int\"]",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "avro-array-items-promote",
+   "type": "AVRO",
+   "old": "{\"type\": \"record\", \"name\": \"R\", \"fields\": [{\"name\": \"x\", \"type\": {\"type\": \"array\", \"items\": \"int\"}}]}",
+   "new": "{\"type\": \"record\", \"name\": \"R\", \"fields\": [{\"name\": \"x\", \"type\": {\"type\": \"array\", \"items\": \"long\"}}]}",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "avro-array-items-narrow",
+   "type": "AVRO",
+   "old": "{\"type\": \"record\", \"name\": \"R\", \"fields\": [{\"name\": \"x\", \"type\": {\"type\": \"array\", \"items\": \"long\"}}]}",
+   "new": "{\"type\": \"record\", \"name\": \"R\", \"fields\": [{\"name\": \"x\", \"type\": {\"type\": \"array\", \"items\": \"int\"}}]}",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "avro-map-values-promote",
+   "type": "AVRO",
+   "old": "{\"type\": \"record\", \"name\": \"R\", \"fields\": [{\"name\": \"x\", \"type\": {\"type\": \"map\", \"values\": \"int\"}}]}",
+   "new": "{\"type\": \"record\", \"name\": \"R\", \"fields\": [{\"name\": \"x\", \"type\": {\"type\": \"map\", \"values\": \"long\"}}]}",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "avro-array-to-map",
+   "type": "AVRO",
+   "old": "{\"type\": \"record\", \"name\": \"R\", \"fields\": [{\"name\": \"x\", \"type\": {\"type\": \"array\", \"items\": \"int\"}}]}",
+   "new": "{\"type\": \"record\", \"name\": \"R\", \"fields\": [{\"name\": \"x\", \"type\": {\"type\": \"map\", \"values\": \"int\"}}]}",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "avro-nested-add-nodefault",
+   "type": "AVRO",
+   "old": "{\"type\": \"record\", \"name\": \"R\", \"fields\": [{\"name\": \"n\", \"type\": {\"type\": \"record\", \"name\": \"N\", \"fields\": [{\"name\": \"x\", \"type\": \"int\"}]}}]}",
+   "new": "{\"type\": \"record\", \"name\": \"R\", \"fields\": [{\"name\": \"n\", \"type\": {\"type\": \"record\", \"name\": \"N\", \"fields\": [{\"name\": \"x\", \"type\": \"int\"}, {\"name\": \"y\", \"type\": \"int\"}]}}]}",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "avro-nested-add-default",
+   "type": "AVRO",
+   "old": "{\"type\": \"record\", \"name\": \"R\", \"fields\": [{\"name\": \"n\", \"type\": {\"type\": \"record\", \"name\": \"N\", \"fields\": [{\"name\": \"x\", \"type\": \"int\"}]}}]}",
+   "new": "{\"type\": \"record\", \"name\": \"R\", \"fields\": [{\"name\": \"n\", \"type\": {\"type\": \"record\", \"name\": \"N\", \"fields\": [{\"name\": \"x\", \"type\": \"int\"}, {\"name\": \"y\", \"type\": \"int\", \"default\": 1}]}}]}",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "avro-nested-type-change",
+   "type": "AVRO",
+   "old": "{\"type\": \"record\", \"name\": \"R\", \"fields\": [{\"name\": \"n\", \"type\": {\"type\": \"record\", \"name\": \"N\", \"fields\": [{\"name\": \"x\", \"type\": \"int\"}]}}]}",
+   "new": "{\"type\": \"record\", \"name\": \"R\", \"fields\": [{\"name\": \"n\", \"type\": {\"type\": \"record\", \"name\": \"N\", \"fields\": [{\"name\": \"x\", \"type\": \"string\"}]}}]}",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "avro-logical-int-date",
+   "type": "AVRO",
+   "old": "{\"type\": \"record\", \"name\": \"R\", \"fields\": [{\"name\": \"x\", \"type\": \"int\"}]}",
+   "new": "{\"type\": \"record\", \"name\": \"R\", \"fields\": [{\"name\": \"x\", \"type\": {\"type\": \"int\", \"logicalType\": \"date\"}}]}",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "avro-logical-date-int",
+   "type": "AVRO",
+   "old": "{\"type\": \"record\", \"name\": \"R\", \"fields\": [{\"name\": \"x\", \"type\": {\"type\": \"int\", \"logicalType\": \"date\"}}]}",
+   "new": "{\"type\": \"record\", \"name\": \"R\", \"fields\": [{\"name\": \"x\", \"type\": \"int\"}]}",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "avro-logical-ts-millis-micros",
+   "type": "AVRO",
+   "old": "{\"type\": \"record\", \"name\": \"R\", \"fields\": [{\"name\": \"x\", \"type\": {\"type\": \"long\", \"logicalType\": \"timestamp-millis\"}}]}",
+   "new": "{\"type\": \"record\", \"name\": \"R\", \"fields\": [{\"name\": \"x\", \"type\": {\"type\": \"long\", \"logicalType\": \"timestamp-micros\"}}]}",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "avro-decimal-precision",
+   "type": "AVRO",
+   "old": "{\"type\": \"record\", \"name\": \"R\", \"fields\": [{\"name\": \"x\", \"type\": {\"type\": \"bytes\", \"logicalType\": \"decimal\", \"precision\": 10, \"scale\": 2}}]}",
+   "new": "{\"type\": \"record\", \"name\": \"R\", \"fields\": [{\"name\": \"x\", \"type\": {\"type\": \"bytes\", \"logicalType\": \"decimal\", \"precision\": 12, \"scale\": 2}}]}",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "avro-decimal-scale",
+   "type": "AVRO",
+   "old": "{\"type\": \"record\", \"name\": \"R\", \"fields\": [{\"name\": \"x\", \"type\": {\"type\": \"bytes\", \"logicalType\": \"decimal\", \"precision\": 10, \"scale\": 2}}]}",
+   "new": "{\"type\": \"record\", \"name\": \"R\", \"fields\": [{\"name\": \"x\", \"type\": {\"type\": \"bytes\", \"logicalType\": \"decimal\", \"precision\": 10, \"scale\": 3}}]}",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "avro-record-to-primitive",
+   "type": "AVRO",
+   "old": "{\"type\": \"record\", \"name\": \"R\", \"fields\": [{\"name\": \"a\", \"type\": \"int\"}]}",
+   "new": "\"int\"",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "avro-primitive-to-record",
+   "type": "AVRO",
+   "old": "\"int\"",
+   "new": "{\"type\": \"record\", \"name\": \"R\", \"fields\": [{\"name\": \"a\", \"type\": \"int\"}]}",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "avro-string-to-enum",
+   "type": "AVRO",
+   "old": "{\"type\": \"record\", \"name\": \"R\", \"fields\": [{\"name\": \"x\", \"type\": \"string\"}]}",
+   "new": "{\"type\": \"record\", \"name\": \"R\", \"fields\": [{\"name\": \"x\", \"type\": {\"type\": \"enum\", \"name\": \"E\", \"symbols\": [\"A\"]}}]}",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "avro-enum-to-string",
+   "type": "AVRO",
+   "old": "{\"type\": \"record\", \"name\": \"R\", \"fields\": [{\"name\": \"x\", \"type\": {\"type\": \"enum\", \"name\": \"E\", \"symbols\": [\"A\"]}}]}",
+   "new": "{\"type\": \"record\", \"name\": \"R\", \"fields\": [{\"name\": \"x\", \"type\": \"string\"}]}",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "avro-union-to-string",
+   "type": "AVRO",
+   "old": "{\"type\": \"record\", \"name\": \"R\", \"fields\": [{\"name\": \"x\", \"type\": [\"int\", \"string\"]}]}",
+   "new": "{\"type\": \"record\", \"name\": \"R\", \"fields\": [{\"name\": \"x\", \"type\": \"string\"}]}",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "avro-recursive-add-default",
+   "type": "AVRO",
+   "old": "{\"type\": \"record\", \"name\": \"Node\", \"fields\": [{\"name\": \"v\", \"type\": \"int\"}, {\"name\": \"next\", \"type\": [\"null\", \"Node\"], \"default\": null}]}",
+   "new": "{\"type\": \"record\", \"name\": \"Node\", \"fields\": [{\"name\": \"v\", \"type\": \"int\"}, {\"name\": \"w\", \"type\": \"int\", \"default\": 0}, {\"name\": \"next\", \"type\": [\"null\", \"Node\"], \"default\": null}]}",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "avro-recursive-add-nodefault",
+   "type": "AVRO",
+   "old": "{\"type\": \"record\", \"name\": \"Node\", \"fields\": [{\"name\": \"v\", \"type\": \"int\"}, {\"name\": \"next\", \"type\": [\"null\", \"Node\"], \"default\": null}]}",
+   "new": "{\"type\": \"record\", \"name\": \"Node\", \"fields\": [{\"name\": \"v\", \"type\": \"int\"}, {\"name\": \"w\", \"type\": \"int\"}, {\"name\": \"next\", \"type\": [\"null\", \"Node\"], \"default\": null}]}",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "avro-reused-type-change",
+   "type": "AVRO",
+   "old": "{\"type\": \"record\", \"name\": \"R\", \"fields\": [{\"name\": \"a\", \"type\": {\"type\": \"record\", \"name\": \"I\", \"fields\": [{\"name\": \"x\", \"type\": \"int\"}]}}, {\"name\": \"b\", \"type\": \"I\"}]}",
+   "new": "{\"type\": \"record\", \"name\": \"R\", \"fields\": [{\"name\": \"a\", \"type\": {\"type\": \"record\", \"name\": \"I\", \"fields\": [{\"name\": \"x\", \"type\": \"long\"}]}}, {\"name\": \"b\", \"type\": \"I\"}]}",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "avro-add-then-union-default",
+   "type": "AVRO",
+   "old": "{\"type\": \"record\", \"name\": \"R\", \"fields\": [{\"name\": \"a\", \"type\": \"int\"}, {\"name\": \"b\", \"type\": \"string\"}]}",
+   "new": "{\"type\": \"record\", \"name\": \"R\", \"fields\": [{\"name\": \"a\", \"type\": \"int\"}, {\"name\": \"b\", \"type\": \"string\"}, {\"name\": \"c\", \"type\": [\"string\", \"null\"], \"default\": \"x\"}]}",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "avro-identical",
+   "type": "AVRO",
+   "old": "{\"type\": \"record\", \"name\": \"R\", \"fields\": [{\"name\": \"a\", \"type\": \"int\"}, {\"name\": \"b\", \"type\": \"string\"}]}",
+   "new": "{\"type\": \"record\", \"name\": \"R\", \"fields\": [{\"name\": \"a\", \"type\": \"int\"}, {\"name\": \"b\", \"type\": \"string\"}]}",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "avro-ref-change",
+   "type": "AVRO",
+   "old": "{\"type\": \"record\", \"name\": \"P\", \"fields\": [{\"name\": \"addr\", \"type\": \"com.acme.Address\"}], \"namespace\": \"com.acme\"}",
+   "new": "{\"type\": \"record\", \"name\": \"P\", \"fields\": [{\"name\": \"addr\", \"type\": \"com.acme.Address\"}], \"namespace\": \"com.acme\"}",
+   "old_refs": [
+    {
+     "name": "com.acme.Address",
+     "schema": "{\"type\": \"record\", \"name\": \"Address\", \"fields\": [{\"name\": \"street\", \"type\": \"string\"}], \"namespace\": \"com.acme\"}"
+    }
+   ],
+   "new_refs": [
+    {
+     "name": "com.acme.Address",
+     "schema": "{\"type\": \"record\", \"name\": \"Address\", \"fields\": [{\"name\": \"street\", \"type\": \"string\"}, {\"name\": \"zip\", \"type\": \"string\"}], \"namespace\": \"com.acme\"}"
+    }
+   ]
+  },
+  {
+   "id": "json-add-prop-open",
+   "type": "JSON",
+   "old": "{\"type\": \"object\", \"properties\": {\"a\": {\"type\": \"string\"}}}",
+   "new": "{\"type\": \"object\", \"properties\": {\"a\": {\"type\": \"string\"}, \"b\": {\"type\": \"integer\"}}}",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "json-remove-prop-open",
+   "type": "JSON",
+   "old": "{\"type\": \"object\", \"properties\": {\"a\": {\"type\": \"string\"}, \"b\": {\"type\": \"integer\"}}}",
+   "new": "{\"type\": \"object\", \"properties\": {\"a\": {\"type\": \"string\"}}}",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "json-add-prop-closed",
+   "type": "JSON",
+   "old": "{\"type\": \"object\", \"properties\": {\"a\": {\"type\": \"string\"}}, \"additionalProperties\": false}",
+   "new": "{\"type\": \"object\", \"properties\": {\"a\": {\"type\": \"string\"}, \"b\": {\"type\": \"integer\"}}, \"additionalProperties\": false}",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "json-remove-prop-closed",
+   "type": "JSON",
+   "old": "{\"type\": \"object\", \"properties\": {\"a\": {\"type\": \"string\"}, \"b\": {\"type\": \"integer\"}}, \"additionalProperties\": false}",
+   "new": "{\"type\": \"object\", \"properties\": {\"a\": {\"type\": \"string\"}}, \"additionalProperties\": false}",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "json-open-to-closed",
+   "type": "JSON",
+   "old": "{\"type\": \"object\", \"properties\": {\"a\": {\"type\": \"string\"}}}",
+   "new": "{\"type\": \"object\", \"properties\": {\"a\": {\"type\": \"string\"}}, \"additionalProperties\": false}",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "json-closed-to-open",
+   "type": "JSON",
+   "old": "{\"type\": \"object\", \"properties\": {\"a\": {\"type\": \"string\"}}, \"additionalProperties\": false}",
+   "new": "{\"type\": \"object\", \"properties\": {\"a\": {\"type\": \"string\"}}}",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "json-add-prop-partial",
+   "type": "JSON",
+   "old": "{\"type\": \"object\", \"properties\": {\"a\": {\"type\": \"string\"}}, \"additionalProperties\": {\"type\": \"integer\"}}",
+   "new": "{\"type\": \"object\", \"properties\": {\"a\": {\"type\": \"string\"}, \"b\": {\"type\": \"integer\"}}, \"additionalProperties\": {\"type\": \"integer\"}}",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "json-add-prop-partial-mismatch",
+   "type": "JSON",
+   "old": "{\"type\": \"object\", \"properties\": {\"a\": {\"type\": \"string\"}}, \"additionalProperties\": {\"type\": \"integer\"}}",
+   "new": "{\"type\": \"object\", \"properties\": {\"a\": {\"type\": \"string\"}, \"b\": {\"type\": \"string\"}}, \"additionalProperties\": {\"type\": \"integer\"}}",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "json-additional-schema-change",
+   "type": "JSON",
+   "old": "{\"type\": \"object\", \"properties\": {}, \"additionalProperties\": {\"type\": \"integer\"}}",
+   "new": "{\"type\": \"object\", \"properties\": {}, \"additionalProperties\": {\"type\": \"number\"}}",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "json-additional-schema-narrow",
+   "type": "JSON",
+   "old": "{\"type\": \"object\", \"properties\": {}, \"additionalProperties\": {\"type\": \"number\"}}",
+   "new": "{\"type\": \"object\", \"properties\": {}, \"additionalProperties\": {\"type\": \"integer\"}}",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "json-add-required",
+   "type": "JSON",
+   "old": "{\"type\": \"object\", \"properties\": {\"a\": {\"type\": \"string\"}}}",
+   "new": "{\"type\": \"object\", \"properties\": {\"a\": {\"type\": \"string\"}}, \"required\": [\"a\"]}",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "json-remove-required",
+   "type": "JSON",
+   "old": "{\"type\": \"object\", \"properties\": {\"a\": {\"type\": \"string\"}}, \"required\": [\"a\"]}",
+   "new": "{\"type\": \"object\", \"properties\": {\"a\": {\"type\": \"string\"}}}",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "json-add-required-with-default",
+   "type": "JSON",
+   "old": "{\"type\": \"object\", \"properties\": {\"a\": {\"type\": \"string\"}}}",
+   "new": "{\"type\": \"object\", \"properties\": {\"a\": {\"type\": \"string\", \"default\": \"x\"}}, \"required\": [\"a\"]}",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "json-type-change",
+   "type": "JSON",
+   "old": "{\"type\": \"string\"}",
+   "new": "{\"type\": \"integer\"}",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "json-int-to-number",
+   "type": "JSON",
+   "old": "{\"type\": \"integer\"}",
+   "new": "{\"type\": \"number\"}",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "json-number-to-int",
+   "type": "JSON",
+   "old": "{\"type\": \"number\"}",
+   "new": "{\"type\": \"integer\"}",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "json-type-widen-array",
+   "type": "JSON",
+   "old": "{\"type\": \"string\"}",
+   "new": "{\"type\": [\"string\", \"null\"]}",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "json-type-narrow-array",
+   "type": "JSON",
+   "old": "{\"type\": [\"string\", \"null\"]}",
+   "new": "{\"type\": \"string\"}",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "json-enum-add",
+   "type": "JSON",
+   "old": "{\"type\": \"string\", \"enum\": [\"a\", \"b\"]}",
+   "new": "{\"type\": \"string\", \"enum\": [\"a\", \"b\", \"c\"]}",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "json-enum-remove",
+   "type": "JSON",
+   "old": "{\"type\": \"string\", \"enum\": [\"a\", \"b\"]}",
+   "new": "{\"type\": \"string\", \"enum\": [\"a\"]}",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "json-enum-added",
+   "type": "JSON",
+   "old": "{\"type\": \"string\"}",
+   "new": "{\"type\": \"string\", \"enum\": [\"a\"]}",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "json-enum-removed",
+   "type": "JSON",
+   "old": "{\"type\": \"string\", \"enum\": [\"a\"]}",
+   "new": "{\"type\": \"string\"}",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "json-maxLength-10-5",
+   "type": "JSON",
+   "old": "{\"type\": \"string\", \"maxLength\": 10}",
+   "new": "{\"type\": \"string\", \"maxLength\": 5}",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "json-maxLength-added-5",
+   "type": "JSON",
+   "old": "{\"type\": \"string\"}",
+   "new": "{\"type\": \"string\", \"maxLength\": 5}",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "json-maxLength-5-10",
+   "type": "JSON",
+   "old": "{\"type\": \"string\", \"maxLength\": 5}",
+   "new": "{\"type\": \"string\", \"maxLength\": 10}",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "json-minLength-1-3",
+   "type": "JSON",
+   "old": "{\"type\": \"string\", \"minLength\": 1}",
+   "new": "{\"type\": \"string\", \"minLength\": 3}",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "json-minLength-added-3",
+   "type": "JSON",
+   "old": "{\"type\": \"string\"}",
+   "new": "{\"type\": \"string\", \"minLength\": 3}",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "json-minLength-3-1",
+   "type": "JSON",
+   "old": "{\"type\": \"string\", \"minLength\": 3}",
+   "new": "{\"type\": \"string\", \"minLength\": 1}",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "json-minLength-added-1",
+   "type": "JSON",
+   "old": "{\"type\": \"string\"}",
+   "new": "{\"type\": \"string\", \"minLength\": 1}",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "json-maximum-10-5",
+   "type": "JSON",
+   "old": "{\"type\": \"number\", \"maximum\": 10}",
+   "new": "{\"type\": \"number\", \"maximum\": 5}",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "json-maximum-added-5",
+   "type": "JSON",
+   "old": "{\"type\": \"number\"}",
+   "new": "{\"type\": \"number\", \"maximum\": 5}",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "json-maximum-5-10",
+   "type": "JSON",
+   "old": "{\"type\": \"number\", \"maximum\": 5}",
+   "new": "{\"type\": \"number\", \"maximum\": 10}",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "json-minimum-1-3",
+   "type": "JSON",
+   "old": "{\"type\": \"number\", \"minimum\": 1}",
+   "new": "{\"type\": \"number\", \"minimum\": 3}",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "json-minimum-added-3",
+   "type": "JSON",
+   "old": "{\"type\": \"number\"}",
+   "new": "{\"type\": \"number\", \"minimum\": 3}",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "json-minimum-3-1",
+   "type": "JSON",
+   "old": "{\"type\": \"number\", \"minimum\": 3}",
+   "new": "{\"type\": \"number\", \"minimum\": 1}",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "json-minimum-added-1",
+   "type": "JSON",
+   "old": "{\"type\": \"number\"}",
+   "new": "{\"type\": \"number\", \"minimum\": 1}",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "json-exclusiveMaximum-10-5",
+   "type": "JSON",
+   "old": "{\"type\": \"number\", \"exclusiveMaximum\": 10}",
+   "new": "{\"type\": \"number\", \"exclusiveMaximum\": 5}",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "json-exclusiveMaximum-added-5",
+   "type": "JSON",
+   "old": "{\"type\": \"number\"}",
+   "new": "{\"type\": \"number\", \"exclusiveMaximum\": 5}",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "json-exclusiveMinimum-3-1",
+   "type": "JSON",
+   "old": "{\"type\": \"number\", \"exclusiveMinimum\": 3}",
+   "new": "{\"type\": \"number\", \"exclusiveMinimum\": 1}",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "json-maxItems-10-5",
+   "type": "JSON",
+   "old": "{\"type\": \"array\", \"maxItems\": 10}",
+   "new": "{\"type\": \"array\", \"maxItems\": 5}",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "json-maxItems-added-5",
+   "type": "JSON",
+   "old": "{\"type\": \"array\"}",
+   "new": "{\"type\": \"array\", \"maxItems\": 5}",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "json-minItems-1-3",
+   "type": "JSON",
+   "old": "{\"type\": \"array\", \"minItems\": 1}",
+   "new": "{\"type\": \"array\", \"minItems\": 3}",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "json-minItems-added-3",
+   "type": "JSON",
+   "old": "{\"type\": \"array\"}",
+   "new": "{\"type\": \"array\", \"minItems\": 3}",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "json-maxProperties-10-5",
+   "type": "JSON",
+   "old": "{\"type\": \"object\", \"maxProperties\": 10}",
+   "new": "{\"type\": \"object\", \"maxProperties\": 5}",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "json-maxProperties-added-5",
+   "type": "JSON",
+   "old": "{\"type\": \"object\"}",
+   "new": "{\"type\": \"object\", \"maxProperties\": 5}",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "json-minProperties-1-3",
+   "type": "JSON",
+   "old": "{\"type\": \"object\", \"minProperties\": 1}",
+   "new": "{\"type\": \"object\", \"minProperties\": 3}",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "json-minProperties-added-3",
+   "type": "JSON",
+   "old": "{\"type\": \"object\"}",
+   "new": "{\"type\": \"object\", \"minProperties\": 3}",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "json-maxLength-removed",
+   "type": "JSON",
+   "old": "{\"type\": \"string\", \"maxLength\": 5}",
+   "new": "{\"type\": \"string\"}",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "json-pattern-added",
+   "type": "JSON",
+   "old": "{\"type\": \"string\"}",
+   "new": "{\"type\": \"string\", \"pattern\": \"^a\"}",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "json-pattern-changed",
+   "type": "JSON",
+   "old": "{\"type\": \"string\", \"pattern\": \"^a\"}",
+   "new": "{\"type\": \"string\", \"pattern\": \"^b\"}",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "json-pattern-removed",
+   "type": "JSON",
+   "old": "{\"type\": \"string\", \"pattern\": \"^a\"}",
+   "new": "{\"type\": \"string\"}",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "json-multipleOf-added",
+   "type": "JSON",
+   "old": "{\"type\": \"number\"}",
+   "new": "{\"type\": \"number\", \"multipleOf\": 2}",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "json-multipleOf-changed",
+   "type": "JSON",
+   "old": "{\"type\": \"number\", \"multipleOf\": 4}",
+   "new": "{\"type\": \"number\", \"multipleOf\": 2}",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "json-uniqueItems-added",
+   "type": "JSON",
+   "old": "{\"type\": \"array\"}",
+   "new": "{\"type\": \"array\", \"uniqueItems\": true}",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "json-items-type-change",
+   "type": "JSON",
+   "old": "{\"type\": \"array\", \"items\": {\"type\": \"string\"}}",
+   "new": "{\"type\": \"array\", \"items\": {\"type\": \"integer\"}}",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "json-items-widen",
+   "type": "JSON",
+   "old": "{\"type\": \"array\", \"items\": {\"type\": \"integer\"}}",
+   "new": "{\"type\": \"array\", \"items\": {\"type\": \"number\"}}",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "json-oneof-add",
+   "type": "JSON",
+   "old": "{\"oneOf\": [{\"type\": \"string\"}, {\"type\": \"integer\"}]}",
+   "new": "{\"oneOf\": [{\"type\": \"string\"}, {\"type\": \"integer\"}, {\"type\": \"boolean\"}]}",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "json-oneof-remove",
+   "type": "JSON",
+   "old": "{\"oneOf\": [{\"type\": \"string\"}, {\"type\": \"integer\"}]}",
+   "new": "{\"oneOf\": [{\"type\": \"string\"}]}",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "json-anyof-add",
+   "type": "JSON",
+   "old": "{\"anyOf\": [{\"type\": \"string\"}]}",
+   "new": "{\"anyOf\": [{\"type\": \"string\"}, {\"type\": \"integer\"}]}",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "json-allof-add",
+   "type": "JSON",
+   "old": "{\"allOf\": [{\"type\": \"object\"}]}",
+   "new": "{\"allOf\": [{\"type\": \"object\"}, {\"required\": [\"a\"]}]}",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "json-to-oneof",
+   "type": "JSON",
+   "old": "{\"type\": \"string\"}",
+   "new": "{\"oneOf\": [{\"type\": \"string\"}, {\"type\": \"integer\"}]}",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "json-from-oneof",
+   "type": "JSON",
+   "old": "{\"oneOf\": [{\"type\": \"string\"}, {\"type\": \"integer\"}]}",
+   "new": "{\"type\": \"string\"}",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "json-nested-type-change",
+   "type": "JSON",
+   "old": "{\"type\": \"object\", \"properties\": {\"n\": {\"type\": \"object\", \"properties\": {\"x\": {\"type\": \"string\"}}}}}",
+   "new": "{\"type\": \"object\", \"properties\": {\"n\": {\"type\": \"object\", \"properties\": {\"x\": {\"type\": \"integer\"}}}}}",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "json-ref-target-change",
+   "type": "JSON",
+   "old": "{\"definitions\": {\"x\": {\"type\": \"string\"}}, \"type\": \"object\", \"properties\": {\"a\": {\"$ref\": \"#/definitions/x\"}}}",
+   "new": "{\"definitions\": {\"x\": {\"type\": \"integer\"}}, \"type\": \"object\", \"properties\": {\"a\": {\"$ref\": \"#/definitions/x\"}}}",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "json-const-change",
+   "type": "JSON",
+   "old": "{\"const\": \"a\"}",
+   "new": "{\"const\": \"b\"}",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "json-description-only",
+   "type": "JSON",
+   "old": "{\"type\": \"string\", \"description\": \"x\"}",
+   "new": "{\"type\": \"string\", \"description\": \"y\"}",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "json-true-to-false",
+   "type": "JSON",
+   "old": "true",
+   "new": "false",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "json-empty-to-typed",
+   "type": "JSON",
+   "old": "{}",
+   "new": "{\"type\": \"string\"}",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "json-typed-to-empty",
+   "type": "JSON",
+   "old": "{\"type\": \"string\"}",
+   "new": "{}",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "json-add-object-type",
+   "type": "JSON",
+   "old": "{\"properties\": {\"a\": {\"type\": \"string\"}}}",
+   "new": "{\"type\": \"object\", \"properties\": {\"a\": {\"type\": \"string\"}}}",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "json-not-added",
+   "type": "JSON",
+   "old": "{\"type\": \"string\"}",
+   "new": "{\"type\": \"string\", \"not\": {\"const\": \"x\"}}",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "json-format-added",
+   "type": "JSON",
+   "old": "{\"type\": \"string\"}",
+   "new": "{\"type\": \"string\", \"format\": \"email\"}",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "json-dependencies-added",
+   "type": "JSON",
+   "old": "{\"type\": \"object\", \"properties\": {\"a\": {\"type\": \"string\"}, \"b\": {\"type\": \"string\"}}}",
+   "new": "{\"type\": \"object\", \"properties\": {\"a\": {\"type\": \"string\"}, \"b\": {\"type\": \"string\"}}, \"dependencies\": {\"a\": [\"b\"]}}",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "json-identical",
+   "type": "JSON",
+   "old": "{\"type\": \"object\", \"properties\": {\"a\": {\"type\": \"string\"}}}",
+   "new": "{\"type\": \"object\", \"properties\": {\"a\": {\"type\": \"string\"}}}",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "proto-add-field",
+   "type": "PROTOBUF",
+   "old": "syntax = \"proto3\";\npackage p;\nmessage A { string a = 1; int32 b = 2; }\n",
+   "new": "syntax = \"proto3\";\npackage p;\nmessage A { string a = 1; int32 b = 2; bool c = 3; }\n",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "proto-remove-field",
+   "type": "PROTOBUF",
+   "old": "syntax = \"proto3\";\npackage p;\nmessage A { string a = 1; int32 b = 2; }\n",
+   "new": "syntax = \"proto3\";\npackage p;\nmessage A { string a = 1; }\n",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "proto-rename-field",
+   "type": "PROTOBUF",
+   "old": "syntax = \"proto3\";\npackage p;\nmessage A { string a = 1; int32 b = 2; }\n",
+   "new": "syntax = \"proto3\";\npackage p;\nmessage A { string a = 1; int32 bee = 2; }\n",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "proto-renumber-field",
+   "type": "PROTOBUF",
+   "old": "syntax = \"proto3\";\npackage p;\nmessage A { string a = 1; int32 b = 2; }\n",
+   "new": "syntax = \"proto3\";\npackage p;\nmessage A { string a = 1; int32 b = 3; }\n",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "proto-type-int32-int64",
+   "type": "PROTOBUF",
+   "old": "syntax = \"proto3\";\npackage p;\nmessage A { int32 x = 1; }\n",
+   "new": "syntax = \"proto3\";\npackage p;\nmessage A { int64 x = 1; }\n",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "proto-type-int32-uint32",
+   "type": "PROTOBUF",
+   "old": "syntax = \"proto3\";\npackage p;\nmessage A { int32 x = 1; }\n",
+   "new": "syntax = \"proto3\";\npackage p;\nmessage A { uint32 x = 1; }\n",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "proto-type-int32-bool",
+   "type": "PROTOBUF",
+   "old": "syntax = \"proto3\";\npackage p;\nmessage A { int32 x = 1; }\n",
+   "new": "syntax = \"proto3\";\npackage p;\nmessage A { bool x = 1; }\n",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "proto-type-int64-int32",
+   "type": "PROTOBUF",
+   "old": "syntax = \"proto3\";\npackage p;\nmessage A { int64 x = 1; }\n",
+   "new": "syntax = \"proto3\";\npackage p;\nmessage A { int32 x = 1; }\n",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "proto-type-sint32-sint64",
+   "type": "PROTOBUF",
+   "old": "syntax = \"proto3\";\npackage p;\nmessage A { sint32 x = 1; }\n",
+   "new": "syntax = \"proto3\";\npackage p;\nmessage A { sint64 x = 1; }\n",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "proto-type-sint32-int32",
+   "type": "PROTOBUF",
+   "old": "syntax = \"proto3\";\npackage p;\nmessage A { sint32 x = 1; }\n",
+   "new": "syntax = \"proto3\";\npackage p;\nmessage A { int32 x = 1; }\n",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "proto-type-fixed32-sfixed32",
+   "type": "PROTOBUF",
+   "old": "syntax = \"proto3\";\npackage p;\nmessage A { fixed32 x = 1; }\n",
+   "new": "syntax = \"proto3\";\npackage p;\nmessage A { sfixed32 x = 1; }\n",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "proto-type-fixed64-sfixed64",
+   "type": "PROTOBUF",
+   "old": "syntax = \"proto3\";\npackage p;\nmessage A { fixed64 x = 1; }\n",
+   "new": "syntax = \"proto3\";\npackage p;\nmessage A { sfixed64 x = 1; }\n",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "proto-type-fixed32-fixed64",
+   "type": "PROTOBUF",
+   "old": "syntax = \"proto3\";\npackage p;\nmessage A { fixed32 x = 1; }\n",
+   "new": "syntax = \"proto3\";\npackage p;\nmessage A { fixed64 x = 1; }\n",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "proto-type-float-double",
+   "type": "PROTOBUF",
+   "old": "syntax = \"proto3\";\npackage p;\nmessage A { float x = 1; }\n",
+   "new": "syntax = \"proto3\";\npackage p;\nmessage A { double x = 1; }\n",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "proto-type-int32-string",
+   "type": "PROTOBUF",
+   "old": "syntax = \"proto3\";\npackage p;\nmessage A { int32 x = 1; }\n",
+   "new": "syntax = \"proto3\";\npackage p;\nmessage A { string x = 1; }\n",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "proto-type-string-bytes",
+   "type": "PROTOBUF",
+   "old": "syntax = \"proto3\";\npackage p;\nmessage A { string x = 1; }\n",
+   "new": "syntax = \"proto3\";\npackage p;\nmessage A { bytes x = 1; }\n",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "proto-type-bytes-string",
+   "type": "PROTOBUF",
+   "old": "syntax = \"proto3\";\npackage p;\nmessage A { bytes x = 1; }\n",
+   "new": "syntax = \"proto3\";\npackage p;\nmessage A { string x = 1; }\n",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "proto-type-int32-float",
+   "type": "PROTOBUF",
+   "old": "syntax = \"proto3\";\npackage p;\nmessage A { int32 x = 1; }\n",
+   "new": "syntax = \"proto3\";\npackage p;\nmessage A { float x = 1; }\n",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "proto-scalar-to-message",
+   "type": "PROTOBUF",
+   "old": "syntax = \"proto3\";\npackage p;\nmessage A { string x = 1; }\nmessage B { string y = 1; }\n",
+   "new": "syntax = \"proto3\";\npackage p;\nmessage A { B x = 1; }\nmessage B { string y = 1; }\n",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "proto-message-type-change",
+   "type": "PROTOBUF",
+   "old": "syntax = \"proto3\";\npackage p;\nmessage A { B x = 1; }\nmessage B { string y = 1; }\nmessage C { string y = 1; }\n",
+   "new": "syntax = \"proto3\";\npackage p;\nmessage A { C x = 1; }\nmessage B { string y = 1; }\nmessage C { string y = 1; }\n",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "proto-enum-to-int",
+   "type": "PROTOBUF",
+   "old": "syntax = \"proto3\";\npackage p;\nmessage A { E x = 1; }\nenum E { E0 = 0; }\n",
+   "new": "syntax = \"proto3\";\npackage p;\nmessage A { int32 x = 1; }\nenum E { E0 = 0; }\n",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "proto-remove-message",
+   "type": "PROTOBUF",
+   "old": "syntax = \"proto3\";\npackage p;\nmessage A { string a = 1; }\nmessage B { string b = 1; }\n",
+   "new": "syntax = \"proto3\";\npackage p;\nmessage A { string a = 1; }\n",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "proto-add-message",
+   "type": "PROTOBUF",
+   "old": "syntax = \"proto3\";\npackage p;\nmessage A { string a = 1; }\n",
+   "new": "syntax = \"proto3\";\npackage p;\nmessage A { string a = 1; }\nmessage B { string b = 1; }\n",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "proto-rename-message",
+   "type": "PROTOBUF",
+   "old": "syntax = \"proto3\";\npackage p;\nmessage A { string a = 1; }\n",
+   "new": "syntax = \"proto3\";\npackage p;\nmessage Z { string a = 1; }\n",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "proto-package-change",
+   "type": "PROTOBUF",
+   "old": "syntax = \"proto3\";\npackage p;\nmessage A { string a = 1; }\n",
+   "new": "syntax = \"proto3\";\npackage q;\nmessage A { string a = 1; }\n",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "proto-into-new-oneof-single",
+   "type": "PROTOBUF",
+   "old": "syntax = \"proto3\";\npackage p;\nmessage A { string a = 1; int32 b = 2; }\n",
+   "new": "syntax = \"proto3\";\npackage p;\nmessage A { oneof k { string a = 1; } int32 b = 2; }\n",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "proto-into-new-oneof-multi",
+   "type": "PROTOBUF",
+   "old": "syntax = \"proto3\";\npackage p;\nmessage A { string a = 1; int32 b = 2; }\n",
+   "new": "syntax = \"proto3\";\npackage p;\nmessage A { oneof k { string a = 1; int32 b = 2; } }\n",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "proto-into-existing-oneof",
+   "type": "PROTOBUF",
+   "old": "syntax = \"proto3\";\npackage p;\nmessage A { oneof k { string a = 1; } int32 b = 2; }\n",
+   "new": "syntax = \"proto3\";\npackage p;\nmessage A { oneof k { string a = 1; int32 b = 2; } }\n",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "proto-remove-oneof-field",
+   "type": "PROTOBUF",
+   "old": "syntax = \"proto3\";\npackage p;\nmessage A { oneof k { string a = 1; int32 b = 2; } }\n",
+   "new": "syntax = \"proto3\";\npackage p;\nmessage A { oneof k { string a = 1; } }\n",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "proto-add-oneof-field",
+   "type": "PROTOBUF",
+   "old": "syntax = \"proto3\";\npackage p;\nmessage A { oneof k { string a = 1; } }\n",
+   "new": "syntax = \"proto3\";\npackage p;\nmessage A { oneof k { string a = 1; int32 b = 2; } }\n",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "proto-out-of-oneof",
+   "type": "PROTOBUF",
+   "old": "syntax = \"proto3\";\npackage p;\nmessage A { oneof k { string a = 1; } }\n",
+   "new": "syntax = \"proto3\";\npackage p;\nmessage A { string a = 1; }\n",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "proto2-optional-to-required",
+   "type": "PROTOBUF",
+   "old": "syntax = \"proto2\";\npackage p;\nmessage A { optional string a = 1; }\n",
+   "new": "syntax = \"proto2\";\npackage p;\nmessage A { required string a = 1; }\n",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "proto2-required-to-optional",
+   "type": "PROTOBUF",
+   "old": "syntax = \"proto2\";\npackage p;\nmessage A { required string a = 1; }\n",
+   "new": "syntax = \"proto2\";\npackage p;\nmessage A { optional string a = 1; }\n",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "proto2-add-required",
+   "type": "PROTOBUF",
+   "old": "syntax = \"proto2\";\npackage p;\nmessage A { optional string a = 1; }\n",
+   "new": "syntax = \"proto2\";\npackage p;\nmessage A { optional string a = 1; required int32 b = 2; }\n",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "proto2-remove-required",
+   "type": "PROTOBUF",
+   "old": "syntax = \"proto2\";\npackage p;\nmessage A { optional string a = 1; required int32 b = 2; }\n",
+   "new": "syntax = \"proto2\";\npackage p;\nmessage A { optional string a = 1; }\n",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "proto-singular-to-repeated-int",
+   "type": "PROTOBUF",
+   "old": "syntax = \"proto3\";\npackage p;\nmessage A { int32 x = 1; }\n",
+   "new": "syntax = \"proto3\";\npackage p;\nmessage A { repeated int32 x = 1; }\n",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "proto-singular-to-repeated-string",
+   "type": "PROTOBUF",
+   "old": "syntax = \"proto3\";\npackage p;\nmessage A { string x = 1; }\n",
+   "new": "syntax = \"proto3\";\npackage p;\nmessage A { repeated string x = 1; }\n",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "proto-repeated-to-singular",
+   "type": "PROTOBUF",
+   "old": "syntax = \"proto3\";\npackage p;\nmessage A { repeated string x = 1; }\n",
+   "new": "syntax = \"proto3\";\npackage p;\nmessage A { string x = 1; }\n",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "proto-enum-add-value",
+   "type": "PROTOBUF",
+   "old": "syntax = \"proto3\";\npackage p;\nmessage A { E e = 1; }\nenum E { E0 = 0; }\n",
+   "new": "syntax = \"proto3\";\npackage p;\nmessage A { E e = 1; }\nenum E { E0 = 0; E1 = 1; }\n",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "proto-enum-remove-value",
+   "type": "PROTOBUF",
+   "old": "syntax = \"proto3\";\npackage p;\nmessage A { E e = 1; }\nenum E { E0 = 0; E1 = 1; }\n",
+   "new": "syntax = \"proto3\";\npackage p;\nmessage A { E e = 1; }\nenum E { E0 = 0; }\n",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "proto-enum-rename",
+   "type": "PROTOBUF",
+   "old": "syntax = \"proto3\";\npackage p;\nmessage A { E e = 1; }\nenum E { E0 = 0; }\n",
+   "new": "syntax = \"proto3\";\npackage p;\nmessage A { F e = 1; }\nenum F { E0 = 0; }\n",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "proto-remove-enum",
+   "type": "PROTOBUF",
+   "old": "syntax = \"proto3\";\npackage p;\nmessage A { string a = 1; }\nenum E { E0 = 0; }\n",
+   "new": "syntax = \"proto3\";\npackage p;\nmessage A { string a = 1; }\n",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "proto-map-value-change",
+   "type": "PROTOBUF",
+   "old": "syntax = \"proto3\";\npackage p;\nmessage A { map<string, int32> m = 1; }\n",
+   "new": "syntax = \"proto3\";\npackage p;\nmessage A { map<string, string> m = 1; }\n",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "proto-map-value-widen",
+   "type": "PROTOBUF",
+   "old": "syntax = \"proto3\";\npackage p;\nmessage A { map<string, int32> m = 1; }\n",
+   "new": "syntax = \"proto3\";\npackage p;\nmessage A { map<string, int64> m = 1; }\n",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "proto-nested-add-field",
+   "type": "PROTOBUF",
+   "old": "syntax = \"proto3\";\npackage p;\nmessage A { message N { string x = 1; } N n = 1; }\n",
+   "new": "syntax = \"proto3\";\npackage p;\nmessage A { message N { string x = 1; int32 y = 2; } N n = 1; }\n",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "proto-nested-type-change",
+   "type": "PROTOBUF",
+   "old": "syntax = \"proto3\";\npackage p;\nmessage A { message N { string x = 1; } N n = 1; }\n",
+   "new": "syntax = \"proto3\";\npackage p;\nmessage A { message N { int32 x = 1; } N n = 1; }\n",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "proto-syntax-2-to-3",
+   "type": "PROTOBUF",
+   "old": "syntax = \"proto2\";\npackage p;\nmessage A { optional string a = 1; }\n",
+   "new": "syntax = \"proto3\";\npackage p;\nmessage A { string a = 1; }\n",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "proto-reserved-added",
+   "type": "PROTOBUF",
+   "old": "syntax = \"proto3\";\npackage p;\nmessage A { string a = 1; int32 b = 2; }\n",
+   "new": "syntax = \"proto3\";\npackage p;\nmessage A { reserved 2; string a = 1; }\n",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "proto-json-name",
+   "type": "PROTOBUF",
+   "old": "syntax = \"proto3\";\npackage p;\nmessage A { string a = 1; int32 b = 2; }\n",
+   "new": "syntax = \"proto3\";\npackage p;\nmessage A { string a = 1 [json_name = \"aa\"]; int32 b = 2; }\n",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "proto-move-to-nested",
+   "type": "PROTOBUF",
+   "old": "syntax = \"proto3\";\npackage p;\nmessage A { B b = 1; }\nmessage B { string x = 1; }\n",
+   "new": "syntax = \"proto3\";\npackage p;\nmessage A { message B { string x = 1; } B b = 1; }\n",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "proto-identical",
+   "type": "PROTOBUF",
+   "old": "syntax = \"proto3\";\npackage p;\nmessage A { string a = 1; int32 b = 2; }\n",
+   "new": "syntax = \"proto3\";\npackage p;\nmessage A { string a = 1; int32 b = 2; }\n",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "proto-optional3-added",
+   "type": "PROTOBUF",
+   "old": "syntax = \"proto3\";\npackage p;\nmessage A { string a = 1; int32 b = 2; }\n",
+   "new": "syntax = \"proto3\";\npackage p;\nmessage A { string a = 1; int32 b = 2; optional string c = 3; }\n",
+   "old_refs": [],
+   "new_refs": []
+  },
+  {
+   "id": "proto-to-optional3",
+   "type": "PROTOBUF",
+   "old": "syntax = \"proto3\";\npackage p;\nmessage A { string a = 1; }\n",
+   "new": "syntax = \"proto3\";\npackage p;\nmessage A { optional string a = 1; }\n",
+   "old_refs": [],
+   "new_refs": []
+  }
+ ],
+ "chains": [
+  {
+   "id": "avro-add-optional-field",
+   "types": [
+    "AVRO",
+    "AVRO"
+   ],
+   "versions": [
+    "{\"type\": \"record\", \"name\": \"R\", \"fields\": [{\"name\": \"a\", \"type\": \"int\"}]}",
+    "{\"type\": \"record\", \"name\": \"R\", \"fields\": [{\"name\": \"a\", \"type\": \"int\"}, {\"name\": \"b\", \"type\": \"string\", \"default\": \"x\"}]}"
+   ]
+  },
+  {
+   "id": "avro-add-required-field",
+   "types": [
+    "AVRO",
+    "AVRO"
+   ],
+   "versions": [
+    "{\"type\": \"record\", \"name\": \"R\", \"fields\": [{\"name\": \"a\", \"type\": \"int\"}]}",
+    "{\"type\": \"record\", \"name\": \"R\", \"fields\": [{\"name\": \"a\", \"type\": \"int\"}, {\"name\": \"b\", \"type\": \"string\"}]}"
+   ]
+  },
+  {
+   "id": "avro-remove-optional-field",
+   "types": [
+    "AVRO",
+    "AVRO"
+   ],
+   "versions": [
+    "{\"type\": \"record\", \"name\": \"R\", \"fields\": [{\"name\": \"a\", \"type\": \"int\"}, {\"name\": \"b\", \"type\": \"string\", \"default\": \"x\"}]}",
+    "{\"type\": \"record\", \"name\": \"R\", \"fields\": [{\"name\": \"a\", \"type\": \"int\"}]}"
+   ]
+  },
+  {
+   "id": "avro-remove-required-field",
+   "types": [
+    "AVRO",
+    "AVRO"
+   ],
+   "versions": [
+    "{\"type\": \"record\", \"name\": \"R\", \"fields\": [{\"name\": \"a\", \"type\": \"int\"}, {\"name\": \"b\", \"type\": \"string\"}]}",
+    "{\"type\": \"record\", \"name\": \"R\", \"fields\": [{\"name\": \"a\", \"type\": \"int\"}]}"
+   ]
+  },
+  {
+   "id": "avro-promote-int-long",
+   "types": [
+    "AVRO",
+    "AVRO"
+   ],
+   "versions": [
+    "{\"type\": \"record\", \"name\": \"R\", \"fields\": [{\"name\": \"a\", \"type\": \"int\"}]}",
+    "{\"type\": \"record\", \"name\": \"R\", \"fields\": [{\"name\": \"a\", \"type\": \"long\"}]}"
+   ]
+  },
+  {
+   "id": "avro-change-int-string",
+   "types": [
+    "AVRO",
+    "AVRO"
+   ],
+   "versions": [
+    "{\"type\": \"record\", \"name\": \"R\", \"fields\": [{\"name\": \"a\", \"type\": \"int\"}]}",
+    "{\"type\": \"record\", \"name\": \"R\", \"fields\": [{\"name\": \"a\", \"type\": \"string\"}]}"
+   ]
+  },
+  {
+   "id": "avro-enum-add-symbol",
+   "types": [
+    "AVRO",
+    "AVRO"
+   ],
+   "versions": [
+    "{\"type\": \"record\", \"name\": \"R\", \"fields\": [{\"name\": \"e\", \"type\": {\"type\": \"enum\", \"name\": \"E\", \"symbols\": [\"A\", \"B\"]}}]}",
+    "{\"type\": \"record\", \"name\": \"R\", \"fields\": [{\"name\": \"e\", \"type\": {\"type\": \"enum\", \"name\": \"E\", \"symbols\": [\"A\", \"B\", \"C\"]}}]}"
+   ]
+  },
+  {
+   "id": "avro-enum-add-symbol-old-default",
+   "types": [
+    "AVRO",
+    "AVRO"
+   ],
+   "versions": [
+    "{\"type\": \"record\", \"name\": \"R\", \"fields\": [{\"name\": \"e\", \"type\": {\"type\": \"enum\", \"name\": \"E\", \"symbols\": [\"A\", \"B\"], \"default\": \"A\"}}]}",
+    "{\"type\": \"record\", \"name\": \"R\", \"fields\": [{\"name\": \"e\", \"type\": {\"type\": \"enum\", \"name\": \"E\", \"symbols\": [\"A\", \"B\", \"C\"], \"default\": \"A\"}}]}"
+   ]
+  },
+  {
+   "id": "avro-union-widen",
+   "types": [
+    "AVRO",
+    "AVRO"
+   ],
+   "versions": [
+    "{\"type\": \"record\", \"name\": \"R\", \"fields\": [{\"name\": \"a\", \"type\": [\"null\", \"int\"], \"default\": null}]}",
+    "{\"type\": \"record\", \"name\": \"R\", \"fields\": [{\"name\": \"a\", \"type\": [\"null\", \"int\", \"string\"], \"default\": null}]}"
+   ]
+  },
+  {
+   "id": "avro-rename-with-alias",
+   "types": [
+    "AVRO",
+    "AVRO"
+   ],
+   "versions": [
+    "{\"type\": \"record\", \"name\": \"R\", \"fields\": [{\"name\": \"a\", \"type\": \"int\"}]}",
+    "{\"type\": \"record\", \"name\": \"R\", \"fields\": [{\"name\": \"b\", \"type\": \"int\", \"aliases\": [\"a\"]}]}"
+   ]
+  },
+  {
+   "id": "avro-three-compatible",
+   "types": [
+    "AVRO",
+    "AVRO",
+    "AVRO"
+   ],
+   "versions": [
+    "{\"type\": \"record\", \"name\": \"R\", \"fields\": [{\"name\": \"a\", \"type\": \"int\"}]}",
+    "{\"type\": \"record\", \"name\": \"R\", \"fields\": [{\"name\": \"a\", \"type\": \"int\"}, {\"name\": \"b\", \"type\": \"string\", \"default\": \"\"}]}",
+    "{\"type\": \"record\", \"name\": \"R\", \"fields\": [{\"name\": \"a\", \"type\": \"int\"}, {\"name\": \"b\", \"type\": \"string\", \"default\": \"\"}, {\"name\": \"c\", \"type\": \"long\", \"default\": 0}]}"
+   ]
+  },
+  {
+   "id": "avro-backward-gap",
+   "types": [
+    "AVRO",
+    "AVRO",
+    "AVRO"
+   ],
+   "versions": [
+    "{\"type\": \"record\", \"name\": \"R\", \"fields\": [{\"name\": \"a\", \"type\": \"int\"}]}",
+    "{\"type\": \"record\", \"name\": \"R\", \"fields\": []}",
+    "{\"type\": \"record\", \"name\": \"R\", \"fields\": [{\"name\": \"a\", \"type\": \"string\", \"default\": \"\"}]}"
+   ]
+  },
+  {
+   "id": "avro-forward-gap",
+   "types": [
+    "AVRO",
+    "AVRO",
+    "AVRO"
+   ],
+   "versions": [
+    "{\"type\": \"record\", \"name\": \"R\", \"fields\": [{\"name\": \"x\", \"type\": \"int\", \"default\": 0}]}",
+    "{\"type\": \"record\", \"name\": \"R\", \"fields\": []}",
+    "{\"type\": \"record\", \"name\": \"R\", \"fields\": [{\"name\": \"x\", \"type\": \"string\"}]}"
+   ]
+  },
+  {
+   "id": "avro-full-gap",
+   "types": [
+    "AVRO",
+    "AVRO",
+    "AVRO"
+   ],
+   "versions": [
+    "{\"type\": \"record\", \"name\": \"R\", \"fields\": [{\"name\": \"x\", \"type\": \"int\", \"default\": 0}]}",
+    "{\"type\": \"record\", \"name\": \"R\", \"fields\": []}",
+    "{\"type\": \"record\", \"name\": \"R\", \"fields\": [{\"name\": \"x\", \"type\": \"string\", \"default\": \"\"}]}"
+   ]
+  },
+  {
+   "id": "avro-to-json",
+   "types": [
+    "AVRO",
+    "JSON"
+   ],
+   "versions": [
+    "{\"type\": \"record\", \"name\": \"R\", \"fields\": [{\"name\": \"a\", \"type\": \"int\"}]}",
+    "{\"type\": \"object\", \"properties\": {\"a\": {\"type\": \"integer\"}}}"
+   ]
+  },
+  {
+   "id": "json-closed-add-property",
+   "types": [
+    "JSON",
+    "JSON"
+   ],
+   "versions": [
+    "{\"type\": \"object\", \"properties\": {\"a\": {\"type\": \"string\"}}, \"additionalProperties\": false}",
+    "{\"type\": \"object\", \"properties\": {\"a\": {\"type\": \"string\"}, \"b\": {\"type\": \"integer\"}}, \"additionalProperties\": false}"
+   ]
+  },
+  {
+   "id": "json-open-add-property",
+   "types": [
+    "JSON",
+    "JSON"
+   ],
+   "versions": [
+    "{\"type\": \"object\", \"properties\": {\"a\": {\"type\": \"string\"}}}",
+    "{\"type\": \"object\", \"properties\": {\"a\": {\"type\": \"string\"}, \"b\": {\"type\": \"integer\"}}}"
+   ]
+  },
+  {
+   "id": "json-open-remove-property",
+   "types": [
+    "JSON",
+    "JSON"
+   ],
+   "versions": [
+    "{\"type\": \"object\", \"properties\": {\"a\": {\"type\": \"string\"}, \"b\": {\"type\": \"integer\"}}}",
+    "{\"type\": \"object\", \"properties\": {\"a\": {\"type\": \"string\"}}}"
+   ]
+  },
+  {
+   "id": "json-add-required",
+   "types": [
+    "JSON",
+    "JSON"
+   ],
+   "versions": [
+    "{\"type\": \"object\", \"properties\": {\"a\": {\"type\": \"string\"}}}",
+    "{\"type\": \"object\", \"properties\": {\"a\": {\"type\": \"string\"}}, \"required\": [\"a\"]}"
+   ]
+  },
+  {
+   "id": "json-widen-integer-number",
+   "types": [
+    "JSON",
+    "JSON"
+   ],
+   "versions": [
+    "{\"type\": \"integer\"}",
+    "{\"type\": \"number\"}"
+   ]
+  },
+  {
+   "id": "json-change-type",
+   "types": [
+    "JSON",
+    "JSON"
+   ],
+   "versions": [
+    "{\"type\": \"string\"}",
+    "{\"type\": \"integer\"}"
+   ]
+  },
+  {
+   "id": "json-relax-max-length",
+   "types": [
+    "JSON",
+    "JSON"
+   ],
+   "versions": [
+    "{\"type\": \"string\", \"maxLength\": 5}",
+    "{\"type\": \"string\", \"maxLength\": 10}"
+   ]
+  },
+  {
+   "id": "json-enum-extend",
+   "types": [
+    "JSON",
+    "JSON"
+   ],
+   "versions": [
+    "{\"enum\": [\"a\", \"b\"]}",
+    "{\"enum\": [\"a\", \"b\", \"c\"]}"
+   ]
+  },
+  {
+   "id": "json-description-only",
+   "types": [
+    "JSON",
+    "JSON"
+   ],
+   "versions": [
+    "{\"type\": \"string\", \"description\": \"v1\"}",
+    "{\"type\": \"string\", \"description\": \"v2\"}"
+   ]
+  },
+  {
+   "id": "json-backward-gap",
+   "types": [
+    "JSON",
+    "JSON",
+    "JSON"
+   ],
+   "versions": [
+    "{\"type\": \"object\", \"properties\": {\"a\": {\"type\": \"string\"}}}",
+    "{\"type\": \"object\", \"properties\": {\"a\": {\"type\": \"integer\"}}}",
+    "{\"type\": \"object\", \"properties\": {\"a\": {\"type\": \"number\"}}}"
+   ]
+  },
+  {
+   "id": "json-forward-gap",
+   "types": [
+    "JSON",
+    "JSON",
+    "JSON"
+   ],
+   "versions": [
+    "{\"type\": \"object\", \"properties\": {\"a\": {\"type\": \"string\"}}}",
+    "{\"type\": \"object\", \"properties\": {\"a\": {\"type\": \"number\"}}}",
+    "{\"type\": \"object\", \"properties\": {\"a\": {\"type\": \"integer\"}}}"
+   ]
+  },
+  {
+   "id": "json-full-gap",
+   "types": [
+    "JSON",
+    "JSON",
+    "JSON"
+   ],
+   "versions": [
+    "{\"type\": \"object\", \"properties\": {\"a\": {\"type\": \"string\"}}}",
+    "{\"type\": \"object\", \"properties\": {\"a\": {\"type\": \"integer\"}}}",
+    "{\"type\": \"object\", \"properties\": {\"a\": {\"type\": \"integer\", \"description\": \"still an integer\"}}}"
+   ]
+  },
+  {
+   "id": "proto-add-field",
+   "types": [
+    "PROTOBUF",
+    "PROTOBUF"
+   ],
+   "versions": [
+    "syntax = \"proto3\";\npackage p;\nmessage A { string a = 1; }\n",
+    "syntax = \"proto3\";\npackage p;\nmessage A { string a = 1; int32 b = 2; }\n"
+   ]
+  },
+  {
+   "id": "proto-remove-field",
+   "types": [
+    "PROTOBUF",
+    "PROTOBUF"
+   ],
+   "versions": [
+    "syntax = \"proto3\";\npackage p;\nmessage A { string a = 1; int32 b = 2; }\n",
+    "syntax = \"proto3\";\npackage p;\nmessage A { string a = 1; }\n"
+   ]
+  },
+  {
+   "id": "proto-int32-int64",
+   "types": [
+    "PROTOBUF",
+    "PROTOBUF"
+   ],
+   "versions": [
+    "syntax = \"proto3\";\npackage p;\nmessage A { int32 a = 1; }\n",
+    "syntax = \"proto3\";\npackage p;\nmessage A { int64 a = 1; }\n"
+   ]
+  },
+  {
+   "id": "proto-int32-string",
+   "types": [
+    "PROTOBUF",
+    "PROTOBUF"
+   ],
+   "versions": [
+    "syntax = \"proto3\";\npackage p;\nmessage A { int32 a = 1; }\n",
+    "syntax = \"proto3\";\npackage p;\nmessage A { string a = 1; }\n"
+   ]
+  },
+  {
+   "id": "proto-remove-message",
+   "types": [
+    "PROTOBUF",
+    "PROTOBUF"
+   ],
+   "versions": [
+    "syntax = \"proto3\";\npackage p;\nmessage A { string a = 1; }\nmessage B { string b = 1; }\n",
+    "syntax = \"proto3\";\npackage p;\nmessage A { string a = 1; }\n"
+   ]
+  },
+  {
+   "id": "proto2-add-required",
+   "types": [
+    "PROTOBUF",
+    "PROTOBUF"
+   ],
+   "versions": [
+    "syntax = \"proto2\";\npackage p;\nmessage A { optional string a = 1; }\n",
+    "syntax = \"proto2\";\npackage p;\nmessage A { optional string a = 1; required int32 b = 2; }\n"
+   ]
+  },
+  {
+   "id": "proto-multiple-into-oneof",
+   "types": [
+    "PROTOBUF",
+    "PROTOBUF"
+   ],
+   "versions": [
+    "syntax = \"proto3\";\npackage p;\nmessage A { string a = 1; int32 b = 2; }\n",
+    "syntax = \"proto3\";\npackage p;\nmessage A { oneof k { string a = 1; int32 b = 2; } }\n"
+   ]
+  },
+  {
+   "id": "proto-package-change",
+   "types": [
+    "PROTOBUF",
+    "PROTOBUF"
+   ],
+   "versions": [
+    "syntax = \"proto3\";\npackage p;\nmessage A { string a = 1; }\n",
+    "syntax = \"proto3\";\npackage q;\nmessage A { string a = 1; }\n"
+   ]
+  },
+  {
+   "id": "proto-transitive-gap",
+   "types": [
+    "PROTOBUF",
+    "PROTOBUF",
+    "PROTOBUF"
+   ],
+   "versions": [
+    "syntax = \"proto3\";\npackage p;\nmessage A { string x = 1; }\n",
+    "syntax = \"proto3\";\npackage p;\nmessage A { int32 x = 1; }\n",
+    "syntax = \"proto3\";\npackage p;\nmessage A { int64 x = 1; }\n"
+   ]
+  }
+ ]
+}

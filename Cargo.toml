@@ -1,0 +1,51 @@
+[package]
+name = "rust-schema-registry"
+version = "0.1.0"
+edition = "2024"
+license = "Apache-2.0"
+description = "A Confluent-compatible Schema Registry: single node, RocksDB storage, contexts, exporters and IMPORT mode"
+repository = "https://github.com/wushilin/rust-schema-registry"
+readme = "README.md"
+
+[[bin]]
+name = "schema-registry"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = "1"
+apache-avro = "0.22"
+arc-swap = "1.7"
+axum = "0.8"
+base64 = "0.22"
+bcrypt = "0.17"
+bytes = "1"
+clap = { version = "4.5", features = ["derive", "env"] }
+glob = "0.3"
+hex = "0.4"
+imbl = "6"
+moka = { version = "0.12", features = ["sync"] }
+prost = "0.14"
+prost-reflect = "0.16"
+prost-types = "0.14"
+protox = "0.9"
+regex = "1"
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+rocksdb = { version = "0.24", default-features = false, features = ["lz4", "zstd"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["preserve_order"] }
+sha2 = "0.10"
+subtle = "2"
+thiserror = "2"
+tokio = { version = "1", features = ["full"] }
+toml = "0.8"
+tower = { version = "0.5", features = ["util"] }
+tower-http = { version = "0.6", features = ["trace", "catch-panic"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+uuid = { version = "1", features = ["v4"] }
+
+[dev-dependencies]
+tempfile = "3"
+
+[profile.release]
+lto = "thin"

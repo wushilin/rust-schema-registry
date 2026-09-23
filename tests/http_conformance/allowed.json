@@ -1,0 +1,47 @@
+[
+ {
+  "step": "type-collision#1",
+  "cmp": "skip",
+  "reason": "Confluent's content hash ignores the schema type, so the same text as JSON after AVRO fails with 42205; we register it"
+ },
+ {
+  "step": "reg-metadata#14",
+  "cmp": "skip",
+  "reason": "rule sets are kept (Confluent Enterprise behavior); community Confluent drops them"
+ },
+ {
+  "step": "reg-metadata#15",
+  "cmp": "skip",
+  "reason": "rule sets are kept (Confluent Enterprise behavior); community Confluent drops them"
+ },
+ {
+  "step": "reg-proto-invalid#5",
+  "cmp": "skip",
+  "reason": "field number 0: Wire accepts it, protoc (and every generated client) rejects it; so do we"
+ },
+ {
+  "step": "import#17",
+  "cmp": "skip",
+  "reason": "Confluent answers with another id's subjects after IMPORT gave the same content a second id"
+ },
+ {
+  "step": "import#18",
+  "cmp": "skip",
+  "reason": "Confluent serves the schema of the version that overwrote the id's only usage; we report the id gone"
+ },
+ {
+  "step": "tags-avro#13",
+  "cmp": "code",
+  "reason": "tagging a record path as sr_field throws inside Confluent (\"0 > -1\"); we report the path as unmatched (same 42201)"
+ },
+ {
+  "step": "tags-nopackage#2",
+  "cmp": "skip",
+  "reason": "Confluent writes `package null;` when it tags a Protobuf schema that has no package, which then fails its own compatibility check; we leave the package out"
+ },
+ {
+  "step": "tags-nopackage#3",
+  "cmp": "skip",
+  "reason": "Confluent writes `package null;` when it tags a Protobuf schema that has no package, which then fails its own compatibility check; we leave the package out"
+ }
+]

@@ -1,0 +1,1700 @@
+{
+  "schemas" : {
+    "avro-prim-string" : {
+      "valid" : true,
+      "canonical" : "\"string\"",
+      "normalized" : "\"string\""
+    },
+    "avro-prim-object" : {
+      "valid" : true,
+      "canonical" : "\"string\"",
+      "normalized" : "\"string\""
+    },
+    "avro-prim-spaces" : {
+      "valid" : true,
+      "canonical" : "\"long\"",
+      "normalized" : "\"long\""
+    },
+    "avro-prim-logical" : {
+      "valid" : true,
+      "canonical" : "{\"type\":\"int\",\"logicalType\":\"date\"}",
+      "normalized" : "{\"type\":\"int\",\"logicalType\":\"date\"}"
+    },
+    "avro-prim-unknown-logical" : {
+      "valid" : true,
+      "canonical" : "{\"type\":\"string\",\"logicalType\":\"my-thing\"}",
+      "normalized" : "{\"type\":\"string\",\"logicalType\":\"my-thing\"}"
+    },
+    "avro-record-pretty" : {
+      "valid" : true,
+      "canonical" : "{\"type\":\"record\",\"name\":\"R\",\"fields\":[{\"name\":\"a\",\"type\":\"int\"}]}",
+      "normalized" : "{\"type\":\"record\",\"name\":\"R\",\"fields\":[{\"name\":\"a\",\"type\":\"int\"}]}"
+    },
+    "avro-record-key-order" : {
+      "valid" : true,
+      "canonical" : "{\"type\":\"record\",\"name\":\"R\",\"fields\":[{\"name\":\"a\",\"type\":\"int\"}]}",
+      "normalized" : "{\"type\":\"record\",\"name\":\"R\",\"fields\":[{\"name\":\"a\",\"type\":\"int\"}]}"
+    },
+    "avro-record-namespace" : {
+      "valid" : true,
+      "canonical" : "{\"type\":\"record\",\"name\":\"R\",\"namespace\":\"com.acme\",\"fields\":[{\"name\":\"a\",\"type\":\"int\"}]}",
+      "normalized" : "{\"type\":\"record\",\"name\":\"R\",\"namespace\":\"com.acme\",\"fields\":[{\"name\":\"a\",\"type\":\"int\"}]}"
+    },
+    "avro-record-fullname" : {
+      "valid" : true,
+      "canonical" : "{\"type\":\"record\",\"name\":\"R\",\"namespace\":\"com.acme\",\"fields\":[{\"name\":\"a\",\"type\":\"int\"}]}",
+      "normalized" : "{\"type\":\"record\",\"name\":\"R\",\"namespace\":\"com.acme\",\"fields\":[{\"name\":\"a\",\"type\":\"int\"}]}"
+    },
+    "avro-record-fullname-and-namespace" : {
+      "valid" : true,
+      "canonical" : "{\"type\":\"record\",\"name\":\"R\",\"namespace\":\"com.acme\",\"fields\":[{\"name\":\"a\",\"type\":\"int\"}]}",
+      "normalized" : "{\"type\":\"record\",\"name\":\"R\",\"namespace\":\"com.acme\",\"fields\":[{\"name\":\"a\",\"type\":\"int\"}]}"
+    },
+    "avro-nested-inherits-namespace" : {
+      "valid" : true,
+      "canonical" : "{\"type\":\"record\",\"name\":\"Outer\",\"namespace\":\"a.b\",\"fields\":[{\"name\":\"inner\",\"type\":{\"type\":\"record\",\"name\":\"Inner\",\"fields\":[{\"name\":\"x\",\"type\":\"int\"}]}}]}",
+      "normalized" : "{\"type\":\"record\",\"name\":\"Outer\",\"namespace\":\"a.b\",\"fields\":[{\"name\":\"inner\",\"type\":{\"type\":\"record\",\"name\":\"Inner\",\"fields\":[{\"name\":\"x\",\"type\":\"int\"}]}}]}"
+    },
+    "avro-nested-other-namespace" : {
+      "valid" : true,
+      "canonical" : "{\"type\":\"record\",\"name\":\"Outer\",\"namespace\":\"a.b\",\"fields\":[{\"name\":\"inner\",\"type\":{\"type\":\"record\",\"name\":\"Inner\",\"namespace\":\"c.d\",\"fields\":[{\"name\":\"x\",\"type\":\"int\"}]}}]}",
+      "normalized" : "{\"type\":\"record\",\"name\":\"Outer\",\"namespace\":\"a.b\",\"fields\":[{\"name\":\"inner\",\"type\":{\"type\":\"record\",\"name\":\"Inner\",\"namespace\":\"c.d\",\"fields\":[{\"name\":\"x\",\"type\":\"int\"}]}}]}"
+    },
+    "avro-nested-reuse-by-name" : {
+      "valid" : true,
+      "canonical" : "{\"type\":\"record\",\"name\":\"Outer\",\"namespace\":\"n\",\"fields\":[{\"name\":\"a\",\"type\":{\"type\":\"record\",\"name\":\"Inner\",\"fields\":[{\"name\":\"x\",\"type\":\"int\"}]}},{\"name\":\"b\",\"type\":\"Inner\"}]}",
+      "normalized" : "{\"type\":\"record\",\"name\":\"Outer\",\"namespace\":\"n\",\"fields\":[{\"name\":\"a\",\"type\":{\"type\":\"record\",\"name\":\"Inner\",\"fields\":[{\"name\":\"x\",\"type\":\"int\"}]}},{\"name\":\"b\",\"type\":\"Inner\"}]}"
+    },
+    "avro-doc-aliases-order" : {
+      "valid" : true,
+      "canonical" : "{\"type\":\"record\",\"name\":\"R\",\"doc\":\"record doc\",\"fields\":[{\"name\":\"a\",\"type\":\"int\",\"doc\":\"field doc\",\"order\":\"descending\",\"aliases\":[\"old_a\"]}],\"aliases\":[\"OldR\"]}",
+      "normalized" : "{\"type\":\"record\",\"name\":\"R\",\"doc\":\"record doc\",\"fields\":[{\"name\":\"a\",\"type\":\"int\",\"doc\":\"field doc\",\"order\":\"descending\",\"aliases\":[\"old_a\"]}],\"aliases\":[\"OldR\"]}"
+    },
+    "avro-defaults" : {
+      "valid" : true,
+      "canonical" : "{\"type\":\"record\",\"name\":\"R\",\"fields\":[{\"name\":\"i\",\"type\":\"int\",\"default\":1},{\"name\":\"s\",\"type\":\"string\",\"default\":\"x\"},{\"name\":\"n\",\"type\":[\"null\",\"string\"],\"default\":null},{\"name\":\"arr\",\"type\":{\"type\":\"array\",\"items\":\"int\"},\"default\":[1,2]},{\"name\":\"m\",\"type\":{\"type\":\"map\",\"values\":\"long\"},\"default\":{\"k\":1}},{\"name\":\"b\",\"type\":\"bytes\",\"default\":\"ÿ\"},{\"name\":\"d\",\"type\":\"double\",\"default\":1.5},{\"name\":\"bo\",\"type\":\"boolean\",\"default\":true}]}",
+      "normalized" : "{\"type\":\"record\",\"name\":\"R\",\"fields\":[{\"name\":\"i\",\"type\":\"int\",\"default\":1},{\"name\":\"s\",\"type\":\"string\",\"default\":\"x\"},{\"name\":\"n\",\"type\":[\"null\",\"string\"],\"default\":null},{\"name\":\"arr\",\"type\":{\"type\":\"array\",\"items\":\"int\"},\"default\":[1,2]},{\"name\":\"m\",\"type\":{\"type\":\"map\",\"values\":\"long\"},\"default\":{\"k\":1}},{\"name\":\"b\",\"type\":\"bytes\",\"default\":\"ÿ\"},{\"name\":\"d\",\"type\":\"double\",\"default\":1.5},{\"name\":\"bo\",\"type\":\"boolean\",\"default\":true}]}"
+    },
+    "avro-record-default" : {
+      "valid" : true,
+      "canonical" : "{\"type\":\"record\",\"name\":\"R\",\"fields\":[{\"name\":\"inner\",\"type\":{\"type\":\"record\",\"name\":\"I\",\"fields\":[{\"name\":\"x\",\"type\":\"int\"}]},\"default\":{\"x\":3}}]}",
+      "normalized" : "{\"type\":\"record\",\"name\":\"R\",\"fields\":[{\"name\":\"inner\",\"type\":{\"type\":\"record\",\"name\":\"I\",\"fields\":[{\"name\":\"x\",\"type\":\"int\"}]},\"default\":{\"x\":3}}]}"
+    },
+    "avro-custom-props" : {
+      "valid" : true,
+      "canonical" : "{\"type\":\"record\",\"name\":\"R\",\"fields\":[{\"name\":\"a\",\"type\":\"int\",\"x-prop\":\"v\",\"connect.name\":\"z\"}],\"custom\":{\"k\":[1,2]}}",
+      "normalized" : "{\"type\":\"record\",\"name\":\"R\",\"fields\":[{\"name\":\"a\",\"type\":\"int\",\"connect.name\":\"z\",\"x-prop\":\"v\"}],\"custom\":{\"k\":[1,2]}}"
+    },
+    "avro-enum" : {
+      "valid" : true,
+      "canonical" : "{\"type\":\"enum\",\"name\":\"E\",\"doc\":\"d\",\"symbols\":[\"A\",\"B\"],\"default\":\"A\"}",
+      "normalized" : "{\"type\":\"enum\",\"name\":\"E\",\"doc\":\"d\",\"symbols\":[\"A\",\"B\"],\"default\":\"A\"}"
+    },
+    "avro-fixed" : {
+      "valid" : true,
+      "canonical" : "{\"type\":\"fixed\",\"name\":\"F\",\"namespace\":\"n\",\"size\":16}",
+      "normalized" : "{\"type\":\"fixed\",\"name\":\"F\",\"namespace\":\"n\",\"size\":16}"
+    },
+    "avro-array-map" : {
+      "valid" : true,
+      "canonical" : "{\"type\":\"array\",\"items\":{\"type\":\"map\",\"values\":[\"null\",\"int\"]}}",
+      "normalized" : "{\"type\":\"array\",\"items\":{\"type\":\"map\",\"values\":[\"null\",\"int\"]}}"
+    },
+    "avro-union-top" : {
+      "valid" : true,
+      "canonical" : "[\"null\",\"string\",{\"type\":\"record\",\"name\":\"R\",\"fields\":[{\"name\":\"a\",\"type\":\"int\"}]}]",
+      "normalized" : "[\"null\",\"string\",{\"type\":\"record\",\"name\":\"R\",\"fields\":[{\"name\":\"a\",\"type\":\"int\"}]}]"
+    },
+    "avro-decimal-bytes" : {
+      "valid" : true,
+      "canonical" : "{\"type\":\"bytes\",\"logicalType\":\"decimal\",\"precision\":10,\"scale\":2}",
+      "normalized" : "{\"type\":\"bytes\",\"logicalType\":\"decimal\",\"precision\":10,\"scale\":2}"
+    },
+    "avro-decimal-fixed" : {
+      "valid" : true,
+      "canonical" : "{\"type\":\"fixed\",\"name\":\"Dec\",\"size\":8,\"logicalType\":\"decimal\",\"precision\":18,\"scale\":4}",
+      "normalized" : "{\"type\":\"fixed\",\"name\":\"Dec\",\"size\":8,\"logicalType\":\"decimal\",\"precision\":18,\"scale\":4}"
+    },
+    "avro-uuid" : {
+      "valid" : true,
+      "canonical" : "{\"type\":\"string\",\"logicalType\":\"uuid\"}",
+      "normalized" : "{\"type\":\"string\",\"logicalType\":\"uuid\"}"
+    },
+    "avro-timestamps" : {
+      "valid" : true,
+      "canonical" : "{\"type\":\"record\",\"name\":\"T\",\"fields\":[{\"name\":\"a\",\"type\":{\"type\":\"long\",\"logicalType\":\"timestamp-millis\"}},{\"name\":\"b\",\"type\":{\"type\":\"long\",\"logicalType\":\"local-timestamp-micros\"}},{\"name\":\"c\",\"type\":{\"type\":\"int\",\"logicalType\":\"time-millis\"}}]}",
+      "normalized" : "{\"type\":\"record\",\"name\":\"T\",\"fields\":[{\"name\":\"a\",\"type\":{\"type\":\"long\",\"logicalType\":\"timestamp-millis\"}},{\"name\":\"b\",\"type\":{\"type\":\"long\",\"logicalType\":\"local-timestamp-micros\"}},{\"name\":\"c\",\"type\":{\"type\":\"int\",\"logicalType\":\"time-millis\"}}]}"
+    },
+    "avro-duration" : {
+      "valid" : true,
+      "canonical" : "{\"type\":\"fixed\",\"name\":\"Dur\",\"size\":12,\"logicalType\":\"duration\"}",
+      "normalized" : "{\"type\":\"fixed\",\"name\":\"Dur\",\"size\":12,\"logicalType\":\"duration\"}"
+    },
+    "avro-recursive" : {
+      "valid" : true,
+      "canonical" : "{\"type\":\"record\",\"name\":\"Node\",\"fields\":[{\"name\":\"v\",\"type\":\"int\"},{\"name\":\"next\",\"type\":[\"null\",\"Node\"],\"default\":null}]}",
+      "normalized" : "{\"type\":\"record\",\"name\":\"Node\",\"fields\":[{\"name\":\"v\",\"type\":\"int\"},{\"name\":\"next\",\"type\":[\"null\",\"Node\"],\"default\":null}]}"
+    },
+    "avro-unicode" : {
+      "valid" : true,
+      "canonical" : "{\"type\":\"record\",\"name\":\"R\",\"fields\":[{\"name\":\"a\",\"type\":\"string\",\"doc\":\"café ☃\"}]}",
+      "normalized" : "{\"type\":\"record\",\"name\":\"R\",\"fields\":[{\"name\":\"a\",\"type\":\"string\",\"doc\":\"café ☃\"}]}"
+    },
+    "avro-number-formats" : {
+      "valid" : true,
+      "canonical" : "{\"type\":\"record\",\"name\":\"R\",\"fields\":[{\"name\":\"d\",\"type\":\"double\",\"default\":1.0},{\"name\":\"l\",\"type\":\"long\",\"default\":10000000000}]}",
+      "normalized" : "{\"type\":\"record\",\"name\":\"R\",\"fields\":[{\"name\":\"d\",\"type\":\"double\",\"default\":1.0},{\"name\":\"l\",\"type\":\"long\",\"default\":10000000000}]}"
+    },
+    "avro-bad-json" : {
+      "valid" : false,
+      "error" : "com.fasterxml.jackson.core.io.JsonEOFException: Unexpected end-of-input within/between Object entries\n at [Source: (String)\"{\"type\":\"; line: 1, column: 9]"
+    },
+    "avro-unknown-type" : {
+      "valid" : false,
+      "error" : "Undefined name: \"nosuchtype\""
+    },
+    "avro-dup-field" : {
+      "valid" : false,
+      "error" : "Duplicate field a in record R: a type:STRING pos:1 and a type:INT pos:0."
+    },
+    "avro-bad-enum-symbol" : {
+      "valid" : false,
+      "error" : "Illegal initial character: 1A"
+    },
+    "avro-dup-enum-symbol" : {
+      "valid" : false,
+      "error" : "Duplicate enum symbol: A"
+    },
+    "avro-bad-default-int" : {
+      "valid" : false,
+      "error" : "Invalid default for field a: \"x\" not a \"int\""
+    },
+    "avro-bad-default-union" : {
+      "valid" : false,
+      "error" : "Invalid default for field a: 1 not a [\"null\",\"int\"]"
+    },
+    "avro-union-dup" : {
+      "valid" : false,
+      "error" : "Duplicate in union:int"
+    },
+    "avro-union-nested" : {
+      "valid" : false,
+      "error" : "Nested union: [\"null\",[\"int\"]]"
+    },
+    "avro-record-no-name" : {
+      "valid" : false,
+      "error" : "No name in schema: {\"type\":\"record\",\"fields\":[]}"
+    },
+    "avro-fields-not-array" : {
+      "valid" : false,
+      "error" : "Record has no fields: {\"type\":\"record\",\"name\":\"R\",\"fields\":{}}"
+    },
+    "avro-bad-name" : {
+      "valid" : false,
+      "error" : "Illegal initial character: 1R"
+    },
+    "avro-fixed-no-size" : {
+      "valid" : false,
+      "error" : "Invalid or no size: {\"type\":\"fixed\",\"name\":\"F\"}"
+    },
+    "avro-redefine-name" : {
+      "valid" : false,
+      "error" : "Can't redefine: X"
+    },
+    "avro-unknown-ref" : {
+      "valid" : false,
+      "error" : "\"Missing\" is not a defined name. The type of the \"a\" field must be a defined name or a {\"type\": ...} expression."
+    },
+    "avro-enum-bad-default" : {
+      "valid" : false,
+      "error" : "The Enum Default: Z is not in the enum symbol set: [A]"
+    },
+    "avro-empty-record" : {
+      "valid" : true,
+      "canonical" : "{\"type\":\"record\",\"name\":\"R\",\"fields\":[]}",
+      "normalized" : "{\"type\":\"record\",\"name\":\"R\",\"fields\":[]}"
+    },
+    "avro-bad-decimal" : {
+      "valid" : true,
+      "canonical" : "{\"type\":\"bytes\",\"logicalType\":\"decimal\",\"precision\":2,\"scale\":5}",
+      "normalized" : "{\"type\":\"bytes\",\"logicalType\":\"decimal\",\"precision\":2,\"scale\":5}"
+    },
+    "avro-with-ref" : {
+      "valid" : true,
+      "canonical" : "{\"type\":\"record\",\"name\":\"P\",\"namespace\":\"com.acme\",\"fields\":[{\"name\":\"addr\",\"type\":\"Address\"}]}",
+      "normalized" : "{\"type\":\"record\",\"name\":\"P\",\"namespace\":\"com.acme\",\"fields\":[{\"name\":\"addr\",\"type\":\"Address\"}]}"
+    },
+    "json-pretty" : {
+      "valid" : true,
+      "canonical" : "{\"type\":\"object\",\"properties\":{\"a\":{\"type\":\"string\"}}}",
+      "normalized" : "{\"properties\":{\"a\":{\"type\":\"string\"}},\"type\":\"object\"}"
+    },
+    "json-key-order" : {
+      "valid" : true,
+      "canonical" : "{\"properties\":{\"b\":{\"type\":\"integer\"},\"a\":{\"type\":\"string\"}},\"type\":\"object\"}",
+      "normalized" : "{\"properties\":{\"a\":{\"type\":\"string\"},\"b\":{\"type\":\"integer\"}},\"type\":\"object\"}"
+    },
+    "json-draft7" : {
+      "valid" : true,
+      "canonical" : "{\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"title\":\"T\",\"type\":\"object\",\"properties\":{\"a\":{\"type\":\"string\"}}}",
+      "normalized" : "{\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"properties\":{\"a\":{\"type\":\"string\"}},\"title\":\"T\",\"type\":\"object\"}"
+    },
+    "json-2020" : {
+      "valid" : true,
+      "canonical" : "{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"type\":\"object\",\"properties\":{\"a\":{\"type\":\"string\"}}}",
+      "normalized" : "{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"properties\":{\"a\":{\"type\":\"string\"}},\"type\":\"object\"}"
+    },
+    "json-numbers" : {
+      "valid" : true,
+      "canonical" : "{\"type\":\"number\",\"minimum\":1.0,\"maximum\":1000.0,\"multipleOf\":0.5}",
+      "normalized" : "{\"maximum\":1000.0,\"minimum\":1.0,\"multipleOf\":0.5,\"type\":\"number\"}"
+    },
+    "json-unicode" : {
+      "valid" : true,
+      "canonical" : "{\"type\":\"string\",\"description\":\"café\"}",
+      "normalized" : "{\"description\":\"café\",\"type\":\"string\"}"
+    },
+    "json-boolean-true" : {
+      "valid" : true,
+      "canonical" : "true",
+      "normalized" : "true"
+    },
+    "json-empty" : {
+      "valid" : true,
+      "canonical" : "{}",
+      "normalized" : "{}"
+    },
+    "json-defs-ref" : {
+      "valid" : true,
+      "canonical" : "{\"definitions\":{\"x\":{\"type\":\"string\"}},\"type\":\"object\",\"properties\":{\"a\":{\"$ref\":\"#/definitions/x\"}}}",
+      "normalized" : "{\"definitions\":{\"x\":{\"type\":\"string\"}},\"properties\":{\"a\":{\"$ref\":\"#/definitions/x\"}},\"type\":\"object\"}"
+    },
+    "json-bad-json" : {
+      "valid" : false,
+      "error" : "Invalid JSON {\"type\":"
+    },
+    "json-bad-type" : {
+      "valid" : false,
+      "error" : "Invalid JSON Schema"
+    },
+    "json-bad-required" : {
+      "valid" : false,
+      "error" : "Invalid JSON Schema"
+    },
+    "json-bad-ref" : {
+      "valid" : false,
+      "error" : "Invalid JSON Schema"
+    },
+    "json-array-schema" : {
+      "valid" : true,
+      "canonical" : "[1,2]",
+      "normalized" : "[1,2]"
+    },
+    "json-number" : {
+      "valid" : true,
+      "canonical" : "5",
+      "normalized" : "5"
+    },
+    "json-string" : {
+      "valid" : true,
+      "canonical" : "\"x\"",
+      "normalized" : "\"x\""
+    },
+    "json-null" : {
+      "valid" : false,
+      "error" : "Invalid JSON Schema"
+    },
+    "json-false" : {
+      "valid" : true,
+      "canonical" : "false",
+      "normalized" : "false"
+    },
+    "json-bad-external-ref" : {
+      "valid" : false,
+      "error" : "Invalid JSON Schema"
+    },
+    "json-bad-pattern" : {
+      "valid" : false,
+      "error" : "Invalid JSON Schema"
+    },
+    "json-bad-min-type" : {
+      "valid" : false,
+      "error" : "Invalid JSON Schema"
+    },
+    "json-unknown-keyword" : {
+      "valid" : true,
+      "canonical" : "{\"type\":\"string\",\"x-custom\":1}",
+      "normalized" : "{\"type\":\"string\",\"x-custom\":1}"
+    },
+    "json-draft4" : {
+      "valid" : true,
+      "canonical" : "{\"$schema\":\"http://json-schema.org/draft-04/schema#\",\"type\":\"number\",\"maximum\":5,\"exclusiveMaximum\":true}",
+      "normalized" : "{\"$schema\":\"http://json-schema.org/draft-04/schema#\",\"exclusiveMaximum\":true,\"maximum\":5,\"type\":\"number\"}"
+    },
+    "json-unknown-format" : {
+      "valid" : true,
+      "canonical" : "{\"type\":\"string\",\"format\":\"my-format\"}",
+      "normalized" : "{\"format\":\"my-format\",\"type\":\"string\"}"
+    },
+    "json-prop-not-schema" : {
+      "valid" : false,
+      "error" : "Invalid JSON Schema"
+    },
+    "json-items-not-schema" : {
+      "valid" : false,
+      "error" : "Invalid JSON Schema"
+    },
+    "json-allof-empty" : {
+      "valid" : true,
+      "canonical" : "{\"allOf\":[]}",
+      "normalized" : "{\"allOf\":[]}"
+    },
+    "json-oneof-not-array" : {
+      "valid" : false,
+      "error" : "Invalid JSON Schema"
+    },
+    "json-enum-not-array" : {
+      "valid" : false,
+      "error" : "Invalid JSON Schema"
+    },
+    "json-deps-bad" : {
+      "valid" : false,
+      "error" : "Invalid JSON Schema"
+    },
+    "json-defs2019-ref" : {
+      "valid" : true,
+      "canonical" : "{\"$defs\":{\"x\":{\"type\":\"string\"}},\"type\":\"object\",\"properties\":{\"a\":{\"$ref\":\"#/$defs/x\"}}}",
+      "normalized" : "{\"$defs\":{\"x\":{\"type\":\"string\"}},\"properties\":{\"a\":{\"$ref\":\"#/$defs/x\"}},\"type\":\"object\"}"
+    },
+    "json-id-ref" : {
+      "valid" : true,
+      "canonical" : "{\"$id\":\"http://example.com/root.json\",\"definitions\":{\"x\":{\"$id\":\"#foo\",\"type\":\"string\"}},\"type\":\"object\",\"properties\":{\"a\":{\"$ref\":\"#foo\"}}}",
+      "normalized" : "{\"$id\":\"http://example.com/root.json\",\"definitions\":{\"x\":{\"$id\":\"#foo\",\"type\":\"string\"}},\"properties\":{\"a\":{\"$ref\":\"#foo\"}},\"type\":\"object\"}"
+    },
+    "json-lookahead-pattern" : {
+      "valid" : true,
+      "canonical" : "{\"type\":\"string\",\"pattern\":\"^(?!x).*$\"}",
+      "normalized" : "{\"pattern\":\"^(?!x).*$\",\"type\":\"string\"}"
+    },
+    "json-min-float" : {
+      "valid" : false,
+      "error" : "Invalid JSON Schema"
+    },
+    "json-multipleof-zero" : {
+      "valid" : false,
+      "error" : "Invalid JSON Schema"
+    },
+    "json-required-not-strings" : {
+      "valid" : false,
+      "error" : "Invalid JSON Schema"
+    },
+    "json-additional-bad" : {
+      "valid" : false,
+      "error" : "Invalid JSON Schema"
+    },
+    "json-type-array-bad" : {
+      "valid" : false,
+      "error" : "Invalid JSON Schema"
+    },
+    "json-uniqueitems-bad" : {
+      "valid" : false,
+      "error" : "Invalid JSON Schema"
+    },
+    "json-ref-sibling" : {
+      "valid" : true,
+      "canonical" : "{\"definitions\":{\"x\":{\"type\":\"string\"}},\"type\":\"object\",\"properties\":{\"a\":{\"$ref\":\"#/definitions/x\",\"maxLength\":3}}}",
+      "normalized" : "{\"definitions\":{\"x\":{\"type\":\"string\"}},\"properties\":{\"a\":{\"$ref\":\"#/definitions/x\",\"maxLength\":3}},\"type\":\"object\"}"
+    },
+    "json-with-ref" : {
+      "valid" : true,
+      "canonical" : "{\"type\":\"object\",\"properties\":{\"c\":{\"$ref\":\"customer.json\"}}}",
+      "normalized" : "{\"properties\":{\"c\":{\"$ref\":\"customer.json\"}},\"type\":\"object\"}"
+    },
+    "proto-basic" : {
+      "valid" : true,
+      "canonical" : "syntax = \"proto3\";\npackage acme;\n\nmessage Order {\n  string id = 1;\n  int32 qty = 2;\n}\n",
+      "normalized" : "syntax = \"proto3\";\npackage acme;\n\nmessage Order {\n  string id = 1;\n  int32 qty = 2;\n}\n"
+    },
+    "proto-compact" : {
+      "valid" : true,
+      "canonical" : "syntax = \"proto3\";\npackage acme;\n\nmessage Order {\n  string id = 1;\n  int32 qty = 2;\n}\n",
+      "normalized" : "syntax = \"proto3\";\npackage acme;\n\nmessage Order {\n  string id = 1;\n  int32 qty = 2;\n}\n"
+    },
+    "proto-comments" : {
+      "valid" : true,
+      "canonical" : "syntax = \"proto3\";\npackage acme;\n\nmessage A {\n  string a = 1;\n}\n",
+      "normalized" : "syntax = \"proto3\";\npackage acme;\n\nmessage A {\n  string a = 1;\n}\n"
+    },
+    "proto-no-package" : {
+      "valid" : true,
+      "canonical" : "syntax = \"proto3\";\n\nmessage A {\n  string a = 1;\n}\n",
+      "normalized" : "syntax = \"proto3\";\n\nmessage A {\n  string a = 1;\n}\n"
+    },
+    "proto-proto2" : {
+      "valid" : true,
+      "canonical" : "syntax = \"proto2\";\npackage p;\n\nmessage A {\n  required string a = 1;\n  optional int32 b = 2 [default = 5];\n  repeated string c = 3;\n  optional string d = 4 [default = \"x\"];\n}\n",
+      "normalized" : "package p;\n\nmessage A {\n  required string a = 1;\n  optional int32 b = 2 [default = 5];\n  repeated string c = 3;\n  optional string d = 4 [default = \"x\"];\n}\n"
+    },
+    "proto-no-syntax" : {
+      "valid" : true,
+      "canonical" : "package p;\n\nmessage A {\n  optional string a = 1;\n}\n",
+      "normalized" : "package p;\n\nmessage A {\n  optional string a = 1;\n}\n"
+    },
+    "proto-nested" : {
+      "valid" : true,
+      "canonical" : "syntax = \"proto3\";\npackage p;\n\nmessage A {\n  B b = 1;\n  K k = 2;\n\n  message B {\n    string x = 1;\n  }\n  enum K {\n    K0 = 0;\n    K1 = 1;\n  }\n}\n",
+      "normalized" : "syntax = \"proto3\";\npackage p;\n\nmessage A {\n  .p.A.B b = 1;\n  .p.A.K k = 2;\n\n  message B {\n    string x = 1;\n  }\n  enum K {\n    K0 = 0;\n    K1 = 1;\n  }\n}\n"
+    },
+    "proto-enum-top" : {
+      "valid" : true,
+      "canonical" : "syntax = \"proto3\";\npackage p;\n\nmessage A {\n  Color c = 1;\n}\nenum Color {\n  RED = 0;\n  GREEN = 1;\n}\n",
+      "normalized" : "syntax = \"proto3\";\npackage p;\n\nmessage A {\n  .p.Color c = 1;\n}\nenum Color {\n  RED = 0;\n  GREEN = 1;\n}\n"
+    },
+    "proto-enum-alias" : {
+      "valid" : true,
+      "canonical" : "syntax = \"proto3\";\n\nenum E {\n  option allow_alias = true;\n  A = 0;\n  B = 0;\n}\n",
+      "normalized" : "syntax = \"proto3\";\n\nenum E {\n  option allow_alias = true;\n  A = 0;\n  B = 0;\n}\n"
+    },
+    "proto-oneof" : {
+      "valid" : true,
+      "canonical" : "syntax = \"proto3\";\n\nmessage A {\n  string other = 3;\n\n  oneof k {\n    string s = 1;\n    int64 n = 2;\n  }\n}\n",
+      "normalized" : "syntax = \"proto3\";\n\nmessage A {\n  string other = 3;\n\n  oneof k {\n    string s = 1;\n    int64 n = 2;\n  }\n}\n"
+    },
+    "proto-map" : {
+      "valid" : true,
+      "canonical" : "syntax = \"proto3\";\n\nmessage A {\n  map<string, int64> m = 1;\n  map<int32, B> mb = 2;\n}\nmessage B {\n  string x = 1;\n}\n",
+      "normalized" : "syntax = \"proto3\";\n\nmessage A {\n  map<string, int64> m = 1;\n  map<int32, .B> mb = 2;\n}\nmessage B {\n  string x = 1;\n}\n"
+    },
+    "proto-optional3" : {
+      "valid" : true,
+      "canonical" : "syntax = \"proto3\";\n\nmessage A {\n  optional string a = 1;\n  string b = 2;\n}\n",
+      "normalized" : "syntax = \"proto3\";\n\nmessage A {\n  optional string a = 1;\n  string b = 2;\n}\n"
+    },
+    "proto-reserved" : {
+      "valid" : true,
+      "canonical" : "syntax = \"proto3\";\n\nmessage A {\n  reserved 2, 15, 9 to 11;\n  reserved \"foo\", \"bar\";\n\n  string a = 1;\n}\n",
+      "normalized" : "syntax = \"proto3\";\n\nmessage A {\n  reserved 2;\n  reserved 9 to 11;\n  reserved 15;\n  reserved \"bar\";\n  reserved \"foo\";\n\n  string a = 1;\n}\n"
+    },
+    "proto-options" : {
+      "valid" : true,
+      "canonical" : "syntax = \"proto3\";\npackage p;\n\noption java_package = \"com.acme\";\noption java_multiple_files = true;\noption go_package = \"acme/p\";\n\nmessage A {\n  option deprecated = true;\n\n  string a = 1 [deprecated = true];\n  repeated int32 b = 2 [packed = false];\n  string c = 3 [json_name = \"cee\"];\n}\n",
+      "normalized" : "syntax = \"proto3\";\npackage p;\n\noption go_package = \"acme/p\";\noption java_multiple_files = true;\noption java_package = \"com.acme\";\n\nmessage A {\n  option deprecated = true;\n\n  string a = 1 [deprecated = true];\n  repeated int32 b = 2 [packed = false];\n  string c = 3 [json_name = \"cee\"];\n}\n"
+    },
+    "proto-service" : {
+      "valid" : true,
+      "canonical" : "syntax = \"proto3\";\npackage p;\n\nmessage Req {\n  string q = 1;\n}\nmessage Resp {\n  string r = 1;\n}\n\nservice S {\n  rpc Get (Req) returns (Resp);\n  rpc Stream (stream Req) returns (stream Resp);\n}\n",
+      "normalized" : "syntax = \"proto3\";\npackage p;\n\nmessage Req {\n  string q = 1;\n}\nmessage Resp {\n  string r = 1;\n}\n\nservice S {\n  rpc Get (.p.Req) returns (.p.Resp);\n  rpc Stream (stream .p.Req) returns (stream .p.Resp);\n}\n"
+    },
+    "proto-wkt" : {
+      "valid" : true,
+      "canonical" : "syntax = \"proto3\";\n\nimport \"google/protobuf/timestamp.proto\";\nimport \"google/protobuf/wrappers.proto\";\n\nmessage A {\n  google.protobuf.Timestamp ts = 1;\n  google.protobuf.StringValue s = 2;\n}\n",
+      "normalized" : "syntax = \"proto3\";\n\nimport \"google/protobuf/timestamp.proto\";\nimport \"google/protobuf/wrappers.proto\";\n\nmessage A {\n  .google.protobuf.Timestamp ts = 1;\n  .google.protobuf.StringValue s = 2;\n}\n"
+    },
+    "proto-confluent-meta" : {
+      "valid" : true,
+      "canonical" : "syntax = \"proto3\";\n\nimport \"confluent/meta.proto\";\n\nmessage A {\n  string ssn = 1 [(confluent.field_meta) = {\n    tags: \"PII\"\n  }];\n}\n",
+      "normalized" : "syntax = \"proto3\";\n\nimport \"confluent/meta.proto\";\n\nmessage A {\n  string ssn = 1 [(confluent.field_meta) = {\n    tags: \"PII\"\n  }];\n}\n"
+    },
+    "proto-decimal" : {
+      "valid" : true,
+      "canonical" : "syntax = \"proto3\";\n\nimport \"confluent/type/decimal.proto\";\n\nmessage A {\n  confluent.type.Decimal amount = 1 [(confluent.field_meta) = {\n    params: [\n      {\n        key: \"precision\",\n        value: \"8\"\n      }\n    ]\n  }];\n}\n",
+      "normalized" : "syntax = \"proto3\";\n\nimport \"confluent/type/decimal.proto\";\n\nmessage A {\n  .confluent.type.Decimal amount = 1 [(confluent.field_meta) = {\n    params: {\n      key: \"precision\",\n      value: \"8\"\n    }\n  }];\n}\n"
+    },
+    "proto-extensions" : {
+      "valid" : true,
+      "canonical" : "syntax = \"proto2\";\npackage p;\n\nmessage A {\n  optional string a = 1;\n\n  extensions 100 to 199;\n}\n\nextend A {\n  optional int32 x = 100;\n}\n",
+      "normalized" : "package p;\n\nmessage A {\n  optional string a = 1;\n\n  extensions 100 to 199;\n}\n\nextend .p.A {\n  optional int32 x = 100;\n}\n"
+    },
+    "proto-explicit-map-entry" : {
+      "valid" : true,
+      "canonical" : "syntax = \"proto3\";\n\nmessage A {\n  repeated MEntry m = 1;\n\n  message MEntry {\n    option map_entry = true;\n  \n    string key = 1;\n    int32 value = 2;\n  }\n}\n",
+      "normalized" : "syntax = \"proto3\";\n\nmessage A {\n  map<string, int32> m = 1;\n}\n"
+    },
+    "proto-fq-types" : {
+      "valid" : true,
+      "canonical" : "syntax = \"proto3\";\npackage a.b;\n\nmessage X {\n  .a.b.Y y = 1;\n}\nmessage Y {\n  string s = 1;\n}\n",
+      "normalized" : "syntax = \"proto3\";\npackage a.b;\n\nmessage X {\n  .a.b.Y y = 1;\n}\nmessage Y {\n  string s = 1;\n}\n"
+    },
+    "proto-google-type-date" : {
+      "valid" : true,
+      "canonical" : "syntax = \"proto3\";\n\nimport \"google/type/date.proto\";\nimport \"google/type/money.proto\";\n\nmessage A {\n  google.type.Date d = 1;\n  google.type.Money m = 2;\n}\n",
+      "normalized" : "syntax = \"proto3\";\n\nimport \"google/type/date.proto\";\nimport \"google/type/money.proto\";\n\nmessage A {\n  .google.type.Date d = 1;\n  .google.type.Money m = 2;\n}\n"
+    },
+    "proto-unknown-option" : {
+      "valid" : true,
+      "canonical" : "syntax = \"proto3\";\n\nmessage A {\n  string a = 1 [(foo.bar) = 3];\n}\n",
+      "normalized" : "syntax = \"proto3\";\n\nmessage A {\n  string a = 1 [(foo.bar) = 3];\n}\n"
+    },
+    "proto-unknown-file-option" : {
+      "valid" : true,
+      "canonical" : "syntax = \"proto3\";\n\noption (foo.bar) = \"x\";\n\nmessage A {\n  string a = 1;\n}\n",
+      "normalized" : "syntax = \"proto3\";\n\noption (foo.bar) = \"x\";\n\nmessage A {\n  string a = 1;\n}\n"
+    },
+    "proto-meta-without-import" : {
+      "valid" : true,
+      "canonical" : "syntax = \"proto3\";\n\nmessage A {\n  string ssn = 1 [(confluent.field_meta) = {\n    tags: \"PII\"\n  }];\n}\n",
+      "normalized" : "syntax = \"proto3\";\n\nmessage A {\n  string ssn = 1 [(confluent.field_meta) = {\n    tags: \"PII\"\n  }];\n}\n"
+    },
+    "proto-missing-import-used" : {
+      "valid" : false,
+      "error" : "Could not resolve type: nope.X"
+    },
+    "proto-nested-enum-first" : {
+      "valid" : true,
+      "canonical" : "syntax = \"proto3\";\n\nmessage A {\n  K k = 1;\n  B b = 2;\n\n  message B {\n    string x = 1;\n  }\n  enum K {\n    K0 = 0;\n  }\n}\nmessage C {\n  string c = 1;\n}\nenum Top {\n  T0 = 0;\n}\n",
+      "normalized" : "syntax = \"proto3\";\n\nmessage A {\n  .A.K k = 1;\n  .A.B b = 2;\n\n  message B {\n    string x = 1;\n  }\n  enum K {\n    K0 = 0;\n  }\n}\nmessage C {\n  string c = 1;\n}\nenum Top {\n  T0 = 0;\n}\n"
+    },
+    "proto-options-order" : {
+      "valid" : true,
+      "canonical" : "syntax = \"proto3\";\npackage p;\n\nimport \"google/protobuf/timestamp.proto\";\n\noption java_package = \"x\";\n\nmessage A {\n  reserved 5;\n\n  option deprecated = true;\n\n  string a = 2 [\n    deprecated = true,\n    json_name = \"aa\"\n  ];\n\n  oneof k {\n    string s = 1;\n  }\n\n  message N {\n    string n = 1;\n  }\n}\n\nservice S {\n  rpc M (A) returns (A) {\n    option deprecated = true;\n  };\n}\n",
+      "normalized" : "syntax = \"proto3\";\npackage p;\n\nimport \"google/protobuf/timestamp.proto\";\n\noption java_package = \"x\";\n\nmessage A {\n  reserved 5;\n\n  option deprecated = true;\n\n  string a = 2 [\n    deprecated = true,\n    json_name = \"aa\"\n  ];\n\n  oneof k {\n    string s = 1;\n  }\n\n  message N {\n    string n = 1;\n  }\n}\n\nservice S {\n  rpc M (.p.A) returns (.p.A) {\n    option deprecated = true;\n  };\n}\n"
+    },
+    "proto-norm-order" : {
+      "valid" : true,
+      "canonical" : "syntax = \"proto3\";\npackage p;\n\noption java_package = \"x\";\n\nmessage Z {\n  reserved \"zz\", \"aa\";\n  reserved 20, 10;\n\n  option deprecated = true;\n  option (foo.bar) = 1;\n\n  int32 b = 2 [\n    deprecated = true,\n    json_name = \"bb\"\n  ];\n  string a = 1;\n\n  oneof o {\n    string y = 4;\n    string x = 3;\n  }\n\n  message Y {\n    string y = 1;\n  }\n  message X {\n    string x = 1;\n  }\n  enum E {\n    option allow_alias = true;\n    E1 = 1;\n    E0 = 0;\n    E2 = 1;\n  }\n}\nmessage A {\n  Z z = 1;\n}\nenum Q {\n  Q1 = 1;\n  Q0 = 0;\n}\n\nservice S {\n  rpc B (A) returns (A);\n  rpc A (A) returns (A);\n}\n",
+      "normalized" : "syntax = \"proto3\";\npackage p;\n\noption java_package = \"x\";\n\nmessage Z {\n  reserved 10;\n  reserved 20;\n  reserved \"aa\";\n  reserved \"zz\";\n\n  option deprecated = true;\n  option (foo.bar) = 1;\n\n  string a = 1;\n  int32 b = 2 [\n    deprecated = true,\n    json_name = \"bb\"\n  ];\n\n  oneof o {\n    string x = 3;\n    string y = 4;\n  }\n\n  message Y {\n    string y = 1;\n  }\n  message X {\n    string x = 1;\n  }\n  enum E {\n    option allow_alias = true;\n    E0 = 0;\n    E1 = 1;\n    E2 = 1;\n  }\n}\nmessage A {\n  .p.Z z = 1;\n}\nenum Q {\n  Q0 = 0;\n  Q1 = 1;\n}\n\nservice S {\n  rpc B (.p.A) returns (.p.A);\n  rpc A (.p.A) returns (.p.A);\n}\n"
+    },
+    "proto-norm-list-options" : {
+      "valid" : true,
+      "canonical" : "syntax = \"proto3\";\n\nimport \"confluent/meta.proto\";\n\nmessage A {\n  string a = 1 [(confluent.field_meta) = {\n    tags: [\n      \"x\",\n      \"y\"\n    ],\n    params: [\n      {\n        key: \"k1\",\n        value: \"v1\"\n      },\n      {\n        key: \"k2\",\n        value: \"v2\"\n      }\n    ]\n  }];\n}\n",
+      "normalized" : "syntax = \"proto3\";\n\nimport \"confluent/meta.proto\";\n\nmessage A {\n  string a = 1 [(confluent.field_meta) = {\n    params: [\n      {\n        key: \"k1\",\n        value: \"v1\"\n      },\n      {\n        key: \"k2\",\n        value: \"v2\"\n      }\n    ],\n    tags: [\n      \"x\",\n      \"y\"\n    ]\n  }];\n}\n"
+    },
+    "proto-norm-public-import" : {
+      "valid" : true,
+      "canonical" : "syntax = \"proto3\";\n\nimport \"google/protobuf/duration.proto\";\nimport public \"google/protobuf/timestamp.proto\";\n\nmessage A {\n  google.protobuf.Timestamp t = 1;\n  google.protobuf.Duration d = 2;\n}\n",
+      "normalized" : "syntax = \"proto3\";\n\nimport \"google/protobuf/duration.proto\";\nimport public \"google/protobuf/timestamp.proto\";\n\nmessage A {\n  .google.protobuf.Timestamp t = 1;\n  .google.protobuf.Duration d = 2;\n}\n"
+    },
+    "proto-norm-options-imports" : {
+      "valid" : true,
+      "canonical" : "syntax = \"proto3\";\n\nimport \"google/protobuf/wrappers.proto\";\nimport \"google/protobuf/duration.proto\";\n\noption java_package = \"x\";\noption (zed.opt) = 1;\noption cc_enable_arenas = true;\n\nmessage A {\n  option (zz.m) = 2;\n  option deprecated = true;\n  option (aa.m) = 3;\n\n  google.protobuf.Duration d = 1 [\n    (x.y) = 1,\n    deprecated = true,\n    json_name = \"dd\"\n  ];\n  google.protobuf.StringValue s = 2;\n}\n",
+      "normalized" : "syntax = \"proto3\";\n\nimport \"google/protobuf/duration.proto\";\nimport \"google/protobuf/wrappers.proto\";\n\noption cc_enable_arenas = true;\noption java_package = \"x\";\noption (zed.opt) = 1;\n\nmessage A {\n  option (aa.m) = 3;\n  option deprecated = true;\n  option (zz.m) = 2;\n\n  .google.protobuf.Duration d = 1 [\n    deprecated = true,\n    json_name = \"dd\",\n    (x.y) = 1\n  ];\n  .google.protobuf.StringValue s = 2;\n}\n"
+    },
+    "proto-bad-syntax" : {
+      "valid" : false,
+      "error" : "Could not parse Protobuf - Syntax error in :1:9: expected a word"
+    },
+    "proto-bad-type" : {
+      "valid" : false,
+      "error" : "Could not resolve type: Missing"
+    },
+    "proto-dup-number" : {
+      "valid" : true,
+      "canonical" : "syntax = \"proto3\";\n\nmessage A {\n  string a = 1;\n  string b = 1;\n}\n",
+      "normalized" : "syntax = \"proto3\";\n\nmessage A {\n  string a = 1;\n  string b = 1;\n}\n"
+    },
+    "proto-missing-import" : {
+      "valid" : true,
+      "canonical" : "syntax = \"proto3\";\n\nimport \"nope.proto\";\n\nmessage A {\n  string a = 1;\n}\n",
+      "normalized" : "syntax = \"proto3\";\n\nimport \"nope.proto\";\n\nmessage A {\n  string a = 1;\n}\n"
+    },
+    "proto3-required" : {
+      "valid" : false,
+      "error" : "Could not parse Protobuf - Syntax error in :2:13: 'required' label forbidden in proto3 field declarations"
+    },
+    "proto-with-ref" : {
+      "valid" : true,
+      "canonical" : "syntax = \"proto3\";\npackage m;\n\nimport \"dep.proto\";\n\nmessage M {\n  d.D d = 1;\n}\n",
+      "normalized" : "syntax = \"proto3\";\npackage m;\n\nimport \"dep.proto\";\n\nmessage M {\n  .d.D d = 1;\n}\n"
+    }
+  },
+  "compat" : {
+    "avro-add-field-default" : {
+      "BACKWARD" : [ ],
+      "FORWARD" : [ ]
+    },
+    "avro-add-field-nodefault" : {
+      "BACKWARD" : [ "{errorType:'READER_FIELD_MISSING_DEFAULT_VALUE', description:'The field 'c' at path '/fields/2' in the new schema has no default value and is missing in the old schema', additionalInfo:'c'}", "{oldSchema: '{\"type\":\"record\",\"name\":\"R\",\"fields\":[{\"name\":\"a\",\"type\":\"int\"},{\"name\":\"b\",\"type\":\"string\"}]}'}" ],
+      "FORWARD" : [ ]
+    },
+    "avro-add-field-null-union" : {
+      "BACKWARD" : [ ],
+      "FORWARD" : [ ]
+    },
+    "avro-remove-field-had-default" : {
+      "BACKWARD" : [ ],
+      "FORWARD" : [ ]
+    },
+    "avro-remove-field-nodefault" : {
+      "BACKWARD" : [ ],
+      "FORWARD" : [ "{errorType:'READER_FIELD_MISSING_DEFAULT_VALUE', description:'The field 'b' at path '/fields/1' in the old schema has no default value and is missing in the new schema', additionalInfo:'b'}", "{oldSchema: '{\"type\":\"record\",\"name\":\"R\",\"fields\":[{\"name\":\"a\",\"type\":\"int\"},{\"name\":\"b\",\"type\":\"string\"}]}'}" ]
+    },
+    "avro-field-order" : {
+      "BACKWARD" : [ ],
+      "FORWARD" : [ ]
+    },
+    "avro-doc-only" : {
+      "BACKWARD" : [ ],
+      "FORWARD" : [ ]
+    },
+    "avro-default-change" : {
+      "BACKWARD" : [ ],
+      "FORWARD" : [ ]
+    },
+    "avro-prom-int-long" : {
+      "BACKWARD" : [ ],
+      "FORWARD" : [ "{errorType:'TYPE_MISMATCH', description:'The type (path '/fields/0/type') of a field in the old schema does not match with the new schema', additionalInfo:'reader type: INT not compatible with writer type: LONG'}", "{oldSchema: '{\"type\":\"record\",\"name\":\"R\",\"fields\":[{\"name\":\"a\",\"type\":\"int\"}]}'}" ]
+    },
+    "avro-prom-long-int" : {
+      "BACKWARD" : [ "{errorType:'TYPE_MISMATCH', description:'The type (path '/fields/0/type') of a field in the new schema does not match with the old schema', additionalInfo:'reader type: INT not compatible with writer type: LONG'}", "{oldSchema: '{\"type\":\"record\",\"name\":\"R\",\"fields\":[{\"name\":\"a\",\"type\":\"long\"}]}'}" ],
+      "FORWARD" : [ ]
+    },
+    "avro-prom-int-float" : {
+      "BACKWARD" : [ ],
+      "FORWARD" : [ "{errorType:'TYPE_MISMATCH', description:'The type (path '/fields/0/type') of a field in the old schema does not match with the new schema', additionalInfo:'reader type: INT not compatible with writer type: FLOAT'}", "{oldSchema: '{\"type\":\"record\",\"name\":\"R\",\"fields\":[{\"name\":\"a\",\"type\":\"int\"}]}'}" ]
+    },
+    "avro-prom-int-double" : {
+      "BACKWARD" : [ ],
+      "FORWARD" : [ "{errorType:'TYPE_MISMATCH', description:'The type (path '/fields/0/type') of a field in the old schema does not match with the new schema', additionalInfo:'reader type: INT not compatible with writer type: DOUBLE'}", "{oldSchema: '{\"type\":\"record\",\"name\":\"R\",\"fields\":[{\"name\":\"a\",\"type\":\"int\"}]}'}" ]
+    },
+    "avro-prom-long-float" : {
+      "BACKWARD" : [ ],
+      "FORWARD" : [ "{errorType:'TYPE_MISMATCH', description:'The type (path '/fields/0/type') of a field in the old schema does not match with the new schema', additionalInfo:'reader type: LONG not compatible with writer type: FLOAT'}", "{oldSchema: '{\"type\":\"record\",\"name\":\"R\",\"fields\":[{\"name\":\"a\",\"type\":\"long\"}]}'}" ]
+    },
+    "avro-prom-long-double" : {
+      "BACKWARD" : [ ],
+      "FORWARD" : [ "{errorType:'TYPE_MISMATCH', description:'The type (path '/fields/0/type') of a field in the old schema does not match with the new schema', additionalInfo:'reader type: LONG not compatible with writer type: DOUBLE'}", "{oldSchema: '{\"type\":\"record\",\"name\":\"R\",\"fields\":[{\"name\":\"a\",\"type\":\"long\"}]}'}" ]
+    },
+    "avro-prom-float-double" : {
+      "BACKWARD" : [ ],
+      "FORWARD" : [ "{errorType:'TYPE_MISMATCH', description:'The type (path '/fields/0/type') of a field in the old schema does not match with the new schema', additionalInfo:'reader type: FLOAT not compatible with writer type: DOUBLE'}", "{oldSchema: '{\"type\":\"record\",\"name\":\"R\",\"fields\":[{\"name\":\"a\",\"type\":\"float\"}]}'}" ]
+    },
+    "avro-prom-double-float" : {
+      "BACKWARD" : [ "{errorType:'TYPE_MISMATCH', description:'The type (path '/fields/0/type') of a field in the new schema does not match with the old schema', additionalInfo:'reader type: FLOAT not compatible with writer type: DOUBLE'}", "{oldSchema: '{\"type\":\"record\",\"name\":\"R\",\"fields\":[{\"name\":\"a\",\"type\":\"double\"}]}'}" ],
+      "FORWARD" : [ ]
+    },
+    "avro-prom-string-bytes" : {
+      "BACKWARD" : [ ],
+      "FORWARD" : [ ]
+    },
+    "avro-prom-bytes-string" : {
+      "BACKWARD" : [ ],
+      "FORWARD" : [ ]
+    },
+    "avro-prom-int-string" : {
+      "BACKWARD" : [ "{errorType:'TYPE_MISMATCH', description:'The type (path '/fields/0/type') of a field in the new schema does not match with the old schema', additionalInfo:'reader type: STRING not compatible with writer type: INT'}", "{oldSchema: '{\"type\":\"record\",\"name\":\"R\",\"fields\":[{\"name\":\"a\",\"type\":\"int\"}]}'}" ],
+      "FORWARD" : [ "{errorType:'TYPE_MISMATCH', description:'The type (path '/fields/0/type') of a field in the old schema does not match with the new schema', additionalInfo:'reader type: INT not compatible with writer type: STRING'}", "{oldSchema: '{\"type\":\"record\",\"name\":\"R\",\"fields\":[{\"name\":\"a\",\"type\":\"int\"}]}'}" ]
+    },
+    "avro-prom-boolean-int" : {
+      "BACKWARD" : [ "{errorType:'TYPE_MISMATCH', description:'The type (path '/fields/0/type') of a field in the new schema does not match with the old schema', additionalInfo:'reader type: INT not compatible with writer type: BOOLEAN'}", "{oldSchema: '{\"type\":\"record\",\"name\":\"R\",\"fields\":[{\"name\":\"a\",\"type\":\"boolean\"}]}'}" ],
+      "FORWARD" : [ "{errorType:'TYPE_MISMATCH', description:'The type (path '/fields/0/type') of a field in the old schema does not match with the new schema', additionalInfo:'reader type: BOOLEAN not compatible with writer type: INT'}", "{oldSchema: '{\"type\":\"record\",\"name\":\"R\",\"fields\":[{\"name\":\"a\",\"type\":\"boolean\"}]}'}" ]
+    },
+    "avro-prom-null-int" : {
+      "BACKWARD" : [ "{errorType:'TYPE_MISMATCH', description:'The type (path '/fields/0/type') of a field in the new schema does not match with the old schema', additionalInfo:'reader type: INT not compatible with writer type: NULL'}", "{oldSchema: '{\"type\":\"record\",\"name\":\"R\",\"fields\":[{\"name\":\"a\",\"type\":\"null\"}]}'}" ],
+      "FORWARD" : [ "{errorType:'TYPE_MISMATCH', description:'The type (path '/fields/0/type') of a field in the old schema does not match with the new schema', additionalInfo:'reader type: NULL not compatible with writer type: INT'}", "{oldSchema: '{\"type\":\"record\",\"name\":\"R\",\"fields\":[{\"name\":\"a\",\"type\":\"null\"}]}'}" ]
+    },
+    "avro-rename-field-alias" : {
+      "BACKWARD" : [ ],
+      "FORWARD" : [ "{errorType:'READER_FIELD_MISSING_DEFAULT_VALUE', description:'The field 'a' at path '/fields/0' in the old schema has no default value and is missing in the new schema', additionalInfo:'a'}", "{oldSchema: '{\"type\":\"record\",\"name\":\"R\",\"fields\":[{\"name\":\"a\",\"type\":\"int\"}]}'}" ]
+    },
+    "avro-rename-field-noalias" : {
+      "BACKWARD" : [ "{errorType:'READER_FIELD_MISSING_DEFAULT_VALUE', description:'The field 'z' at path '/fields/0' in the new schema has no default value and is missing in the old schema', additionalInfo:'z'}", "{oldSchema: '{\"type\":\"record\",\"name\":\"R\",\"fields\":[{\"name\":\"a\",\"type\":\"int\"}]}'}" ],
+      "FORWARD" : [ "{errorType:'READER_FIELD_MISSING_DEFAULT_VALUE', description:'The field 'a' at path '/fields/0' in the old schema has no default value and is missing in the new schema', additionalInfo:'a'}", "{oldSchema: '{\"type\":\"record\",\"name\":\"R\",\"fields\":[{\"name\":\"a\",\"type\":\"int\"}]}'}" ]
+    },
+    "avro-rename-record" : {
+      "BACKWARD" : [ "{errorType:'NAME_MISMATCH', description:'The name of the schema has changed (path '/name')', additionalInfo:'expected: R'}", "{oldSchema: '{\"type\":\"record\",\"name\":\"R\",\"fields\":[{\"name\":\"a\",\"type\":\"int\"}]}'}" ],
+      "FORWARD" : [ "{errorType:'NAME_MISMATCH', description:'The name of the schema has changed (path '/name')', additionalInfo:'expected: S'}", "{oldSchema: '{\"type\":\"record\",\"name\":\"R\",\"fields\":[{\"name\":\"a\",\"type\":\"int\"}]}'}" ]
+    },
+    "avro-rename-record-alias" : {
+      "BACKWARD" : [ ],
+      "FORWARD" : [ "{errorType:'NAME_MISMATCH', description:'The name of the schema has changed (path '/name')', additionalInfo:'expected: S'}", "{oldSchema: '{\"type\":\"record\",\"name\":\"R\",\"fields\":[{\"name\":\"a\",\"type\":\"int\"}]}'}" ]
+    },
+    "avro-change-namespace" : {
+      "BACKWARD" : [ ],
+      "FORWARD" : [ ]
+    },
+    "avro-enum-add" : {
+      "BACKWARD" : [ ],
+      "FORWARD" : [ "{errorType:'MISSING_ENUM_SYMBOLS', description:'The old schema is missing enum symbols '[C]' at path '/fields/0/type/symbols' in the new schema', additionalInfo:'[C]'}", "{oldSchema: '{\"type\":\"record\",\"name\":\"R\",\"fields\":[{\"name\":\"e\",\"type\":{\"type\":\"enum\",\"name\":\"E\",\"symbols\":[\"A\",\"B\"]}}]}'}" ]
+    },
+    "avro-enum-remove" : {
+      "BACKWARD" : [ "{errorType:'MISSING_ENUM_SYMBOLS', description:'The new schema is missing enum symbols '[B]' at path '/fields/0/type/symbols' in the old schema', additionalInfo:'[B]'}", "{oldSchema: '{\"type\":\"record\",\"name\":\"R\",\"fields\":[{\"name\":\"e\",\"type\":{\"type\":\"enum\",\"name\":\"E\",\"symbols\":[\"A\",\"B\"]}}]}'}" ],
+      "FORWARD" : [ ]
+    },
+    "avro-enum-remove-default" : {
+      "BACKWARD" : [ ],
+      "FORWARD" : [ ]
+    },
+    "avro-enum-reorder" : {
+      "BACKWARD" : [ ],
+      "FORWARD" : [ ]
+    },
+    "avro-enum-top-remove" : {
+      "BACKWARD" : [ "{errorType:'MISSING_ENUM_SYMBOLS', description:'The new schema is missing enum symbols '[B]' at path '/symbols' in the old schema', additionalInfo:'[B]'}", "{oldSchema: '{\"type\":\"enum\",\"name\":\"E\",\"symbols\":[\"A\",\"B\"]}'}" ],
+      "FORWARD" : [ ]
+    },
+    "avro-fixed-size" : {
+      "BACKWARD" : [ "{errorType:'FIXED_SIZE_MISMATCH', description:'The size of FIXED type field at path '/fields/0/type/size' in the new schema does not match with the old schema', additionalInfo:'expected: 4, found: 8'}", "{oldSchema: '{\"type\":\"record\",\"name\":\"R\",\"fields\":[{\"name\":\"x\",\"type\":{\"type\":\"fixed\",\"name\":\"F\",\"size\":4}}]}'}" ],
+      "FORWARD" : [ "{errorType:'FIXED_SIZE_MISMATCH', description:'The size of FIXED type field at path '/fields/0/type/size' in the old schema does not match with the new schema', additionalInfo:'expected: 8, found: 4'}", "{oldSchema: '{\"type\":\"record\",\"name\":\"R\",\"fields\":[{\"name\":\"x\",\"type\":{\"type\":\"fixed\",\"name\":\"F\",\"size\":4}}]}'}" ]
+    },
+    "avro-fixed-rename" : {
+      "BACKWARD" : [ "{errorType:'NAME_MISMATCH', description:'The name of the schema has changed (path '/fields/0/type/name')', additionalInfo:'expected: F'}", "{oldSchema: '{\"type\":\"record\",\"name\":\"R\",\"fields\":[{\"name\":\"x\",\"type\":{\"type\":\"fixed\",\"name\":\"F\",\"size\":4}}]}'}" ],
+      "FORWARD" : [ "{errorType:'NAME_MISMATCH', description:'The name of the schema has changed (path '/fields/0/type/name')', additionalInfo:'expected: G'}", "{oldSchema: '{\"type\":\"record\",\"name\":\"R\",\"fields\":[{\"name\":\"x\",\"type\":{\"type\":\"fixed\",\"name\":\"F\",\"size\":4}}]}'}" ]
+    },
+    "avro-fixed-to-bytes" : {
+      "BACKWARD" : [ "{errorType:'TYPE_MISMATCH', description:'The type (path '/fields/0/type') of a field in the new schema does not match with the old schema', additionalInfo:'reader type: BYTES not compatible with writer type: FIXED'}", "{oldSchema: '{\"type\":\"record\",\"name\":\"R\",\"fields\":[{\"name\":\"x\",\"type\":{\"type\":\"fixed\",\"name\":\"F\",\"size\":4}}]}'}" ],
+      "FORWARD" : [ "{errorType:'TYPE_MISMATCH', description:'The type (path '/fields/0/type') of a field in the old schema does not match with the new schema', additionalInfo:'reader type: FIXED not compatible with writer type: BYTES'}", "{oldSchema: '{\"type\":\"record\",\"name\":\"R\",\"fields\":[{\"name\":\"x\",\"type\":{\"type\":\"fixed\",\"name\":\"F\",\"size\":4}}]}'}" ]
+    },
+    "avro-union-add-branch" : {
+      "BACKWARD" : [ ],
+      "FORWARD" : [ "{errorType:'MISSING_UNION_BRANCH', description:'The old schema is missing a type inside a union field at path '/fields/0/type/2' in the new schema', additionalInfo:'reader union lacking writer type: LONG'}", "{oldSchema: '{\"type\":\"record\",\"name\":\"R\",\"fields\":[{\"name\":\"u\",\"type\":[\"int\",\"string\"]}]}'}" ]
+    },
+    "avro-union-remove-branch" : {
+      "BACKWARD" : [ "{errorType:'MISSING_UNION_BRANCH', description:'The new schema is missing a type inside a union field at path '/fields/0/type/1' in the old schema', additionalInfo:'reader union lacking writer type: STRING'}", "{oldSchema: '{\"type\":\"record\",\"name\":\"R\",\"fields\":[{\"name\":\"u\",\"type\":[\"int\",\"string\"]}]}'}" ],
+      "FORWARD" : [ ]
+    },
+    "avro-to-nullable" : {
+      "BACKWARD" : [ ],
+      "FORWARD" : [ "{errorType:'TYPE_MISMATCH', description:'The type (path '/') of a field in the old schema does not match with the new schema', additionalInfo:'reader type: INT not compatible with writer type: NULL'}", "{oldSchema: '{\"type\":\"record\",\"name\":\"R\",\"fields\":[{\"name\":\"u\",\"type\":\"int\"}]}'}" ]
+    },
+    "avro-from-nullable" : {
+      "BACKWARD" : [ "{errorType:'TYPE_MISMATCH', description:'The type (path '/') of a field in the new schema does not match with the old schema', additionalInfo:'reader type: INT not compatible with writer type: NULL'}", "{oldSchema: '{\"type\":\"record\",\"name\":\"R\",\"fields\":[{\"name\":\"u\",\"type\":[\"null\",\"int\"]}]}'}" ],
+      "FORWARD" : [ ]
+    },
+    "avro-union-reorder" : {
+      "BACKWARD" : [ ],
+      "FORWARD" : [ ]
+    },
+    "avro-union-promote" : {
+      "BACKWARD" : [ ],
+      "FORWARD" : [ "{errorType:'MISSING_UNION_BRANCH', description:'The old schema is missing a type inside a union field at path '/fields/0/type/1' in the new schema', additionalInfo:'reader union lacking writer type: LONG'}", "{oldSchema: '{\"type\":\"record\",\"name\":\"R\",\"fields\":[{\"name\":\"u\",\"type\":[\"null\",\"int\"]}]}'}" ]
+    },
+    "avro-union-to-single-member" : {
+      "BACKWARD" : [ ],
+      "FORWARD" : [ ]
+    },
+    "avro-top-union-add" : {
+      "BACKWARD" : [ ],
+      "FORWARD" : [ "{errorType:'MISSING_UNION_BRANCH', description:'The old schema is missing a type inside a union field at path '/2' in the new schema', additionalInfo:'reader union lacking writer type: NULL'}", "{oldSchema: '[\"int\",\"string\"]'}" ]
+    },
+    "avro-top-union-remove" : {
+      "BACKWARD" : [ "{errorType:'MISSING_UNION_BRANCH', description:'The new schema is missing a type inside a union field at path '/1' in the old schema', additionalInfo:'reader union lacking writer type: STRING'}", "{oldSchema: '[\"int\",\"string\"]'}" ],
+      "FORWARD" : [ ]
+    },
+    "avro-array-items-promote" : {
+      "BACKWARD" : [ ],
+      "FORWARD" : [ "{errorType:'TYPE_MISMATCH', description:'The type (path '/fields/0/type/items') of a field in the old schema does not match with the new schema', additionalInfo:'reader type: INT not compatible with writer type: LONG'}", "{oldSchema: '{\"type\":\"record\",\"name\":\"R\",\"fields\":[{\"name\":\"x\",\"type\":{\"type\":\"array\",\"items\":\"int\"}}]}'}" ]
+    },
+    "avro-array-items-narrow" : {
+      "BACKWARD" : [ "{errorType:'TYPE_MISMATCH', description:'The type (path '/fields/0/type/items') of a field in the new schema does not match with the old schema', additionalInfo:'reader type: INT not compatible with writer type: LONG'}", "{oldSchema: '{\"type\":\"record\",\"name\":\"R\",\"fields\":[{\"name\":\"x\",\"type\":{\"type\":\"array\",\"items\":\"long\"}}]}'}" ],
+      "FORWARD" : [ ]
+    },
+    "avro-map-values-promote" : {
+      "BACKWARD" : [ ],
+      "FORWARD" : [ "{errorType:'TYPE_MISMATCH', description:'The type (path '/fields/0/type/values') of a field in the old schema does not match with the new schema', additionalInfo:'reader type: INT not compatible with writer type: LONG'}", "{oldSchema: '{\"type\":\"record\",\"name\":\"R\",\"fields\":[{\"name\":\"x\",\"type\":{\"type\":\"map\",\"values\":\"int\"}}]}'}" ]
+    },
+    "avro-array-to-map" : {
+      "BACKWARD" : [ "{errorType:'TYPE_MISMATCH', description:'The type (path '/fields/0/type') of a field in the new schema does not match with the old schema', additionalInfo:'reader type: MAP not compatible with writer type: ARRAY'}", "{oldSchema: '{\"type\":\"record\",\"name\":\"R\",\"fields\":[{\"name\":\"x\",\"type\":{\"type\":\"array\",\"items\":\"int\"}}]}'}" ],
+      "FORWARD" : [ "{errorType:'TYPE_MISMATCH', description:'The type (path '/fields/0/type') of a field in the old schema does not match with the new schema', additionalInfo:'reader type: ARRAY not compatible with writer type: MAP'}", "{oldSchema: '{\"type\":\"record\",\"name\":\"R\",\"fields\":[{\"name\":\"x\",\"type\":{\"type\":\"array\",\"items\":\"int\"}}]}'}" ]
+    },
+    "avro-nested-add-nodefault" : {
+      "BACKWARD" : [ "{errorType:'READER_FIELD_MISSING_DEFAULT_VALUE', description:'The field 'y' at path '/fields/0/type/fields/1' in the new schema has no default value and is missing in the old schema', additionalInfo:'y'}", "{oldSchema: '{\"type\":\"record\",\"name\":\"R\",\"fields\":[{\"name\":\"n\",\"type\":{\"type\":\"record\",\"name\":\"N\",\"fields\":[{\"name\":\"x\",\"type\":\"int\"}]}}]}'}" ],
+      "FORWARD" : [ ]
+    },
+    "avro-nested-add-default" : {
+      "BACKWARD" : [ ],
+      "FORWARD" : [ ]
+    },
+    "avro-nested-type-change" : {
+      "BACKWARD" : [ "{errorType:'TYPE_MISMATCH', description:'The type (path '/fields/0/type/fields/0/type') of a field in the new schema does not match with the old schema', additionalInfo:'reader type: STRING not compatible with writer type: INT'}", "{oldSchema: '{\"type\":\"record\",\"name\":\"R\",\"fields\":[{\"name\":\"n\",\"type\":{\"type\":\"record\",\"name\":\"N\",\"fields\":[{\"name\":\"x\",\"type\":\"int\"}]}}]}'}" ],
+      "FORWARD" : [ "{errorType:'TYPE_MISMATCH', description:'The type (path '/fields/0/type/fields/0/type') of a field in the old schema does not match with the new schema', additionalInfo:'reader type: INT not compatible with writer type: STRING'}", "{oldSchema: '{\"type\":\"record\",\"name\":\"R\",\"fields\":[{\"name\":\"n\",\"type\":{\"type\":\"record\",\"name\":\"N\",\"fields\":[{\"name\":\"x\",\"type\":\"int\"}]}}]}'}" ]
+    },
+    "avro-logical-int-date" : {
+      "BACKWARD" : [ ],
+      "FORWARD" : [ ]
+    },
+    "avro-logical-date-int" : {
+      "BACKWARD" : [ ],
+      "FORWARD" : [ ]
+    },
+    "avro-logical-ts-millis-micros" : {
+      "BACKWARD" : [ ],
+      "FORWARD" : [ ]
+    },
+    "avro-decimal-precision" : {
+      "BACKWARD" : [ ],
+      "FORWARD" : [ ]
+    },
+    "avro-decimal-scale" : {
+      "BACKWARD" : [ ],
+      "FORWARD" : [ ]
+    },
+    "avro-record-to-primitive" : {
+      "BACKWARD" : [ "{errorType:'TYPE_MISMATCH', description:'The type (path '/') of a field in the new schema does not match with the old schema', additionalInfo:'reader type: INT not compatible with writer type: RECORD'}", "{oldSchema: '{\"type\":\"record\",\"name\":\"R\",\"fields\":[{\"name\":\"a\",\"type\":\"int\"}]}'}" ],
+      "FORWARD" : [ "{errorType:'TYPE_MISMATCH', description:'The type (path '/') of a field in the old schema does not match with the new schema', additionalInfo:'reader type: RECORD not compatible with writer type: INT'}", "{oldSchema: '{\"type\":\"record\",\"name\":\"R\",\"fields\":[{\"name\":\"a\",\"type\":\"int\"}]}'}" ]
+    },
+    "avro-primitive-to-record" : {
+      "BACKWARD" : [ "{errorType:'TYPE_MISMATCH', description:'The type (path '/') of a field in the new schema does not match with the old schema', additionalInfo:'reader type: RECORD not compatible with writer type: INT'}", "{oldSchema: '\"int\"'}" ],
+      "FORWARD" : [ "{errorType:'TYPE_MISMATCH', description:'The type (path '/') of a field in the old schema does not match with the new schema', additionalInfo:'reader type: INT not compatible with writer type: RECORD'}", "{oldSchema: '\"int\"'}" ]
+    },
+    "avro-string-to-enum" : {
+      "BACKWARD" : [ "{errorType:'TYPE_MISMATCH', description:'The type (path '/fields/0/type') of a field in the new schema does not match with the old schema', additionalInfo:'reader type: ENUM not compatible with writer type: STRING'}", "{oldSchema: '{\"type\":\"record\",\"name\":\"R\",\"fields\":[{\"name\":\"x\",\"type\":\"string\"}]}'}" ],
+      "FORWARD" : [ "{errorType:'TYPE_MISMATCH', description:'The type (path '/fields/0/type') of a field in the old schema does not match with the new schema', additionalInfo:'reader type: STRING not compatible with writer type: ENUM'}", "{oldSchema: '{\"type\":\"record\",\"name\":\"R\",\"fields\":[{\"name\":\"x\",\"type\":\"string\"}]}'}" ]
+    },
+    "avro-enum-to-string" : {
+      "BACKWARD" : [ "{errorType:'TYPE_MISMATCH', description:'The type (path '/fields/0/type') of a field in the new schema does not match with the old schema', additionalInfo:'reader type: STRING not compatible with writer type: ENUM'}", "{oldSchema: '{\"type\":\"record\",\"name\":\"R\",\"fields\":[{\"name\":\"x\",\"type\":{\"type\":\"enum\",\"name\":\"E\",\"symbols\":[\"A\"]}}]}'}" ],
+      "FORWARD" : [ "{errorType:'TYPE_MISMATCH', description:'The type (path '/fields/0/type') of a field in the old schema does not match with the new schema', additionalInfo:'reader type: ENUM not compatible with writer type: STRING'}", "{oldSchema: '{\"type\":\"record\",\"name\":\"R\",\"fields\":[{\"name\":\"x\",\"type\":{\"type\":\"enum\",\"name\":\"E\",\"symbols\":[\"A\"]}}]}'}" ]
+    },
+    "avro-union-to-string" : {
+      "BACKWARD" : [ "{errorType:'TYPE_MISMATCH', description:'The type (path '/') of a field in the new schema does not match with the old schema', additionalInfo:'reader type: STRING not compatible with writer type: INT'}", "{oldSchema: '{\"type\":\"record\",\"name\":\"R\",\"fields\":[{\"name\":\"x\",\"type\":[\"int\",\"string\"]}]}'}" ],
+      "FORWARD" : [ ]
+    },
+    "avro-recursive-add-default" : {
+      "BACKWARD" : [ ],
+      "FORWARD" : [ ]
+    },
+    "avro-recursive-add-nodefault" : {
+      "BACKWARD" : [ "{errorType:'READER_FIELD_MISSING_DEFAULT_VALUE', description:'The field 'w' at path '/fields/1' in the new schema has no default value and is missing in the old schema', additionalInfo:'w'}", "{oldSchema: '{\"type\":\"record\",\"name\":\"Node\",\"fields\":[{\"name\":\"v\",\"type\":\"int\"},{\"name\":\"next\",\"type\":[\"null\",\"Node\"],\"default\":null}]}'}" ],
+      "FORWARD" : [ ]
+    },
+    "avro-reused-type-change" : {
+      "BACKWARD" : [ ],
+      "FORWARD" : [ "{errorType:'TYPE_MISMATCH', description:'The type (path '/fields/0/type/fields/0/type') of a field in the old schema does not match with the new schema', additionalInfo:'reader type: INT not compatible with writer type: LONG'}", "{errorType:'TYPE_MISMATCH', description:'The type (path '/fields/0/type/fields/0/type') of a field in the old schema does not match with the new schema', additionalInfo:'reader type: INT not compatible with writer type: LONG'}", "{oldSchema: '{\"type\":\"record\",\"name\":\"R\",\"fields\":[{\"name\":\"a\",\"type\":{\"type\":\"record\",\"name\":\"I\",\"fields\":[{\"name\":\"x\",\"type\":\"int\"}]}},{\"name\":\"b\",\"type\":\"I\"}]}'}" ]
+    },
+    "avro-add-then-union-default" : {
+      "BACKWARD" : [ ],
+      "FORWARD" : [ ]
+    },
+    "avro-identical" : {
+      "BACKWARD" : [ ],
+      "FORWARD" : [ ]
+    },
+    "avro-ref-change" : {
+      "BACKWARD" : [ "{errorType:'READER_FIELD_MISSING_DEFAULT_VALUE', description:'The field 'zip' at path '/fields/0/type/fields/1' in the new schema has no default value and is missing in the old schema', additionalInfo:'zip'}", "{oldSchema: '{\"type\":\"record\",\"name\":\"P\",\"namespace\":\"com.acme\",\"fields\":[{\"name\":\"addr\",\"type\":\"Address\"}]}'}" ],
+      "FORWARD" : [ ]
+    },
+    "json-add-prop-open" : {
+      "BACKWARD" : [ "{errorType:\"PROPERTY_ADDED_TO_OPEN_CONTENT_MODEL\", description:\"The new schema has an open content model and has a property or item at path '#/properties/b' which is missing in the old schema'}", "{oldSchema: '{\"type\":\"object\",\"properties\":{\"a\":{\"type\":\"string\"}}}'}" ],
+      "FORWARD" : [ ]
+    },
+    "json-remove-prop-open" : {
+      "BACKWARD" : [ ],
+      "FORWARD" : [ "{errorType:\"PROPERTY_ADDED_TO_OPEN_CONTENT_MODEL\", description:\"The old schema has an open content model and has a property or item at path '#/properties/b' which is missing in the new schema'}", "{oldSchema: '{\"type\":\"object\",\"properties\":{\"a\":{\"type\":\"string\"},\"b\":{\"type\":\"integer\"}}}'}" ]
+    },
+    "json-add-prop-closed" : {
+      "BACKWARD" : [ ],
+      "FORWARD" : [ "{errorType:\"PROPERTY_REMOVED_FROM_CLOSED_CONTENT_MODEL\", description:\"The old has a closed content model and is missing a property or item present at path '#/properties/b' in the new schema'}", "{oldSchema: '{\"type\":\"object\",\"properties\":{\"a\":{\"type\":\"string\"}},\"additionalProperties\":false}'}" ]
+    },
+    "json-remove-prop-closed" : {
+      "BACKWARD" : [ "{errorType:\"PROPERTY_REMOVED_FROM_CLOSED_CONTENT_MODEL\", description:\"The new has a closed content model and is missing a property or item present at path '#/properties/b' in the old schema'}", "{oldSchema: '{\"type\":\"object\",\"properties\":{\"a\":{\"type\":\"string\"},\"b\":{\"type\":\"integer\"}},\"additionalProperties\":false}'}" ],
+      "FORWARD" : [ ]
+    },
+    "json-open-to-closed" : {
+      "BACKWARD" : [ "{errorType:\"ADDITIONAL_PROPERTIES_REMOVED\", description:\"The keyword at path '#/additionalProperties' in the new schema is not present in the old schema'}", "{oldSchema: '{\"type\":\"object\",\"properties\":{\"a\":{\"type\":\"string\"}}}'}" ],
+      "FORWARD" : [ ]
+    },
+    "json-closed-to-open" : {
+      "BACKWARD" : [ ],
+      "FORWARD" : [ "{errorType:\"ADDITIONAL_PROPERTIES_REMOVED\", description:\"The keyword at path '#/additionalProperties' in the old schema is not present in the new schema'}", "{oldSchema: '{\"type\":\"object\",\"properties\":{\"a\":{\"type\":\"string\"}},\"additionalProperties\":false}'}" ]
+    },
+    "json-add-prop-partial" : {
+      "BACKWARD" : [ ],
+      "FORWARD" : [ ]
+    },
+    "json-add-prop-partial-mismatch" : {
+      "BACKWARD" : [ "{errorType:\"TYPE_CHANGED\", description:\"A type at path '#/properties/b' is different between the new schema and the old schema'}", "{errorType:\"PROPERTY_ADDED_NOT_COVERED_BY_PARTIALLY_OPEN_CONTENT_MODEL\", description:\"The new schema has a property or item at path '#/properties/b' which is missing in the old schema and is not covered by its partially open content model'}", "{oldSchema: '{\"type\":\"object\",\"properties\":{\"a\":{\"type\":\"string\"}},\"additionalProperties\":{\"type\":\"integer\"}}'}" ],
+      "FORWARD" : [ "{errorType:\"TYPE_CHANGED\", description:\"A type at path '#/properties/b' is different between the old schema and the new schema'}", "{errorType:\"PROPERTY_REMOVED_NOT_COVERED_BY_PARTIALLY_OPEN_CONTENT_MODEL\", description:\"A property or item is missing in the old schema but present at path '#/properties/b' in the new schema and is not covered by its partially open content model'}", "{oldSchema: '{\"type\":\"object\",\"properties\":{\"a\":{\"type\":\"string\"}},\"additionalProperties\":{\"type\":\"integer\"}}'}" ]
+    },
+    "json-additional-schema-change" : {
+      "BACKWARD" : [ ],
+      "FORWARD" : [ "{errorType:\"TYPE_NARROWED\", description:\"A type at path '#/additionalProperties' is different between the old schema and the new schema'}", "{oldSchema: '{\"type\":\"object\",\"properties\":{},\"additionalProperties\":{\"type\":\"integer\"}}'}" ]
+    },
+    "json-additional-schema-narrow" : {
+      "BACKWARD" : [ "{errorType:\"TYPE_NARROWED\", description:\"A type at path '#/additionalProperties' is different between the new schema and the old schema'}", "{oldSchema: '{\"type\":\"object\",\"properties\":{},\"additionalProperties\":{\"type\":\"number\"}}'}" ],
+      "FORWARD" : [ ]
+    },
+    "json-add-required" : {
+      "BACKWARD" : [ "{errorType:\"REQUIRED_ATTRIBUTE_ADDED\", description:\"The keyword at path '#/required/a' in the new schema is not present in the old schema'}", "{oldSchema: '{\"type\":\"object\",\"properties\":{\"a\":{\"type\":\"string\"}}}'}" ],
+      "FORWARD" : [ ]
+    },
+    "json-remove-required" : {
+      "BACKWARD" : [ ],
+      "FORWARD" : [ "{errorType:\"REQUIRED_ATTRIBUTE_ADDED\", description:\"The keyword at path '#/required/a' in the old schema is not present in the new schema'}", "{oldSchema: '{\"type\":\"object\",\"properties\":{\"a\":{\"type\":\"string\"}},\"required\":[\"a\"]}'}" ]
+    },
+    "json-add-required-with-default" : {
+      "BACKWARD" : [ ],
+      "FORWARD" : [ ]
+    },
+    "json-type-change" : {
+      "BACKWARD" : [ "{errorType:\"TYPE_CHANGED\", description:\"A type at path '#/' is different between the new schema and the old schema'}", "{oldSchema: '{\"type\":\"string\"}'}" ],
+      "FORWARD" : [ "{errorType:\"TYPE_CHANGED\", description:\"A type at path '#/' is different between the old schema and the new schema'}", "{oldSchema: '{\"type\":\"string\"}'}" ]
+    },
+    "json-int-to-number" : {
+      "BACKWARD" : [ ],
+      "FORWARD" : [ "{errorType:\"TYPE_NARROWED\", description:\"A type at path '#/' is different between the old schema and the new schema'}", "{oldSchema: '{\"type\":\"integer\"}'}" ]
+    },
+    "json-number-to-int" : {
+      "BACKWARD" : [ "{errorType:\"TYPE_NARROWED\", description:\"A type at path '#/' is different between the new schema and the old schema'}", "{oldSchema: '{\"type\":\"number\"}'}" ],
+      "FORWARD" : [ ]
+    },
+    "json-type-widen-array" : {
+      "BACKWARD" : [ ],
+      "FORWARD" : [ "{errorType:\"TYPE_CHANGED\", description:\"A type at path '#/' is different between the old schema and the new schema'}", "{oldSchema: '{\"type\":\"string\"}'}" ]
+    },
+    "json-type-narrow-array" : {
+      "BACKWARD" : [ "{errorType:\"TYPE_CHANGED\", description:\"A type at path '#/' is different between the new schema and the old schema'}", "{oldSchema: '{\"type\":[\"string\",\"null\"]}'}" ],
+      "FORWARD" : [ ]
+    },
+    "json-enum-add" : {
+      "BACKWARD" : [ ],
+      "FORWARD" : [ "{errorType:\"COMBINED_TYPE_SUBSCHEMAS_CHANGED\", description:\"A type at path '#/' is different between the old schema and the new schema'}", "{oldSchema: '{\"type\":\"string\",\"enum\":[\"a\",\"b\"]}'}" ]
+    },
+    "json-enum-remove" : {
+      "BACKWARD" : [ "{errorType:\"COMBINED_TYPE_SUBSCHEMAS_CHANGED\", description:\"A type at path '#/' is different between the new schema and the old schema'}", "{oldSchema: '{\"type\":\"string\",\"enum\":[\"a\",\"b\"]}'}" ],
+      "FORWARD" : [ ]
+    },
+    "json-enum-added" : {
+      "BACKWARD" : [ "{errorType:\"TYPE_CHANGED\", description:\"A type at path '#/' is different between the new schema and the old schema'}", "{oldSchema: '{\"type\":\"string\"}'}" ],
+      "FORWARD" : [ ]
+    },
+    "json-enum-removed" : {
+      "BACKWARD" : [ ],
+      "FORWARD" : [ "{errorType:\"TYPE_CHANGED\", description:\"A type at path '#/' is different between the old schema and the new schema'}", "{oldSchema: '{\"type\":\"string\",\"enum\":[\"a\"]}'}" ]
+    },
+    "json-maxLength-10-5" : {
+      "BACKWARD" : [ "{errorType:\"MAX_LENGTH_DECREASED\", description:\"The value at path '#/maxLength' in the new schema is less than its value in the old schema'}", "{oldSchema: '{\"type\":\"string\",\"maxLength\":10}'}" ],
+      "FORWARD" : [ ]
+    },
+    "json-maxLength-added-5" : {
+      "BACKWARD" : [ "{errorType:\"MAX_LENGTH_ADDED\", description:\"The keyword at path '#/maxLength' in the new schema is not present in the old schema'}", "{oldSchema: '{\"type\":\"string\"}'}" ],
+      "FORWARD" : [ ]
+    },
+    "json-maxLength-5-10" : {
+      "BACKWARD" : [ ],
+      "FORWARD" : [ "{errorType:\"MAX_LENGTH_DECREASED\", description:\"The value at path '#/maxLength' in the old schema is less than its value in the new schema'}", "{oldSchema: '{\"type\":\"string\",\"maxLength\":5}'}" ]
+    },
+    "json-minLength-1-3" : {
+      "BACKWARD" : [ "{errorType:\"MIN_LENGTH_INCREASED\", description:\"The value at path '#/minLength' in the new schema is more than its value in the old schema'}", "{oldSchema: '{\"type\":\"string\",\"minLength\":1}'}" ],
+      "FORWARD" : [ ]
+    },
+    "json-minLength-added-3" : {
+      "BACKWARD" : [ "{errorType:\"MIN_LENGTH_ADDED\", description:\"The keyword at path '#/minLength' in the new schema is not present in the old schema'}", "{oldSchema: '{\"type\":\"string\"}'}" ],
+      "FORWARD" : [ ]
+    },
+    "json-minLength-3-1" : {
+      "BACKWARD" : [ ],
+      "FORWARD" : [ "{errorType:\"MIN_LENGTH_INCREASED\", description:\"The value at path '#/minLength' in the old schema is more than its value in the new schema'}", "{oldSchema: '{\"type\":\"string\",\"minLength\":3}'}" ]
+    },
+    "json-minLength-added-1" : {
+      "BACKWARD" : [ "{errorType:\"MIN_LENGTH_ADDED\", description:\"The keyword at path '#/minLength' in the new schema is not present in the old schema'}", "{oldSchema: '{\"type\":\"string\"}'}" ],
+      "FORWARD" : [ ]
+    },
+    "json-maximum-10-5" : {
+      "BACKWARD" : [ "{errorType:\"MAXIMUM_DECREASED\", description:\"The value at path '#/maximum' in the new schema is less than its value in the old schema'}", "{oldSchema: '{\"type\":\"number\",\"maximum\":10}'}" ],
+      "FORWARD" : [ ]
+    },
+    "json-maximum-added-5" : {
+      "BACKWARD" : [ "{errorType:\"MAXIMUM_ADDED\", description:\"The keyword at path '#/maximum' in the new schema is not present in the old schema'}", "{oldSchema: '{\"type\":\"number\"}'}" ],
+      "FORWARD" : [ ]
+    },
+    "json-maximum-5-10" : {
+      "BACKWARD" : [ ],
+      "FORWARD" : [ "{errorType:\"MAXIMUM_DECREASED\", description:\"The value at path '#/maximum' in the old schema is less than its value in the new schema'}", "{oldSchema: '{\"type\":\"number\",\"maximum\":5}'}" ]
+    },
+    "json-minimum-1-3" : {
+      "BACKWARD" : [ "{errorType:\"MINIMUM_INCREASED\", description:\"The value at path '#/minimum' in the new schema is more than its value in the old schema'}", "{oldSchema: '{\"type\":\"number\",\"minimum\":1}'}" ],
+      "FORWARD" : [ ]
+    },
+    "json-minimum-added-3" : {
+      "BACKWARD" : [ "{errorType:\"MINIMUM_ADDED\", description:\"The keyword at path '#/minimum' in the new schema is not present in the old schema'}", "{oldSchema: '{\"type\":\"number\"}'}" ],
+      "FORWARD" : [ ]
+    },
+    "json-minimum-3-1" : {
+      "BACKWARD" : [ ],
+      "FORWARD" : [ "{errorType:\"MINIMUM_INCREASED\", description:\"The value at path '#/minimum' in the old schema is more than its value in the new schema'}", "{oldSchema: '{\"type\":\"number\",\"minimum\":3}'}" ]
+    },
+    "json-minimum-added-1" : {
+      "BACKWARD" : [ "{errorType:\"MINIMUM_ADDED\", description:\"The keyword at path '#/minimum' in the new schema is not present in the old schema'}", "{oldSchema: '{\"type\":\"number\"}'}" ],
+      "FORWARD" : [ ]
+    },
+    "json-exclusiveMaximum-10-5" : {
+      "BACKWARD" : [ ],
+      "error" : "Cannot invoke \"java.lang.Number.doubleValue()\" because the return value of \"org.everit.json.schema.NumberSchema.getMaximum()\" is null"
+    },
+    "json-exclusiveMaximum-added-5" : {
+      "BACKWARD" : [ "{errorType:\"EXCLUSIVE_MAXIMUM_ADDED\", description:\"The keyword at path '#/exclusiveMaximum' in the new schema is not present in the old schema'}", "{oldSchema: '{\"type\":\"number\"}'}" ],
+      "FORWARD" : [ ]
+    },
+    "json-exclusiveMinimum-3-1" : {
+      "BACKWARD" : [ ],
+      "FORWARD" : [ "{errorType:\"EXCLUSIVE_MINIMUM_INCREASED\", description:\"The value at path '#/exclusiveMinimum' in the old schema is more than its value in the new schema'}", "{oldSchema: '{\"type\":\"number\",\"exclusiveMinimum\":3}'}" ]
+    },
+    "json-maxItems-10-5" : {
+      "BACKWARD" : [ "{errorType:\"MAX_ITEMS_DECREASED\", description:\"The value at path '#/maxItems' in the new schema is less than its value in the old schema'}", "{oldSchema: '{\"type\":\"array\",\"maxItems\":10}'}" ],
+      "FORWARD" : [ ]
+    },
+    "json-maxItems-added-5" : {
+      "BACKWARD" : [ "{errorType:\"MAX_ITEMS_ADDED\", description:\"The keyword at path '#/maxItems' in the new schema is not present in the old schema'}", "{oldSchema: '{\"type\":\"array\"}'}" ],
+      "FORWARD" : [ ]
+    },
+    "json-minItems-1-3" : {
+      "BACKWARD" : [ "{errorType:\"MIN_ITEMS_INCREASED\", description:\"The value at path '#/minItems' in the new schema is more than its value in the old schema'}", "{oldSchema: '{\"type\":\"array\",\"minItems\":1}'}" ],
+      "FORWARD" : [ ]
+    },
+    "json-minItems-added-3" : {
+      "BACKWARD" : [ "{errorType:\"MIN_ITEMS_ADDED\", description:\"The keyword at path '#/minItems' in the new schema is not present in the old schema'}", "{oldSchema: '{\"type\":\"array\"}'}" ],
+      "FORWARD" : [ ]
+    },
+    "json-maxProperties-10-5" : {
+      "BACKWARD" : [ "{errorType:\"MAX_PROPERTIES_DECREASED\", description:\"The value at path '#/maxProperties' in the new schema is less than its value in the old schema'}", "{oldSchema: '{\"type\":\"object\",\"maxProperties\":10}'}" ],
+      "FORWARD" : [ ]
+    },
+    "json-maxProperties-added-5" : {
+      "BACKWARD" : [ "{errorType:\"MAX_PROPERTIES_ADDED\", description:\"The keyword at path '#/maxProperties' in the new schema is not present in the old schema'}", "{oldSchema: '{\"type\":\"object\"}'}" ],
+      "FORWARD" : [ ]
+    },
+    "json-minProperties-1-3" : {
+      "BACKWARD" : [ "{errorType:\"MIN_PROPERTIES_INCREASED\", description:\"The value at path '#/minProperties' in the new schema is more than its value in the old schema'}", "{oldSchema: '{\"type\":\"object\",\"minProperties\":1}'}" ],
+      "FORWARD" : [ ]
+    },
+    "json-minProperties-added-3" : {
+      "BACKWARD" : [ "{errorType:\"MIN_PROPERTIES_ADDED\", description:\"The keyword at path '#/minProperties' in the new schema is not present in the old schema'}", "{oldSchema: '{\"type\":\"object\"}'}" ],
+      "FORWARD" : [ ]
+    },
+    "json-maxLength-removed" : {
+      "BACKWARD" : [ ],
+      "FORWARD" : [ "{errorType:\"MAX_LENGTH_ADDED\", description:\"The keyword at path '#/maxLength' in the old schema is not present in the new schema'}", "{oldSchema: '{\"type\":\"string\",\"maxLength\":5}'}" ]
+    },
+    "json-pattern-added" : {
+      "BACKWARD" : [ "{errorType:\"PATTERN_ADDED\", description:\"The keyword at path '#/pattern' in the new schema is not present in the old schema'}", "{oldSchema: '{\"type\":\"string\"}'}" ],
+      "FORWARD" : [ ]
+    },
+    "json-pattern-changed" : {
+      "BACKWARD" : [ "{errorType:\"PATTERN_CHANGED\", description:\"The value at path '#/pattern' is different between the new and old schema'}", "{oldSchema: '{\"type\":\"string\",\"pattern\":\"^a\"}'}" ],
+      "FORWARD" : [ "{errorType:\"PATTERN_CHANGED\", description:\"The value at path '#/pattern' is different between the old and new schema'}", "{oldSchema: '{\"type\":\"string\",\"pattern\":\"^a\"}'}" ]
+    },
+    "json-pattern-removed" : {
+      "BACKWARD" : [ ],
+      "FORWARD" : [ "{errorType:\"PATTERN_ADDED\", description:\"The keyword at path '#/pattern' in the old schema is not present in the new schema'}", "{oldSchema: '{\"type\":\"string\",\"pattern\":\"^a\"}'}" ]
+    },
+    "json-multipleOf-added" : {
+      "BACKWARD" : [ "{errorType:\"MULTIPLE_OF_ADDED\", description:\"The keyword at path '#/multipleOf' in the new schema is not present in the old schema'}", "{oldSchema: '{\"type\":\"number\"}'}" ],
+      "FORWARD" : [ ]
+    },
+    "json-multipleOf-changed" : {
+      "BACKWARD" : [ ],
+      "FORWARD" : [ "{errorType:\"MULTIPLE_OF_EXPANDED\", description:\"The value at path '#/multipleOf' in the old schema is more than its value in the new schema'}", "{oldSchema: '{\"type\":\"number\",\"multipleOf\":4}'}" ]
+    },
+    "json-uniqueItems-added" : {
+      "BACKWARD" : [ "{errorType:\"UNIQUE_ITEMS_ADDED\", description:\"The keyword at path '#/uniqueItems' in the new schema is not present in the old schema'}", "{oldSchema: '{\"type\":\"array\"}'}" ],
+      "FORWARD" : [ ]
+    },
+    "json-items-type-change" : {
+      "BACKWARD" : [ "{errorType:\"TYPE_CHANGED\", description:\"A type at path '#/items' is different between the new schema and the old schema'}", "{oldSchema: '{\"type\":\"array\",\"items\":{\"type\":\"string\"}}'}" ],
+      "FORWARD" : [ "{errorType:\"TYPE_CHANGED\", description:\"A type at path '#/items' is different between the old schema and the new schema'}", "{oldSchema: '{\"type\":\"array\",\"items\":{\"type\":\"string\"}}'}" ]
+    },
+    "json-items-widen" : {
+      "BACKWARD" : [ ],
+      "FORWARD" : [ "{errorType:\"TYPE_NARROWED\", description:\"A type at path '#/items' is different between the old schema and the new schema'}", "{oldSchema: '{\"type\":\"array\",\"items\":{\"type\":\"integer\"}}'}" ]
+    },
+    "json-oneof-add" : {
+      "BACKWARD" : [ ],
+      "FORWARD" : [ "{errorType:\"SUM_TYPE_NARROWED\", description:\"An array or combined type at path '#/' has fewer elements in the old schema than the new schema'}", "{oldSchema: '{\"oneOf\":[{\"type\":\"string\"},{\"type\":\"integer\"}]}'}" ]
+    },
+    "json-oneof-remove" : {
+      "BACKWARD" : [ "{errorType:\"SUM_TYPE_NARROWED\", description:\"An array or combined type at path '#/' has fewer elements in the new schema than the old schema'}", "{oldSchema: '{\"oneOf\":[{\"type\":\"string\"},{\"type\":\"integer\"}]}'}" ],
+      "FORWARD" : [ ]
+    },
+    "json-anyof-add" : {
+      "BACKWARD" : [ ],
+      "FORWARD" : [ "{errorType:\"SUM_TYPE_NARROWED\", description:\"An array or combined type at path '#/' has fewer elements in the old schema than the new schema'}", "{oldSchema: '{\"anyOf\":[{\"type\":\"string\"}]}'}" ]
+    },
+    "json-allof-add" : {
+      "BACKWARD" : [ "{errorType:\"PRODUCT_TYPE_EXTENDED\", description:\"An array or combined type at path '#/' has more elements in the new schema than the old schema'}", "{oldSchema: '{\"allOf\":[{\"type\":\"object\"}]}'}" ],
+      "FORWARD" : [ ]
+    },
+    "json-to-oneof" : {
+      "BACKWARD" : [ ],
+      "FORWARD" : [ "{errorType:\"TYPE_CHANGED\", description:\"A type at path '#/' is different between the old schema and the new schema'}", "{oldSchema: '{\"type\":\"string\"}'}" ]
+    },
+    "json-from-oneof" : {
+      "BACKWARD" : [ "{errorType:\"TYPE_CHANGED\", description:\"A type at path '#/' is different between the new schema and the old schema'}", "{oldSchema: '{\"oneOf\":[{\"type\":\"string\"},{\"type\":\"integer\"}]}'}" ],
+      "FORWARD" : [ ]
+    },
+    "json-nested-type-change" : {
+      "BACKWARD" : [ "{errorType:\"TYPE_CHANGED\", description:\"A type at path '#/properties/n/properties/x' is different between the new schema and the old schema'}", "{oldSchema: '{\"type\":\"object\",\"properties\":{\"n\":{\"type\":\"object\",\"properties\":{\"x\":{\"type\":\"string\"}}}}}'}" ],
+      "FORWARD" : [ "{errorType:\"TYPE_CHANGED\", description:\"A type at path '#/properties/n/properties/x' is different between the old schema and the new schema'}", "{oldSchema: '{\"type\":\"object\",\"properties\":{\"n\":{\"type\":\"object\",\"properties\":{\"x\":{\"type\":\"string\"}}}}}'}" ]
+    },
+    "json-ref-target-change" : {
+      "BACKWARD" : [ "{errorType:\"TYPE_CHANGED\", description:\"A type at path '#/properties/a' is different between the new schema and the old schema'}", "{oldSchema: '{\"definitions\":{\"x\":{\"type\":\"string\"}},\"type\":\"object\",\"properties\":{\"a\":{\"$ref\":\"#/definitions/x\"}}}'}" ],
+      "FORWARD" : [ "{errorType:\"TYPE_CHANGED\", description:\"A type at path '#/properties/a' is different between the old schema and the new schema'}", "{oldSchema: '{\"definitions\":{\"x\":{\"type\":\"string\"}},\"type\":\"object\",\"properties\":{\"a\":{\"$ref\":\"#/definitions/x\"}}}'}" ]
+    },
+    "json-const-change" : {
+      "BACKWARD" : [ "{errorType:\"ENUM_ARRAY_CHANGED\", description:\"A type at path '#/const' is different between the new schema and the old schema'}", "{oldSchema: '{\"const\":\"a\"}'}" ],
+      "FORWARD" : [ "{errorType:\"ENUM_ARRAY_CHANGED\", description:\"A type at path '#/const' is different between the old schema and the new schema'}", "{oldSchema: '{\"const\":\"a\"}'}" ]
+    },
+    "json-description-only" : {
+      "BACKWARD" : [ ],
+      "FORWARD" : [ ]
+    },
+    "json-true-to-false" : {
+      "BACKWARD" : [ "{errorType:\"TYPE_CHANGED\", description:\"A type at path '#/' is different between the new schema and the old schema'}", "{oldSchema: 'true'}" ],
+      "FORWARD" : [ ]
+    },
+    "json-empty-to-typed" : {
+      "BACKWARD" : [ "{errorType:\"TYPE_CHANGED\", description:\"A type at path '#/' is different between the new schema and the old schema'}", "{oldSchema: '{}'}" ],
+      "FORWARD" : [ ]
+    },
+    "json-typed-to-empty" : {
+      "BACKWARD" : [ ],
+      "FORWARD" : [ "{errorType:\"TYPE_CHANGED\", description:\"A type at path '#/' is different between the old schema and the new schema'}", "{oldSchema: '{\"type\":\"string\"}'}" ]
+    },
+    "json-add-object-type" : {
+      "BACKWARD" : [ ],
+      "FORWARD" : [ ]
+    },
+    "json-not-added" : {
+      "BACKWARD" : [ "{errorType:\"TYPE_CHANGED\", description:\"A type at path '#/' is different between the new schema and the old schema'}", "{oldSchema: '{\"type\":\"string\"}'}" ],
+      "FORWARD" : [ ]
+    },
+    "json-format-added" : {
+      "BACKWARD" : [ ],
+      "FORWARD" : [ ]
+    },
+    "json-dependencies-added" : {
+      "BACKWARD" : [ "{errorType:\"DEPENDENCY_ARRAY_ADDED\", description:\"The keyword at path '#/dependencies/a' in the new schema is not present in the old schema'}", "{oldSchema: '{\"type\":\"object\",\"properties\":{\"a\":{\"type\":\"string\"},\"b\":{\"type\":\"string\"}}}'}" ],
+      "FORWARD" : [ ]
+    },
+    "json-identical" : {
+      "BACKWARD" : [ ],
+      "FORWARD" : [ ]
+    },
+    "proto-add-field" : {
+      "BACKWARD" : [ ],
+      "FORWARD" : [ ]
+    },
+    "proto-remove-field" : {
+      "BACKWARD" : [ ],
+      "FORWARD" : [ ]
+    },
+    "proto-rename-field" : {
+      "BACKWARD" : [ ],
+      "FORWARD" : [ ]
+    },
+    "proto-renumber-field" : {
+      "BACKWARD" : [ ],
+      "FORWARD" : [ ]
+    },
+    "proto-type-int32-int64" : {
+      "BACKWARD" : [ ],
+      "FORWARD" : [ ]
+    },
+    "proto-type-int32-uint32" : {
+      "BACKWARD" : [ ],
+      "FORWARD" : [ ]
+    },
+    "proto-type-int32-bool" : {
+      "BACKWARD" : [ ],
+      "FORWARD" : [ ]
+    },
+    "proto-type-int64-int32" : {
+      "BACKWARD" : [ ],
+      "FORWARD" : [ ]
+    },
+    "proto-type-sint32-sint64" : {
+      "BACKWARD" : [ ],
+      "FORWARD" : [ ]
+    },
+    "proto-type-sint32-int32" : {
+      "BACKWARD" : [ "{errorType:\"FIELD_SCALAR_KIND_CHANGED\", description:\"The kind of a SCALAR field at path '#/A/1' in the new schema does not match its kind in the old schema\"}", "{oldSchema: 'syntax = \"proto3\";\npackage p;\n\nmessage A {\n  sint32 x = 1;\n}\n'}" ],
+      "FORWARD" : [ "{errorType:\"FIELD_SCALAR_KIND_CHANGED\", description:\"The kind of a SCALAR field at path '#/A/1' in the old schema does not match its kind in the new schema\"}", "{oldSchema: 'syntax = \"proto3\";\npackage p;\n\nmessage A {\n  sint32 x = 1;\n}\n'}" ]
+    },
+    "proto-type-fixed32-sfixed32" : {
+      "BACKWARD" : [ ],
+      "FORWARD" : [ ]
+    },
+    "proto-type-fixed64-sfixed64" : {
+      "BACKWARD" : [ ],
+      "FORWARD" : [ ]
+    },
+    "proto-type-fixed32-fixed64" : {
+      "BACKWARD" : [ "{errorType:\"FIELD_SCALAR_KIND_CHANGED\", description:\"The kind of a SCALAR field at path '#/A/1' in the new schema does not match its kind in the old schema\"}", "{oldSchema: 'syntax = \"proto3\";\npackage p;\n\nmessage A {\n  fixed32 x = 1;\n}\n'}" ],
+      "FORWARD" : [ "{errorType:\"FIELD_SCALAR_KIND_CHANGED\", description:\"The kind of a SCALAR field at path '#/A/1' in the old schema does not match its kind in the new schema\"}", "{oldSchema: 'syntax = \"proto3\";\npackage p;\n\nmessage A {\n  fixed32 x = 1;\n}\n'}" ]
+    },
+    "proto-type-float-double" : {
+      "BACKWARD" : [ "{errorType:\"FIELD_SCALAR_KIND_CHANGED\", description:\"The kind of a SCALAR field at path '#/A/1' in the new schema does not match its kind in the old schema\"}", "{oldSchema: 'syntax = \"proto3\";\npackage p;\n\nmessage A {\n  float x = 1;\n}\n'}" ],
+      "FORWARD" : [ "{errorType:\"FIELD_SCALAR_KIND_CHANGED\", description:\"The kind of a SCALAR field at path '#/A/1' in the old schema does not match its kind in the new schema\"}", "{oldSchema: 'syntax = \"proto3\";\npackage p;\n\nmessage A {\n  float x = 1;\n}\n'}" ]
+    },
+    "proto-type-int32-string" : {
+      "BACKWARD" : [ "{errorType:\"FIELD_SCALAR_KIND_CHANGED\", description:\"The kind of a SCALAR field at path '#/A/1' in the new schema does not match its kind in the old schema\"}", "{oldSchema: 'syntax = \"proto3\";\npackage p;\n\nmessage A {\n  int32 x = 1;\n}\n'}" ],
+      "FORWARD" : [ "{errorType:\"FIELD_SCALAR_KIND_CHANGED\", description:\"The kind of a SCALAR field at path '#/A/1' in the old schema does not match its kind in the new schema\"}", "{oldSchema: 'syntax = \"proto3\";\npackage p;\n\nmessage A {\n  int32 x = 1;\n}\n'}" ]
+    },
+    "proto-type-string-bytes" : {
+      "BACKWARD" : [ ],
+      "FORWARD" : [ ]
+    },
+    "proto-type-bytes-string" : {
+      "BACKWARD" : [ ],
+      "FORWARD" : [ ]
+    },
+    "proto-type-int32-float" : {
+      "BACKWARD" : [ "{errorType:\"FIELD_SCALAR_KIND_CHANGED\", description:\"The kind of a SCALAR field at path '#/A/1' in the new schema does not match its kind in the old schema\"}", "{oldSchema: 'syntax = \"proto3\";\npackage p;\n\nmessage A {\n  int32 x = 1;\n}\n'}" ],
+      "FORWARD" : [ "{errorType:\"FIELD_SCALAR_KIND_CHANGED\", description:\"The kind of a SCALAR field at path '#/A/1' in the old schema does not match its kind in the new schema\"}", "{oldSchema: 'syntax = \"proto3\";\npackage p;\n\nmessage A {\n  int32 x = 1;\n}\n'}" ]
+    },
+    "proto-scalar-to-message" : {
+      "BACKWARD" : [ "{errorType:\"FIELD_KIND_CHANGED\", description:\"The type of a field at path '#/A/1' in the new schema does not match the old schema\"}", "{oldSchema: 'syntax = \"proto3\";\npackage p;\n\nmessage A {\n  string x = 1;\n}\nmessage B {\n  string y = 1;\n}\n'}" ],
+      "FORWARD" : [ "{errorType:\"FIELD_KIND_CHANGED\", description:\"The type of a field at path '#/A/1' in the old schema does not match the new schema\"}", "{oldSchema: 'syntax = \"proto3\";\npackage p;\n\nmessage A {\n  string x = 1;\n}\nmessage B {\n  string y = 1;\n}\n'}" ]
+    },
+    "proto-message-type-change" : {
+      "BACKWARD" : [ "{errorType:\"FIELD_NAMED_TYPE_CHANGED\", description:\"The type of a MESSAGE field at path '#/A/1' in the new schema does not match its type in the old schema\"}", "{oldSchema: 'syntax = \"proto3\";\npackage p;\n\nmessage A {\n  B x = 1;\n}\nmessage B {\n  string y = 1;\n}\nmessage C {\n  string y = 1;\n}\n'}" ],
+      "FORWARD" : [ "{errorType:\"FIELD_NAMED_TYPE_CHANGED\", description:\"The type of a MESSAGE field at path '#/A/1' in the old schema does not match its type in the new schema\"}", "{oldSchema: 'syntax = \"proto3\";\npackage p;\n\nmessage A {\n  B x = 1;\n}\nmessage B {\n  string y = 1;\n}\nmessage C {\n  string y = 1;\n}\n'}" ]
+    },
+    "proto-enum-to-int" : {
+      "BACKWARD" : [ ],
+      "FORWARD" : [ ]
+    },
+    "proto-remove-message" : {
+      "BACKWARD" : [ "{errorType:\"MESSAGE_REMOVED\", description:\"The new schema is missing a MESSAGE type at path '#/B' in the old schema\"}", "{oldSchema: 'syntax = \"proto3\";\npackage p;\n\nmessage A {\n  string a = 1;\n}\nmessage B {\n  string b = 1;\n}\n'}" ],
+      "FORWARD" : [ ]
+    },
+    "proto-add-message" : {
+      "BACKWARD" : [ ],
+      "FORWARD" : [ "{errorType:\"MESSAGE_REMOVED\", description:\"The old schema is missing a MESSAGE type at path '#/B' in the new schema\"}", "{oldSchema: 'syntax = \"proto3\";\npackage p;\n\nmessage A {\n  string a = 1;\n}\n'}" ]
+    },
+    "proto-rename-message" : {
+      "BACKWARD" : [ "{errorType:\"MESSAGE_REMOVED\", description:\"The new schema is missing a MESSAGE type at path '#/A' in the old schema\"}", "{oldSchema: 'syntax = \"proto3\";\npackage p;\n\nmessage A {\n  string a = 1;\n}\n'}" ],
+      "FORWARD" : [ "{errorType:\"MESSAGE_REMOVED\", description:\"The old schema is missing a MESSAGE type at path '#/Z' in the new schema\"}", "{oldSchema: 'syntax = \"proto3\";\npackage p;\n\nmessage A {\n  string a = 1;\n}\n'}" ]
+    },
+    "proto-package-change" : {
+      "BACKWARD" : [ "{errorType:\"PACKAGE_CHANGED\", description:\"The package at '#/' in the new schema does not match the package in the old schema\"}", "{oldSchema: 'syntax = \"proto3\";\npackage p;\n\nmessage A {\n  string a = 1;\n}\n'}" ],
+      "FORWARD" : [ "{errorType:\"PACKAGE_CHANGED\", description:\"The package at '#/' in the old schema does not match the package in the new schema\"}", "{oldSchema: 'syntax = \"proto3\";\npackage p;\n\nmessage A {\n  string a = 1;\n}\n'}" ]
+    },
+    "proto-into-new-oneof-single" : {
+      "BACKWARD" : [ ],
+      "FORWARD" : [ ]
+    },
+    "proto-into-new-oneof-multi" : {
+      "BACKWARD" : [ "{errorType:\"MULTIPLE_FIELDS_MOVED_TO_ONEOF\", description:\"Multiple fields in the oneof at path '#/A/k' in the new schema are outside a oneof in the old schema\"}", "{oldSchema: 'syntax = \"proto3\";\npackage p;\n\nmessage A {\n  string a = 1;\n  int32 b = 2;\n}\n'}" ],
+      "FORWARD" : [ ]
+    },
+    "proto-into-existing-oneof" : {
+      "BACKWARD" : [ "{errorType:\"FIELD_MOVED_TO_EXISTING_ONEOF\", description:\"A field in the oneof at path '#/A/k' in the new schema is outside an existing oneof in the old schema\"}", "{oldSchema: 'syntax = \"proto3\";\npackage p;\n\nmessage A {\n  int32 b = 2;\n\n  oneof k {\n    string a = 1;\n  }\n}\n'}" ],
+      "FORWARD" : [ "{errorType:\"ONEOF_FIELD_REMOVED\", description:\"The old schema is missing a oneof field at path '#/A/k/2' in the new schema\"}", "{oldSchema: 'syntax = \"proto3\";\npackage p;\n\nmessage A {\n  int32 b = 2;\n\n  oneof k {\n    string a = 1;\n  }\n}\n'}" ]
+    },
+    "proto-remove-oneof-field" : {
+      "BACKWARD" : [ "{errorType:\"ONEOF_FIELD_REMOVED\", description:\"The new schema is missing a oneof field at path '#/A/k/2' in the old schema\"}", "{oldSchema: 'syntax = \"proto3\";\npackage p;\n\nmessage A {\n  oneof k {\n    string a = 1;\n    int32 b = 2;\n  }\n}\n'}" ],
+      "FORWARD" : [ ]
+    },
+    "proto-add-oneof-field" : {
+      "BACKWARD" : [ ],
+      "FORWARD" : [ "{errorType:\"ONEOF_FIELD_REMOVED\", description:\"The old schema is missing a oneof field at path '#/A/k/2' in the new schema\"}", "{oldSchema: 'syntax = \"proto3\";\npackage p;\n\nmessage A {\n  oneof k {\n    string a = 1;\n  }\n}\n'}" ]
+    },
+    "proto-out-of-oneof" : {
+      "BACKWARD" : [ ],
+      "FORWARD" : [ ]
+    },
+    "proto2-optional-to-required" : {
+      "BACKWARD" : [ ],
+      "FORWARD" : [ ]
+    },
+    "proto2-required-to-optional" : {
+      "BACKWARD" : [ ],
+      "FORWARD" : [ ]
+    },
+    "proto2-add-required" : {
+      "BACKWARD" : [ "{errorType:\"REQUIRED_FIELD_ADDED\", description:\"A required field  at path '#/A/2' in the new schema is missing in the old schema\"}", "{oldSchema: 'syntax = \"proto2\";\npackage p;\n\nmessage A {\n  optional string a = 1;\n}\n'}" ],
+      "FORWARD" : [ "{errorType:\"REQUIRED_FIELD_REMOVED\", description:\"The old schema is missing a required field at path: '#/A/2' in the new schema\"}", "{oldSchema: 'syntax = \"proto2\";\npackage p;\n\nmessage A {\n  optional string a = 1;\n}\n'}" ]
+    },
+    "proto2-remove-required" : {
+      "BACKWARD" : [ "{errorType:\"REQUIRED_FIELD_REMOVED\", description:\"The new schema is missing a required field at path: '#/A/2' in the old schema\"}", "{oldSchema: 'syntax = \"proto2\";\npackage p;\n\nmessage A {\n  optional string a = 1;\n  required int32 b = 2;\n}\n'}" ],
+      "FORWARD" : [ "{errorType:\"REQUIRED_FIELD_ADDED\", description:\"A required field  at path '#/A/2' in the old schema is missing in the new schema\"}", "{oldSchema: 'syntax = \"proto2\";\npackage p;\n\nmessage A {\n  optional string a = 1;\n  required int32 b = 2;\n}\n'}" ]
+    },
+    "proto-singular-to-repeated-int" : {
+      "BACKWARD" : [ ],
+      "FORWARD" : [ ]
+    },
+    "proto-singular-to-repeated-string" : {
+      "BACKWARD" : [ ],
+      "FORWARD" : [ ]
+    },
+    "proto-repeated-to-singular" : {
+      "BACKWARD" : [ ],
+      "FORWARD" : [ ]
+    },
+    "proto-enum-add-value" : {
+      "BACKWARD" : [ ],
+      "FORWARD" : [ ]
+    },
+    "proto-enum-remove-value" : {
+      "BACKWARD" : [ ],
+      "FORWARD" : [ ]
+    },
+    "proto-enum-rename" : {
+      "BACKWARD" : [ ],
+      "FORWARD" : [ ]
+    },
+    "proto-remove-enum" : {
+      "BACKWARD" : [ ],
+      "FORWARD" : [ ]
+    },
+    "proto-map-value-change" : {
+      "BACKWARD" : [ "{errorType:\"FIELD_SCALAR_KIND_CHANGED\", description:\"The kind of a SCALAR field at path '#/A/1' in the new schema does not match its kind in the old schema\"}", "{oldSchema: 'syntax = \"proto3\";\npackage p;\n\nmessage A {\n  map<string, int32> m = 1;\n}\n'}" ],
+      "FORWARD" : [ "{errorType:\"FIELD_SCALAR_KIND_CHANGED\", description:\"The kind of a SCALAR field at path '#/A/1' in the old schema does not match its kind in the new schema\"}", "{oldSchema: 'syntax = \"proto3\";\npackage p;\n\nmessage A {\n  map<string, int32> m = 1;\n}\n'}" ]
+    },
+    "proto-map-value-widen" : {
+      "BACKWARD" : [ ],
+      "FORWARD" : [ ]
+    },
+    "proto-nested-add-field" : {
+      "BACKWARD" : [ ],
+      "FORWARD" : [ ]
+    },
+    "proto-nested-type-change" : {
+      "BACKWARD" : [ "{errorType:\"FIELD_SCALAR_KIND_CHANGED\", description:\"The kind of a SCALAR field at path '#/A/N/1' in the new schema does not match its kind in the old schema\"}", "{oldSchema: 'syntax = \"proto3\";\npackage p;\n\nmessage A {\n  N n = 1;\n\n  message N {\n    string x = 1;\n  }\n}\n'}" ],
+      "FORWARD" : [ "{errorType:\"FIELD_SCALAR_KIND_CHANGED\", description:\"The kind of a SCALAR field at path '#/A/N/1' in the old schema does not match its kind in the new schema\"}", "{oldSchema: 'syntax = \"proto3\";\npackage p;\n\nmessage A {\n  N n = 1;\n\n  message N {\n    string x = 1;\n  }\n}\n'}" ]
+    },
+    "proto-syntax-2-to-3" : {
+      "BACKWARD" : [ ],
+      "FORWARD" : [ ]
+    },
+    "proto-reserved-added" : {
+      "BACKWARD" : [ ],
+      "FORWARD" : [ ]
+    },
+    "proto-json-name" : {
+      "BACKWARD" : [ ],
+      "FORWARD" : [ ]
+    },
+    "proto-move-to-nested" : {
+      "BACKWARD" : [ "{errorType:\"FIELD_NAMED_TYPE_CHANGED\", description:\"The type of a MESSAGE field at path '#/A/1' in the new schema does not match its type in the old schema\"}", "{errorType:\"MESSAGE_REMOVED\", description:\"The new schema is missing a MESSAGE type at path '#/B' in the old schema\"}", "{oldSchema: 'syntax = \"proto3\";\npackage p;\n\nmessage A {\n  B b = 1;\n}\nmessage B {\n  string x = 1;\n}\n'}" ],
+      "FORWARD" : [ "{errorType:\"FIELD_NAMED_TYPE_CHANGED\", description:\"The type of a MESSAGE field at path '#/A/1' in the old schema does not match its type in the new schema\"}", "{errorType:\"MESSAGE_REMOVED\", description:\"The old schema is missing a MESSAGE type at path '#/A/B' in the new schema\"}", "{oldSchema: 'syntax = \"proto3\";\npackage p;\n\nmessage A {\n  B b = 1;\n}\nmessage B {\n  string x = 1;\n}\n'}" ]
+    },
+    "proto-identical" : {
+      "BACKWARD" : [ ],
+      "FORWARD" : [ ]
+    },
+    "proto-optional3-added" : {
+      "BACKWARD" : [ ],
+      "FORWARD" : [ ]
+    },
+    "proto-to-optional3" : {
+      "BACKWARD" : [ ],
+      "FORWARD" : [ ]
+    }
+  },
+  "chains" : {
+    "avro-add-optional-field" : {
+      "NONE" : [ ],
+      "BACKWARD" : [ ],
+      "BACKWARD_TRANSITIVE" : [ ],
+      "FORWARD" : [ ],
+      "FORWARD_TRANSITIVE" : [ ],
+      "FULL" : [ ],
+      "FULL_TRANSITIVE" : [ ]
+    },
+    "avro-add-required-field" : {
+      "NONE" : [ ],
+      "BACKWARD" : [ "{errorType:'READER_FIELD_MISSING_DEFAULT_VALUE', description:'The field 'b' at path '/fields/1' in the new schema has no default value and is missing in the old schema', additionalInfo:'b'}", "{oldSchemaVersion: 1}", "{oldSchema: '{\"type\":\"record\",\"name\":\"R\",\"fields\":[{\"name\":\"a\",\"type\":\"int\"}]}'}" ],
+      "BACKWARD_TRANSITIVE" : [ "{errorType:'READER_FIELD_MISSING_DEFAULT_VALUE', description:'The field 'b' at path '/fields/1' in the new schema has no default value and is missing in the old schema', additionalInfo:'b'}", "{oldSchemaVersion: 1}", "{oldSchema: '{\"type\":\"record\",\"name\":\"R\",\"fields\":[{\"name\":\"a\",\"type\":\"int\"}]}'}" ],
+      "FORWARD" : [ ],
+      "FORWARD_TRANSITIVE" : [ ],
+      "FULL" : [ "{errorType:'READER_FIELD_MISSING_DEFAULT_VALUE', description:'The field 'b' at path '/fields/1' in the new schema has no default value and is missing in the old schema', additionalInfo:'b'}", "{oldSchemaVersion: 1}", "{oldSchema: '{\"type\":\"record\",\"name\":\"R\",\"fields\":[{\"name\":\"a\",\"type\":\"int\"}]}'}" ],
+      "FULL_TRANSITIVE" : [ "{errorType:'READER_FIELD_MISSING_DEFAULT_VALUE', description:'The field 'b' at path '/fields/1' in the new schema has no default value and is missing in the old schema', additionalInfo:'b'}", "{oldSchemaVersion: 1}", "{oldSchema: '{\"type\":\"record\",\"name\":\"R\",\"fields\":[{\"name\":\"a\",\"type\":\"int\"}]}'}" ]
+    },
+    "avro-remove-optional-field" : {
+      "NONE" : [ ],
+      "BACKWARD" : [ ],
+      "BACKWARD_TRANSITIVE" : [ ],
+      "FORWARD" : [ ],
+      "FORWARD_TRANSITIVE" : [ ],
+      "FULL" : [ ],
+      "FULL_TRANSITIVE" : [ ]
+    },
+    "avro-remove-required-field" : {
+      "NONE" : [ ],
+      "BACKWARD" : [ ],
+      "BACKWARD_TRANSITIVE" : [ ],
+      "FORWARD" : [ "{errorType:'READER_FIELD_MISSING_DEFAULT_VALUE', description:'The field 'b' at path '/fields/1' in the old schema has no default value and is missing in the new schema', additionalInfo:'b'}", "{oldSchemaVersion: 1}", "{oldSchema: '{\"type\":\"record\",\"name\":\"R\",\"fields\":[{\"name\":\"a\",\"type\":\"int\"},{\"name\":\"b\",\"type\":\"string\"}]}'}" ],
+      "FORWARD_TRANSITIVE" : [ "{errorType:'READER_FIELD_MISSING_DEFAULT_VALUE', description:'The field 'b' at path '/fields/1' in the old schema has no default value and is missing in the new schema', additionalInfo:'b'}", "{oldSchemaVersion: 1}", "{oldSchema: '{\"type\":\"record\",\"name\":\"R\",\"fields\":[{\"name\":\"a\",\"type\":\"int\"},{\"name\":\"b\",\"type\":\"string\"}]}'}" ],
+      "FULL" : [ "{errorType:'READER_FIELD_MISSING_DEFAULT_VALUE', description:'The field 'b' at path '/fields/1' in the old schema has no default value and is missing in the new schema', additionalInfo:'b'}" ],
+      "FULL_TRANSITIVE" : [ "{errorType:'READER_FIELD_MISSING_DEFAULT_VALUE', description:'The field 'b' at path '/fields/1' in the old schema has no default value and is missing in the new schema', additionalInfo:'b'}" ]
+    },
+    "avro-promote-int-long" : {
+      "NONE" : [ ],
+      "BACKWARD" : [ ],
+      "BACKWARD_TRANSITIVE" : [ ],
+      "FORWARD" : [ "{errorType:'TYPE_MISMATCH', description:'The type (path '/fields/0/type') of a field in the old schema does not match with the new schema', additionalInfo:'reader type: INT not compatible with writer type: LONG'}", "{oldSchemaVersion: 1}", "{oldSchema: '{\"type\":\"record\",\"name\":\"R\",\"fields\":[{\"name\":\"a\",\"type\":\"int\"}]}'}" ],
+      "FORWARD_TRANSITIVE" : [ "{errorType:'TYPE_MISMATCH', description:'The type (path '/fields/0/type') of a field in the old schema does not match with the new schema', additionalInfo:'reader type: INT not compatible with writer type: LONG'}", "{oldSchemaVersion: 1}", "{oldSchema: '{\"type\":\"record\",\"name\":\"R\",\"fields\":[{\"name\":\"a\",\"type\":\"int\"}]}'}" ],
+      "FULL" : [ "{errorType:'TYPE_MISMATCH', description:'The type (path '/fields/0/type') of a field in the old schema does not match with the new schema', additionalInfo:'reader type: INT not compatible with writer type: LONG'}" ],
+      "FULL_TRANSITIVE" : [ "{errorType:'TYPE_MISMATCH', description:'The type (path '/fields/0/type') of a field in the old schema does not match with the new schema', additionalInfo:'reader type: INT not compatible with writer type: LONG'}" ]
+    },
+    "avro-change-int-string" : {
+      "NONE" : [ ],
+      "BACKWARD" : [ "{errorType:'TYPE_MISMATCH', description:'The type (path '/fields/0/type') of a field in the new schema does not match with the old schema', additionalInfo:'reader type: STRING not compatible with writer type: INT'}", "{oldSchemaVersion: 1}", "{oldSchema: '{\"type\":\"record\",\"name\":\"R\",\"fields\":[{\"name\":\"a\",\"type\":\"int\"}]}'}" ],
+      "BACKWARD_TRANSITIVE" : [ "{errorType:'TYPE_MISMATCH', description:'The type (path '/fields/0/type') of a field in the new schema does not match with the old schema', additionalInfo:'reader type: STRING not compatible with writer type: INT'}", "{oldSchemaVersion: 1}", "{oldSchema: '{\"type\":\"record\",\"name\":\"R\",\"fields\":[{\"name\":\"a\",\"type\":\"int\"}]}'}" ],
+      "FORWARD" : [ "{errorType:'TYPE_MISMATCH', description:'The type (path '/fields/0/type') of a field in the old schema does not match with the new schema', additionalInfo:'reader type: INT not compatible with writer type: STRING'}", "{oldSchemaVersion: 1}", "{oldSchema: '{\"type\":\"record\",\"name\":\"R\",\"fields\":[{\"name\":\"a\",\"type\":\"int\"}]}'}" ],
+      "FORWARD_TRANSITIVE" : [ "{errorType:'TYPE_MISMATCH', description:'The type (path '/fields/0/type') of a field in the old schema does not match with the new schema', additionalInfo:'reader type: INT not compatible with writer type: STRING'}", "{oldSchemaVersion: 1}", "{oldSchema: '{\"type\":\"record\",\"name\":\"R\",\"fields\":[{\"name\":\"a\",\"type\":\"int\"}]}'}" ],
+      "FULL" : [ "{errorType:'TYPE_MISMATCH', description:'The type (path '/fields/0/type') of a field in the old schema does not match with the new schema', additionalInfo:'reader type: INT not compatible with writer type: STRING'}", "{errorType:'TYPE_MISMATCH', description:'The type (path '/fields/0/type') of a field in the new schema does not match with the old schema', additionalInfo:'reader type: STRING not compatible with writer type: INT'}", "{oldSchemaVersion: 1}", "{oldSchema: '{\"type\":\"record\",\"name\":\"R\",\"fields\":[{\"name\":\"a\",\"type\":\"int\"}]}'}" ],
+      "FULL_TRANSITIVE" : [ "{errorType:'TYPE_MISMATCH', description:'The type (path '/fields/0/type') of a field in the old schema does not match with the new schema', additionalInfo:'reader type: INT not compatible with writer type: STRING'}", "{errorType:'TYPE_MISMATCH', description:'The type (path '/fields/0/type') of a field in the new schema does not match with the old schema', additionalInfo:'reader type: STRING not compatible with writer type: INT'}", "{oldSchemaVersion: 1}", "{oldSchema: '{\"type\":\"record\",\"name\":\"R\",\"fields\":[{\"name\":\"a\",\"type\":\"int\"}]}'}" ]
+    },
+    "avro-enum-add-symbol" : {
+      "NONE" : [ ],
+      "BACKWARD" : [ ],
+      "BACKWARD_TRANSITIVE" : [ ],
+      "FORWARD" : [ "{errorType:'MISSING_ENUM_SYMBOLS', description:'The old schema is missing enum symbols '[C]' at path '/fields/0/type/symbols' in the new schema', additionalInfo:'[C]'}", "{oldSchemaVersion: 1}", "{oldSchema: '{\"type\":\"record\",\"name\":\"R\",\"fields\":[{\"name\":\"e\",\"type\":{\"type\":\"enum\",\"name\":\"E\",\"symbols\":[\"A\",\"B\"]}}]}'}" ],
+      "FORWARD_TRANSITIVE" : [ "{errorType:'MISSING_ENUM_SYMBOLS', description:'The old schema is missing enum symbols '[C]' at path '/fields/0/type/symbols' in the new schema', additionalInfo:'[C]'}", "{oldSchemaVersion: 1}", "{oldSchema: '{\"type\":\"record\",\"name\":\"R\",\"fields\":[{\"name\":\"e\",\"type\":{\"type\":\"enum\",\"name\":\"E\",\"symbols\":[\"A\",\"B\"]}}]}'}" ],
+      "FULL" : [ "{errorType:'MISSING_ENUM_SYMBOLS', description:'The old schema is missing enum symbols '[C]' at path '/fields/0/type/symbols' in the new schema', additionalInfo:'[C]'}" ],
+      "FULL_TRANSITIVE" : [ "{errorType:'MISSING_ENUM_SYMBOLS', description:'The old schema is missing enum symbols '[C]' at path '/fields/0/type/symbols' in the new schema', additionalInfo:'[C]'}" ]
+    },
+    "avro-enum-add-symbol-old-default" : {
+      "NONE" : [ ],
+      "BACKWARD" : [ ],
+      "BACKWARD_TRANSITIVE" : [ ],
+      "FORWARD" : [ ],
+      "FORWARD_TRANSITIVE" : [ ],
+      "FULL" : [ ],
+      "FULL_TRANSITIVE" : [ ]
+    },
+    "avro-union-widen" : {
+      "NONE" : [ ],
+      "BACKWARD" : [ ],
+      "BACKWARD_TRANSITIVE" : [ ],
+      "FORWARD" : [ "{errorType:'MISSING_UNION_BRANCH', description:'The old schema is missing a type inside a union field at path '/fields/0/type/2' in the new schema', additionalInfo:'reader union lacking writer type: STRING'}", "{oldSchemaVersion: 1}", "{oldSchema: '{\"type\":\"record\",\"name\":\"R\",\"fields\":[{\"name\":\"a\",\"type\":[\"null\",\"int\"],\"default\":null}]}'}" ],
+      "FORWARD_TRANSITIVE" : [ "{errorType:'MISSING_UNION_BRANCH', description:'The old schema is missing a type inside a union field at path '/fields/0/type/2' in the new schema', additionalInfo:'reader union lacking writer type: STRING'}", "{oldSchemaVersion: 1}", "{oldSchema: '{\"type\":\"record\",\"name\":\"R\",\"fields\":[{\"name\":\"a\",\"type\":[\"null\",\"int\"],\"default\":null}]}'}" ],
+      "FULL" : [ "{errorType:'MISSING_UNION_BRANCH', description:'The old schema is missing a type inside a union field at path '/fields/0/type/2' in the new schema', additionalInfo:'reader union lacking writer type: STRING'}" ],
+      "FULL_TRANSITIVE" : [ "{errorType:'MISSING_UNION_BRANCH', description:'The old schema is missing a type inside a union field at path '/fields/0/type/2' in the new schema', additionalInfo:'reader union lacking writer type: STRING'}" ]
+    },
+    "avro-rename-with-alias" : {
+      "NONE" : [ ],
+      "BACKWARD" : [ ],
+      "BACKWARD_TRANSITIVE" : [ ],
+      "FORWARD" : [ "{errorType:'READER_FIELD_MISSING_DEFAULT_VALUE', description:'The field 'a' at path '/fields/0' in the old schema has no default value and is missing in the new schema', additionalInfo:'a'}", "{oldSchemaVersion: 1}", "{oldSchema: '{\"type\":\"record\",\"name\":\"R\",\"fields\":[{\"name\":\"a\",\"type\":\"int\"}]}'}" ],
+      "FORWARD_TRANSITIVE" : [ "{errorType:'READER_FIELD_MISSING_DEFAULT_VALUE', description:'The field 'a' at path '/fields/0' in the old schema has no default value and is missing in the new schema', additionalInfo:'a'}", "{oldSchemaVersion: 1}", "{oldSchema: '{\"type\":\"record\",\"name\":\"R\",\"fields\":[{\"name\":\"a\",\"type\":\"int\"}]}'}" ],
+      "FULL" : [ "{errorType:'READER_FIELD_MISSING_DEFAULT_VALUE', description:'The field 'a' at path '/fields/0' in the old schema has no default value and is missing in the new schema', additionalInfo:'a'}" ],
+      "FULL_TRANSITIVE" : [ "{errorType:'READER_FIELD_MISSING_DEFAULT_VALUE', description:'The field 'a' at path '/fields/0' in the old schema has no default value and is missing in the new schema', additionalInfo:'a'}" ]
+    },
+    "avro-three-compatible" : {
+      "NONE" : [ ],
+      "BACKWARD" : [ ],
+      "BACKWARD_TRANSITIVE" : [ ],
+      "FORWARD" : [ ],
+      "FORWARD_TRANSITIVE" : [ ],
+      "FULL" : [ ],
+      "FULL_TRANSITIVE" : [ ]
+    },
+    "avro-backward-gap" : {
+      "NONE" : [ ],
+      "BACKWARD" : [ ],
+      "BACKWARD_TRANSITIVE" : [ "{errorType:'TYPE_MISMATCH', description:'The type (path '/fields/0/type') of a field in the new schema does not match with the old schema', additionalInfo:'reader type: STRING not compatible with writer type: INT'}", "{oldSchemaVersion: 1}", "{oldSchema: '{\"type\":\"record\",\"name\":\"R\",\"fields\":[{\"name\":\"a\",\"type\":\"int\"}]}'}" ],
+      "FORWARD" : [ ],
+      "FORWARD_TRANSITIVE" : [ "{errorType:'TYPE_MISMATCH', description:'The type (path '/fields/0/type') of a field in the old schema does not match with the new schema', additionalInfo:'reader type: INT not compatible with writer type: STRING'}", "{oldSchemaVersion: 1}", "{oldSchema: '{\"type\":\"record\",\"name\":\"R\",\"fields\":[{\"name\":\"a\",\"type\":\"int\"}]}'}" ],
+      "FULL" : [ ],
+      "FULL_TRANSITIVE" : [ "{errorType:'TYPE_MISMATCH', description:'The type (path '/fields/0/type') of a field in the old schema does not match with the new schema', additionalInfo:'reader type: INT not compatible with writer type: STRING'}", "{errorType:'TYPE_MISMATCH', description:'The type (path '/fields/0/type') of a field in the new schema does not match with the old schema', additionalInfo:'reader type: STRING not compatible with writer type: INT'}", "{oldSchemaVersion: 1}", "{oldSchema: '{\"type\":\"record\",\"name\":\"R\",\"fields\":[{\"name\":\"a\",\"type\":\"int\"}]}'}" ]
+    },
+    "avro-forward-gap" : {
+      "NONE" : [ ],
+      "BACKWARD" : [ "{errorType:'READER_FIELD_MISSING_DEFAULT_VALUE', description:'The field 'x' at path '/fields/0' in the new schema has no default value and is missing in the old schema', additionalInfo:'x'}", "{oldSchemaVersion: 2}", "{oldSchema: '{\"type\":\"record\",\"name\":\"R\",\"fields\":[]}'}" ],
+      "BACKWARD_TRANSITIVE" : [ "{errorType:'READER_FIELD_MISSING_DEFAULT_VALUE', description:'The field 'x' at path '/fields/0' in the new schema has no default value and is missing in the old schema', additionalInfo:'x'}", "{oldSchemaVersion: 2}", "{oldSchema: '{\"type\":\"record\",\"name\":\"R\",\"fields\":[]}'}" ],
+      "FORWARD" : [ ],
+      "FORWARD_TRANSITIVE" : [ "{errorType:'TYPE_MISMATCH', description:'The type (path '/fields/0/type') of a field in the old schema does not match with the new schema', additionalInfo:'reader type: INT not compatible with writer type: STRING'}", "{oldSchemaVersion: 1}", "{oldSchema: '{\"type\":\"record\",\"name\":\"R\",\"fields\":[{\"name\":\"x\",\"type\":\"int\",\"default\":0}]}'}" ],
+      "FULL" : [ "{errorType:'READER_FIELD_MISSING_DEFAULT_VALUE', description:'The field 'x' at path '/fields/0' in the new schema has no default value and is missing in the old schema', additionalInfo:'x'}", "{oldSchemaVersion: 2}", "{oldSchema: '{\"type\":\"record\",\"name\":\"R\",\"fields\":[]}'}" ],
+      "FULL_TRANSITIVE" : [ "{errorType:'READER_FIELD_MISSING_DEFAULT_VALUE', description:'The field 'x' at path '/fields/0' in the new schema has no default value and is missing in the old schema', additionalInfo:'x'}", "{oldSchemaVersion: 2}", "{oldSchema: '{\"type\":\"record\",\"name\":\"R\",\"fields\":[]}'}" ]
+    },
+    "avro-full-gap" : {
+      "NONE" : [ ],
+      "BACKWARD" : [ ],
+      "BACKWARD_TRANSITIVE" : [ "{errorType:'TYPE_MISMATCH', description:'The type (path '/fields/0/type') of a field in the new schema does not match with the old schema', additionalInfo:'reader type: STRING not compatible with writer type: INT'}", "{oldSchemaVersion: 1}", "{oldSchema: '{\"type\":\"record\",\"name\":\"R\",\"fields\":[{\"name\":\"x\",\"type\":\"int\",\"default\":0}]}'}" ],
+      "FORWARD" : [ ],
+      "FORWARD_TRANSITIVE" : [ "{errorType:'TYPE_MISMATCH', description:'The type (path '/fields/0/type') of a field in the old schema does not match with the new schema', additionalInfo:'reader type: INT not compatible with writer type: STRING'}", "{oldSchemaVersion: 1}", "{oldSchema: '{\"type\":\"record\",\"name\":\"R\",\"fields\":[{\"name\":\"x\",\"type\":\"int\",\"default\":0}]}'}" ],
+      "FULL" : [ ],
+      "FULL_TRANSITIVE" : [ "{errorType:'TYPE_MISMATCH', description:'The type (path '/fields/0/type') of a field in the old schema does not match with the new schema', additionalInfo:'reader type: INT not compatible with writer type: STRING'}", "{errorType:'TYPE_MISMATCH', description:'The type (path '/fields/0/type') of a field in the new schema does not match with the old schema', additionalInfo:'reader type: STRING not compatible with writer type: INT'}", "{oldSchemaVersion: 1}", "{oldSchema: '{\"type\":\"record\",\"name\":\"R\",\"fields\":[{\"name\":\"x\",\"type\":\"int\",\"default\":0}]}'}" ]
+    },
+    "avro-to-json" : {
+      "NONE" : [ ],
+      "BACKWARD" : [ "Incompatible because of different schema type" ],
+      "BACKWARD_TRANSITIVE" : [ "Incompatible because of different schema type" ],
+      "FORWARD" : [ "Incompatible because of different schema type" ],
+      "FORWARD_TRANSITIVE" : [ "Incompatible because of different schema type" ],
+      "FULL" : [ "Incompatible because of different schema type" ],
+      "FULL_TRANSITIVE" : [ "Incompatible because of different schema type" ]
+    },
+    "json-closed-add-property" : {
+      "NONE" : [ ],
+      "BACKWARD" : [ ],
+      "BACKWARD_TRANSITIVE" : [ ],
+      "FORWARD" : [ "{errorType:\"PROPERTY_REMOVED_FROM_CLOSED_CONTENT_MODEL\", description:\"The old has a closed content model and is missing a property or item present at path '#/properties/b' in the new schema'}", "{oldSchemaVersion: 1}", "{oldSchema: '{\"type\":\"object\",\"properties\":{\"a\":{\"type\":\"string\"}},\"additionalProperties\":false}'}" ],
+      "FORWARD_TRANSITIVE" : [ "{errorType:\"PROPERTY_REMOVED_FROM_CLOSED_CONTENT_MODEL\", description:\"The old has a closed content model and is missing a property or item present at path '#/properties/b' in the new schema'}", "{oldSchemaVersion: 1}", "{oldSchema: '{\"type\":\"object\",\"properties\":{\"a\":{\"type\":\"string\"}},\"additionalProperties\":false}'}" ],
+      "FULL" : [ "{errorType:\"PROPERTY_REMOVED_FROM_CLOSED_CONTENT_MODEL\", description:\"The old has a closed content model and is missing a property or item present at path '#/properties/b' in the new schema'}" ],
+      "FULL_TRANSITIVE" : [ "{errorType:\"PROPERTY_REMOVED_FROM_CLOSED_CONTENT_MODEL\", description:\"The old has a closed content model and is missing a property or item present at path '#/properties/b' in the new schema'}" ]
+    },
+    "json-open-add-property" : {
+      "NONE" : [ ],
+      "BACKWARD" : [ "{errorType:\"PROPERTY_ADDED_TO_OPEN_CONTENT_MODEL\", description:\"The new schema has an open content model and has a property or item at path '#/properties/b' which is missing in the old schema'}", "{oldSchemaVersion: 1}", "{oldSchema: '{\"type\":\"object\",\"properties\":{\"a\":{\"type\":\"string\"}}}'}" ],
+      "BACKWARD_TRANSITIVE" : [ "{errorType:\"PROPERTY_ADDED_TO_OPEN_CONTENT_MODEL\", description:\"The new schema has an open content model and has a property or item at path '#/properties/b' which is missing in the old schema'}", "{oldSchemaVersion: 1}", "{oldSchema: '{\"type\":\"object\",\"properties\":{\"a\":{\"type\":\"string\"}}}'}" ],
+      "FORWARD" : [ ],
+      "FORWARD_TRANSITIVE" : [ ],
+      "FULL" : [ "{errorType:\"PROPERTY_ADDED_TO_OPEN_CONTENT_MODEL\", description:\"The new schema has an open content model and has a property or item at path '#/properties/b' which is missing in the old schema'}", "{oldSchemaVersion: 1}", "{oldSchema: '{\"type\":\"object\",\"properties\":{\"a\":{\"type\":\"string\"}}}'}" ],
+      "FULL_TRANSITIVE" : [ "{errorType:\"PROPERTY_ADDED_TO_OPEN_CONTENT_MODEL\", description:\"The new schema has an open content model and has a property or item at path '#/properties/b' which is missing in the old schema'}", "{oldSchemaVersion: 1}", "{oldSchema: '{\"type\":\"object\",\"properties\":{\"a\":{\"type\":\"string\"}}}'}" ]
+    },
+    "json-open-remove-property" : {
+      "NONE" : [ ],
+      "BACKWARD" : [ ],
+      "BACKWARD_TRANSITIVE" : [ ],
+      "FORWARD" : [ "{errorType:\"PROPERTY_ADDED_TO_OPEN_CONTENT_MODEL\", description:\"The old schema has an open content model and has a property or item at path '#/properties/b' which is missing in the new schema'}", "{oldSchemaVersion: 1}", "{oldSchema: '{\"type\":\"object\",\"properties\":{\"a\":{\"type\":\"string\"},\"b\":{\"type\":\"integer\"}}}'}" ],
+      "FORWARD_TRANSITIVE" : [ "{errorType:\"PROPERTY_ADDED_TO_OPEN_CONTENT_MODEL\", description:\"The old schema has an open content model and has a property or item at path '#/properties/b' which is missing in the new schema'}", "{oldSchemaVersion: 1}", "{oldSchema: '{\"type\":\"object\",\"properties\":{\"a\":{\"type\":\"string\"},\"b\":{\"type\":\"integer\"}}}'}" ],
+      "FULL" : [ "{errorType:\"PROPERTY_ADDED_TO_OPEN_CONTENT_MODEL\", description:\"The old schema has an open content model and has a property or item at path '#/properties/b' which is missing in the new schema'}" ],
+      "FULL_TRANSITIVE" : [ "{errorType:\"PROPERTY_ADDED_TO_OPEN_CONTENT_MODEL\", description:\"The old schema has an open content model and has a property or item at path '#/properties/b' which is missing in the new schema'}" ]
+    },
+    "json-add-required" : {
+      "NONE" : [ ],
+      "BACKWARD" : [ "{errorType:\"REQUIRED_ATTRIBUTE_ADDED\", description:\"The keyword at path '#/required/a' in the new schema is not present in the old schema'}", "{oldSchemaVersion: 1}", "{oldSchema: '{\"type\":\"object\",\"properties\":{\"a\":{\"type\":\"string\"}}}'}" ],
+      "BACKWARD_TRANSITIVE" : [ "{errorType:\"REQUIRED_ATTRIBUTE_ADDED\", description:\"The keyword at path '#/required/a' in the new schema is not present in the old schema'}", "{oldSchemaVersion: 1}", "{oldSchema: '{\"type\":\"object\",\"properties\":{\"a\":{\"type\":\"string\"}}}'}" ],
+      "FORWARD" : [ ],
+      "FORWARD_TRANSITIVE" : [ ],
+      "FULL" : [ "{errorType:\"REQUIRED_ATTRIBUTE_ADDED\", description:\"The keyword at path '#/required/a' in the new schema is not present in the old schema'}", "{oldSchemaVersion: 1}", "{oldSchema: '{\"type\":\"object\",\"properties\":{\"a\":{\"type\":\"string\"}}}'}" ],
+      "FULL_TRANSITIVE" : [ "{errorType:\"REQUIRED_ATTRIBUTE_ADDED\", description:\"The keyword at path '#/required/a' in the new schema is not present in the old schema'}", "{oldSchemaVersion: 1}", "{oldSchema: '{\"type\":\"object\",\"properties\":{\"a\":{\"type\":\"string\"}}}'}" ]
+    },
+    "json-widen-integer-number" : {
+      "NONE" : [ ],
+      "BACKWARD" : [ ],
+      "BACKWARD_TRANSITIVE" : [ ],
+      "FORWARD" : [ "{errorType:\"TYPE_NARROWED\", description:\"A type at path '#/' is different between the old schema and the new schema'}", "{oldSchemaVersion: 1}", "{oldSchema: '{\"type\":\"integer\"}'}" ],
+      "FORWARD_TRANSITIVE" : [ "{errorType:\"TYPE_NARROWED\", description:\"A type at path '#/' is different between the old schema and the new schema'}", "{oldSchemaVersion: 1}", "{oldSchema: '{\"type\":\"integer\"}'}" ],
+      "FULL" : [ "{errorType:\"TYPE_NARROWED\", description:\"A type at path '#/' is different between the old schema and the new schema'}" ],
+      "FULL_TRANSITIVE" : [ "{errorType:\"TYPE_NARROWED\", description:\"A type at path '#/' is different between the old schema and the new schema'}" ]
+    },
+    "json-change-type" : {
+      "NONE" : [ ],
+      "BACKWARD" : [ "{errorType:\"TYPE_CHANGED\", description:\"A type at path '#/' is different between the new schema and the old schema'}", "{oldSchemaVersion: 1}", "{oldSchema: '{\"type\":\"string\"}'}" ],
+      "BACKWARD_TRANSITIVE" : [ "{errorType:\"TYPE_CHANGED\", description:\"A type at path '#/' is different between the new schema and the old schema'}", "{oldSchemaVersion: 1}", "{oldSchema: '{\"type\":\"string\"}'}" ],
+      "FORWARD" : [ "{errorType:\"TYPE_CHANGED\", description:\"A type at path '#/' is different between the old schema and the new schema'}", "{oldSchemaVersion: 1}", "{oldSchema: '{\"type\":\"string\"}'}" ],
+      "FORWARD_TRANSITIVE" : [ "{errorType:\"TYPE_CHANGED\", description:\"A type at path '#/' is different between the old schema and the new schema'}", "{oldSchemaVersion: 1}", "{oldSchema: '{\"type\":\"string\"}'}" ],
+      "FULL" : [ "{errorType:\"TYPE_CHANGED\", description:\"A type at path '#/' is different between the old schema and the new schema'}", "{errorType:\"TYPE_CHANGED\", description:\"A type at path '#/' is different between the new schema and the old schema'}", "{oldSchemaVersion: 1}", "{oldSchema: '{\"type\":\"string\"}'}" ],
+      "FULL_TRANSITIVE" : [ "{errorType:\"TYPE_CHANGED\", description:\"A type at path '#/' is different between the old schema and the new schema'}", "{errorType:\"TYPE_CHANGED\", description:\"A type at path '#/' is different between the new schema and the old schema'}", "{oldSchemaVersion: 1}", "{oldSchema: '{\"type\":\"string\"}'}" ]
+    },
+    "json-relax-max-length" : {
+      "NONE" : [ ],
+      "BACKWARD" : [ ],
+      "BACKWARD_TRANSITIVE" : [ ],
+      "FORWARD" : [ "{errorType:\"MAX_LENGTH_DECREASED\", description:\"The value at path '#/maxLength' in the old schema is less than its value in the new schema'}", "{oldSchemaVersion: 1}", "{oldSchema: '{\"type\":\"string\",\"maxLength\":5}'}" ],
+      "FORWARD_TRANSITIVE" : [ "{errorType:\"MAX_LENGTH_DECREASED\", description:\"The value at path '#/maxLength' in the old schema is less than its value in the new schema'}", "{oldSchemaVersion: 1}", "{oldSchema: '{\"type\":\"string\",\"maxLength\":5}'}" ],
+      "FULL" : [ "{errorType:\"MAX_LENGTH_DECREASED\", description:\"The value at path '#/maxLength' in the old schema is less than its value in the new schema'}" ],
+      "FULL_TRANSITIVE" : [ "{errorType:\"MAX_LENGTH_DECREASED\", description:\"The value at path '#/maxLength' in the old schema is less than its value in the new schema'}" ]
+    },
+    "json-enum-extend" : {
+      "NONE" : [ ],
+      "BACKWARD" : [ ],
+      "BACKWARD_TRANSITIVE" : [ ],
+      "FORWARD" : [ "{errorType:\"ENUM_ARRAY_NARROWED\", description:\"An array or combined type at path '#/enum' has fewer elements in the old schema than the new schema'}", "{oldSchemaVersion: 1}", "{oldSchema: '{\"enum\":[\"a\",\"b\"]}'}" ],
+      "FORWARD_TRANSITIVE" : [ "{errorType:\"ENUM_ARRAY_NARROWED\", description:\"An array or combined type at path '#/enum' has fewer elements in the old schema than the new schema'}", "{oldSchemaVersion: 1}", "{oldSchema: '{\"enum\":[\"a\",\"b\"]}'}" ],
+      "FULL" : [ "{errorType:\"ENUM_ARRAY_NARROWED\", description:\"An array or combined type at path '#/enum' has fewer elements in the old schema than the new schema'}" ],
+      "FULL_TRANSITIVE" : [ "{errorType:\"ENUM_ARRAY_NARROWED\", description:\"An array or combined type at path '#/enum' has fewer elements in the old schema than the new schema'}" ]
+    },
+    "json-description-only" : {
+      "NONE" : [ ],
+      "BACKWARD" : [ ],
+      "BACKWARD_TRANSITIVE" : [ ],
+      "FORWARD" : [ ],
+      "FORWARD_TRANSITIVE" : [ ],
+      "FULL" : [ ],
+      "FULL_TRANSITIVE" : [ ]
+    },
+    "json-backward-gap" : {
+      "NONE" : [ ],
+      "BACKWARD" : [ ],
+      "BACKWARD_TRANSITIVE" : [ "{errorType:\"TYPE_CHANGED\", description:\"A type at path '#/properties/a' is different between the new schema and the old schema'}", "{oldSchemaVersion: 1}", "{oldSchema: '{\"type\":\"object\",\"properties\":{\"a\":{\"type\":\"string\"}}}'}" ],
+      "FORWARD" : [ "{errorType:\"TYPE_NARROWED\", description:\"A type at path '#/properties/a' is different between the old schema and the new schema'}", "{oldSchemaVersion: 2}", "{oldSchema: '{\"type\":\"object\",\"properties\":{\"a\":{\"type\":\"integer\"}}}'}" ],
+      "FORWARD_TRANSITIVE" : [ "{errorType:\"TYPE_NARROWED\", description:\"A type at path '#/properties/a' is different between the old schema and the new schema'}", "{oldSchemaVersion: 2}", "{oldSchema: '{\"type\":\"object\",\"properties\":{\"a\":{\"type\":\"integer\"}}}'}" ],
+      "FULL" : [ "{errorType:\"TYPE_NARROWED\", description:\"A type at path '#/properties/a' is different between the old schema and the new schema'}" ],
+      "FULL_TRANSITIVE" : [ "{errorType:\"TYPE_NARROWED\", description:\"A type at path '#/properties/a' is different between the old schema and the new schema'}" ]
+    },
+    "json-forward-gap" : {
+      "NONE" : [ ],
+      "BACKWARD" : [ "{errorType:\"TYPE_NARROWED\", description:\"A type at path '#/properties/a' is different between the new schema and the old schema'}", "{oldSchemaVersion: 2}", "{oldSchema: '{\"type\":\"object\",\"properties\":{\"a\":{\"type\":\"number\"}}}'}" ],
+      "BACKWARD_TRANSITIVE" : [ "{errorType:\"TYPE_NARROWED\", description:\"A type at path '#/properties/a' is different between the new schema and the old schema'}", "{oldSchemaVersion: 2}", "{oldSchema: '{\"type\":\"object\",\"properties\":{\"a\":{\"type\":\"number\"}}}'}" ],
+      "FORWARD" : [ ],
+      "FORWARD_TRANSITIVE" : [ "{errorType:\"TYPE_CHANGED\", description:\"A type at path '#/properties/a' is different between the old schema and the new schema'}", "{oldSchemaVersion: 1}", "{oldSchema: '{\"type\":\"object\",\"properties\":{\"a\":{\"type\":\"string\"}}}'}" ],
+      "FULL" : [ "{errorType:\"TYPE_NARROWED\", description:\"A type at path '#/properties/a' is different between the new schema and the old schema'}", "{oldSchemaVersion: 2}", "{oldSchema: '{\"type\":\"object\",\"properties\":{\"a\":{\"type\":\"number\"}}}'}" ],
+      "FULL_TRANSITIVE" : [ "{errorType:\"TYPE_NARROWED\", description:\"A type at path '#/properties/a' is different between the new schema and the old schema'}", "{oldSchemaVersion: 2}", "{oldSchema: '{\"type\":\"object\",\"properties\":{\"a\":{\"type\":\"number\"}}}'}" ]
+    },
+    "json-full-gap" : {
+      "NONE" : [ ],
+      "BACKWARD" : [ ],
+      "BACKWARD_TRANSITIVE" : [ "{errorType:\"TYPE_CHANGED\", description:\"A type at path '#/properties/a' is different between the new schema and the old schema'}", "{oldSchemaVersion: 1}", "{oldSchema: '{\"type\":\"object\",\"properties\":{\"a\":{\"type\":\"string\"}}}'}" ],
+      "FORWARD" : [ ],
+      "FORWARD_TRANSITIVE" : [ "{errorType:\"TYPE_CHANGED\", description:\"A type at path '#/properties/a' is different between the old schema and the new schema'}", "{oldSchemaVersion: 1}", "{oldSchema: '{\"type\":\"object\",\"properties\":{\"a\":{\"type\":\"string\"}}}'}" ],
+      "FULL" : [ ],
+      "FULL_TRANSITIVE" : [ "{errorType:\"TYPE_CHANGED\", description:\"A type at path '#/properties/a' is different between the old schema and the new schema'}", "{errorType:\"TYPE_CHANGED\", description:\"A type at path '#/properties/a' is different between the new schema and the old schema'}", "{oldSchemaVersion: 1}", "{oldSchema: '{\"type\":\"object\",\"properties\":{\"a\":{\"type\":\"string\"}}}'}" ]
+    },
+    "proto-add-field" : {
+      "NONE" : [ ],
+      "BACKWARD" : [ ],
+      "BACKWARD_TRANSITIVE" : [ ],
+      "FORWARD" : [ ],
+      "FORWARD_TRANSITIVE" : [ ],
+      "FULL" : [ ],
+      "FULL_TRANSITIVE" : [ ]
+    },
+    "proto-remove-field" : {
+      "NONE" : [ ],
+      "BACKWARD" : [ ],
+      "BACKWARD_TRANSITIVE" : [ ],
+      "FORWARD" : [ ],
+      "FORWARD_TRANSITIVE" : [ ],
+      "FULL" : [ ],
+      "FULL_TRANSITIVE" : [ ]
+    },
+    "proto-int32-int64" : {
+      "NONE" : [ ],
+      "BACKWARD" : [ ],
+      "BACKWARD_TRANSITIVE" : [ ],
+      "FORWARD" : [ ],
+      "FORWARD_TRANSITIVE" : [ ],
+      "FULL" : [ ],
+      "FULL_TRANSITIVE" : [ ]
+    },
+    "proto-int32-string" : {
+      "NONE" : [ ],
+      "BACKWARD" : [ "{errorType:\"FIELD_SCALAR_KIND_CHANGED\", description:\"The kind of a SCALAR field at path '#/A/1' in the new schema does not match its kind in the old schema\"}", "{oldSchemaVersion: 1}", "{oldSchema: 'syntax = \"proto3\";\npackage p;\n\nmessage A {\n  int32 a = 1;\n}\n'}" ],
+      "BACKWARD_TRANSITIVE" : [ "{errorType:\"FIELD_SCALAR_KIND_CHANGED\", description:\"The kind of a SCALAR field at path '#/A/1' in the new schema does not match its kind in the old schema\"}", "{oldSchemaVersion: 1}", "{oldSchema: 'syntax = \"proto3\";\npackage p;\n\nmessage A {\n  int32 a = 1;\n}\n'}" ],
+      "FORWARD" : [ "{errorType:\"FIELD_SCALAR_KIND_CHANGED\", description:\"The kind of a SCALAR field at path '#/A/1' in the old schema does not match its kind in the new schema\"}", "{oldSchemaVersion: 1}", "{oldSchema: 'syntax = \"proto3\";\npackage p;\n\nmessage A {\n  int32 a = 1;\n}\n'}" ],
+      "FORWARD_TRANSITIVE" : [ "{errorType:\"FIELD_SCALAR_KIND_CHANGED\", description:\"The kind of a SCALAR field at path '#/A/1' in the old schema does not match its kind in the new schema\"}", "{oldSchemaVersion: 1}", "{oldSchema: 'syntax = \"proto3\";\npackage p;\n\nmessage A {\n  int32 a = 1;\n}\n'}" ],
+      "FULL" : [ "{errorType:\"FIELD_SCALAR_KIND_CHANGED\", description:\"The kind of a SCALAR field at path '#/A/1' in the old schema does not match its kind in the new schema\"}", "{errorType:\"FIELD_SCALAR_KIND_CHANGED\", description:\"The kind of a SCALAR field at path '#/A/1' in the new schema does not match its kind in the old schema\"}", "{oldSchemaVersion: 1}", "{oldSchema: 'syntax = \"proto3\";\npackage p;\n\nmessage A {\n  int32 a = 1;\n}\n'}" ],
+      "FULL_TRANSITIVE" : [ "{errorType:\"FIELD_SCALAR_KIND_CHANGED\", description:\"The kind of a SCALAR field at path '#/A/1' in the old schema does not match its kind in the new schema\"}", "{errorType:\"FIELD_SCALAR_KIND_CHANGED\", description:\"The kind of a SCALAR field at path '#/A/1' in the new schema does not match its kind in the old schema\"}", "{oldSchemaVersion: 1}", "{oldSchema: 'syntax = \"proto3\";\npackage p;\n\nmessage A {\n  int32 a = 1;\n}\n'}" ]
+    },
+    "proto-remove-message" : {
+      "NONE" : [ ],
+      "BACKWARD" : [ "{errorType:\"MESSAGE_REMOVED\", description:\"The new schema is missing a MESSAGE type at path '#/B' in the old schema\"}", "{oldSchemaVersion: 1}", "{oldSchema: 'syntax = \"proto3\";\npackage p;\n\nmessage A {\n  string a = 1;\n}\nmessage B {\n  string b = 1;\n}\n'}" ],
+      "BACKWARD_TRANSITIVE" : [ "{errorType:\"MESSAGE_REMOVED\", description:\"The new schema is missing a MESSAGE type at path '#/B' in the old schema\"}", "{oldSchemaVersion: 1}", "{oldSchema: 'syntax = \"proto3\";\npackage p;\n\nmessage A {\n  string a = 1;\n}\nmessage B {\n  string b = 1;\n}\n'}" ],
+      "FORWARD" : [ ],
+      "FORWARD_TRANSITIVE" : [ ],
+      "FULL" : [ "{errorType:\"MESSAGE_REMOVED\", description:\"The new schema is missing a MESSAGE type at path '#/B' in the old schema\"}", "{oldSchemaVersion: 1}", "{oldSchema: 'syntax = \"proto3\";\npackage p;\n\nmessage A {\n  string a = 1;\n}\nmessage B {\n  string b = 1;\n}\n'}" ],
+      "FULL_TRANSITIVE" : [ "{errorType:\"MESSAGE_REMOVED\", description:\"The new schema is missing a MESSAGE type at path '#/B' in the old schema\"}", "{oldSchemaVersion: 1}", "{oldSchema: 'syntax = \"proto3\";\npackage p;\n\nmessage A {\n  string a = 1;\n}\nmessage B {\n  string b = 1;\n}\n'}" ]
+    },
+    "proto2-add-required" : {
+      "NONE" : [ ],
+      "BACKWARD" : [ "{errorType:\"REQUIRED_FIELD_ADDED\", description:\"A required field  at path '#/A/2' in the new schema is missing in the old schema\"}", "{oldSchemaVersion: 1}", "{oldSchema: 'syntax = \"proto2\";\npackage p;\n\nmessage A {\n  optional string a = 1;\n}\n'}" ],
+      "BACKWARD_TRANSITIVE" : [ "{errorType:\"REQUIRED_FIELD_ADDED\", description:\"A required field  at path '#/A/2' in the new schema is missing in the old schema\"}", "{oldSchemaVersion: 1}", "{oldSchema: 'syntax = \"proto2\";\npackage p;\n\nmessage A {\n  optional string a = 1;\n}\n'}" ],
+      "FORWARD" : [ "{errorType:\"REQUIRED_FIELD_REMOVED\", description:\"The old schema is missing a required field at path: '#/A/2' in the new schema\"}", "{oldSchemaVersion: 1}", "{oldSchema: 'syntax = \"proto2\";\npackage p;\n\nmessage A {\n  optional string a = 1;\n}\n'}" ],
+      "FORWARD_TRANSITIVE" : [ "{errorType:\"REQUIRED_FIELD_REMOVED\", description:\"The old schema is missing a required field at path: '#/A/2' in the new schema\"}", "{oldSchemaVersion: 1}", "{oldSchema: 'syntax = \"proto2\";\npackage p;\n\nmessage A {\n  optional string a = 1;\n}\n'}" ],
+      "FULL" : [ "{errorType:\"REQUIRED_FIELD_REMOVED\", description:\"The old schema is missing a required field at path: '#/A/2' in the new schema\"}", "{errorType:\"REQUIRED_FIELD_ADDED\", description:\"A required field  at path '#/A/2' in the new schema is missing in the old schema\"}", "{oldSchemaVersion: 1}", "{oldSchema: 'syntax = \"proto2\";\npackage p;\n\nmessage A {\n  optional string a = 1;\n}\n'}" ],
+      "FULL_TRANSITIVE" : [ "{errorType:\"REQUIRED_FIELD_REMOVED\", description:\"The old schema is missing a required field at path: '#/A/2' in the new schema\"}", "{errorType:\"REQUIRED_FIELD_ADDED\", description:\"A required field  at path '#/A/2' in the new schema is missing in the old schema\"}", "{oldSchemaVersion: 1}", "{oldSchema: 'syntax = \"proto2\";\npackage p;\n\nmessage A {\n  optional string a = 1;\n}\n'}" ]
+    },
+    "proto-multiple-into-oneof" : {
+      "NONE" : [ ],
+      "BACKWARD" : [ "{errorType:\"MULTIPLE_FIELDS_MOVED_TO_ONEOF\", description:\"Multiple fields in the oneof at path '#/A/k' in the new schema are outside a oneof in the old schema\"}", "{oldSchemaVersion: 1}", "{oldSchema: 'syntax = \"proto3\";\npackage p;\n\nmessage A {\n  string a = 1;\n  int32 b = 2;\n}\n'}" ],
+      "BACKWARD_TRANSITIVE" : [ "{errorType:\"MULTIPLE_FIELDS_MOVED_TO_ONEOF\", description:\"Multiple fields in the oneof at path '#/A/k' in the new schema are outside a oneof in the old schema\"}", "{oldSchemaVersion: 1}", "{oldSchema: 'syntax = \"proto3\";\npackage p;\n\nmessage A {\n  string a = 1;\n  int32 b = 2;\n}\n'}" ],
+      "FORWARD" : [ ],
+      "FORWARD_TRANSITIVE" : [ ],
+      "FULL" : [ "{errorType:\"MULTIPLE_FIELDS_MOVED_TO_ONEOF\", description:\"Multiple fields in the oneof at path '#/A/k' in the new schema are outside a oneof in the old schema\"}", "{oldSchemaVersion: 1}", "{oldSchema: 'syntax = \"proto3\";\npackage p;\n\nmessage A {\n  string a = 1;\n  int32 b = 2;\n}\n'}" ],
+      "FULL_TRANSITIVE" : [ "{errorType:\"MULTIPLE_FIELDS_MOVED_TO_ONEOF\", description:\"Multiple fields in the oneof at path '#/A/k' in the new schema are outside a oneof in the old schema\"}", "{oldSchemaVersion: 1}", "{oldSchema: 'syntax = \"proto3\";\npackage p;\n\nmessage A {\n  string a = 1;\n  int32 b = 2;\n}\n'}" ]
+    },
+    "proto-package-change" : {
+      "NONE" : [ ],
+      "BACKWARD" : [ "{errorType:\"PACKAGE_CHANGED\", description:\"The package at '#/' in the new schema does not match the package in the old schema\"}", "{oldSchemaVersion: 1}", "{oldSchema: 'syntax = \"proto3\";\npackage p;\n\nmessage A {\n  string a = 1;\n}\n'}" ],
+      "BACKWARD_TRANSITIVE" : [ "{errorType:\"PACKAGE_CHANGED\", description:\"The package at '#/' in the new schema does not match the package in the old schema\"}", "{oldSchemaVersion: 1}", "{oldSchema: 'syntax = \"proto3\";\npackage p;\n\nmessage A {\n  string a = 1;\n}\n'}" ],
+      "FORWARD" : [ "{errorType:\"PACKAGE_CHANGED\", description:\"The package at '#/' in the old schema does not match the package in the new schema\"}", "{oldSchemaVersion: 1}", "{oldSchema: 'syntax = \"proto3\";\npackage p;\n\nmessage A {\n  string a = 1;\n}\n'}" ],
+      "FORWARD_TRANSITIVE" : [ "{errorType:\"PACKAGE_CHANGED\", description:\"The package at '#/' in the old schema does not match the package in the new schema\"}", "{oldSchemaVersion: 1}", "{oldSchema: 'syntax = \"proto3\";\npackage p;\n\nmessage A {\n  string a = 1;\n}\n'}" ],
+      "FULL" : [ "{errorType:\"PACKAGE_CHANGED\", description:\"The package at '#/' in the old schema does not match the package in the new schema\"}", "{errorType:\"PACKAGE_CHANGED\", description:\"The package at '#/' in the new schema does not match the package in the old schema\"}", "{oldSchemaVersion: 1}", "{oldSchema: 'syntax = \"proto3\";\npackage p;\n\nmessage A {\n  string a = 1;\n}\n'}" ],
+      "FULL_TRANSITIVE" : [ "{errorType:\"PACKAGE_CHANGED\", description:\"The package at '#/' in the old schema does not match the package in the new schema\"}", "{errorType:\"PACKAGE_CHANGED\", description:\"The package at '#/' in the new schema does not match the package in the old schema\"}", "{oldSchemaVersion: 1}", "{oldSchema: 'syntax = \"proto3\";\npackage p;\n\nmessage A {\n  string a = 1;\n}\n'}" ]
+    },
+    "proto-transitive-gap" : {
+      "NONE" : [ ],
+      "BACKWARD" : [ ],
+      "BACKWARD_TRANSITIVE" : [ "{errorType:\"FIELD_SCALAR_KIND_CHANGED\", description:\"The kind of a SCALAR field at path '#/A/1' in the new schema does not match its kind in the old schema\"}", "{oldSchemaVersion: 1}", "{oldSchema: 'syntax = \"proto3\";\npackage p;\n\nmessage A {\n  string x = 1;\n}\n'}" ],
+      "FORWARD" : [ ],
+      "FORWARD_TRANSITIVE" : [ "{errorType:\"FIELD_SCALAR_KIND_CHANGED\", description:\"The kind of a SCALAR field at path '#/A/1' in the old schema does not match its kind in the new schema\"}", "{oldSchemaVersion: 1}", "{oldSchema: 'syntax = \"proto3\";\npackage p;\n\nmessage A {\n  string x = 1;\n}\n'}" ],
+      "FULL" : [ ],
+      "FULL_TRANSITIVE" : [ "{errorType:\"FIELD_SCALAR_KIND_CHANGED\", description:\"The kind of a SCALAR field at path '#/A/1' in the old schema does not match its kind in the new schema\"}", "{errorType:\"FIELD_SCALAR_KIND_CHANGED\", description:\"The kind of a SCALAR field at path '#/A/1' in the new schema does not match its kind in the old schema\"}", "{oldSchemaVersion: 1}", "{oldSchema: 'syntax = \"proto3\";\npackage p;\n\nmessage A {\n  string x = 1;\n}\n'}" ]
+    }
+  }
+}

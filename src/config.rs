@@ -1,0 +1,132 @@
+//! Server configuration (TOML file, overridable from the command line).
+
+use std::net::SocketAddr;
+use std::path::{Path, PathBuf};
+
+use serde::Deserialize;
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct ServerConfig {
+    /// Address to listen on.
+    pub listen: SocketAddr,
+    /// RocksDB directory.
+    pub data_dir: PathBuf,
+    /// Compatibility level used when neither global, context nor subject config sets one.
+    pub default_compatibility: String,
+    /// Reported by `/v1/metadata/id` and used as the AUTO exporter context name.
+    /// Generated and persisted on first start when unset.
+    pub cluster_id: Option<String>,
+    /// fsync the WAL on every write. Turning this off trades durability of the
+    /// last few writes on power loss for lower write latency.
+    pub sync_writes: bool,
+    /// Maximum request body size in bytes.
+    pub max_body_bytes: usize,
+    /// Normalize every schema on registration and lookup unless a subject,
+    /// context or global config says otherwise. On (the default), logically
+    /// equal schemas (JSON key order, Protobuf field order or qualified type
+    /// names, Avro property order, ...) share one id. `false` gives
+    /// Confluent's default, where only identical canonical forms do.
+    pub normalize: bool,
+    /// `GET /schemas` result cap (Confluent `schema.search.default.limit` / `max.limit`).
+    pub schema_search_default_limit: usize,
+    pub schema_search_max_limit: usize,
+    /// `GET /subjects` result cap (Confluent `subject.search.default.limit` / `max.limit`).
+    pub subject_search_default_limit: usize,
+    pub subject_search_max_limit: usize,
+    /// Maximum entries in each in-memory schema cache (schema bodies, parsed
+    /// stored schemas, parsed request schemas). Metadata (ids, subjects,
+    /// versions, config) is always fully in memory; this bounds the big part.
+    pub cache_max_entries: u64,
+    /// How often exporters poll when idle (they are also woken on every change).
+    pub exporter_poll_seconds: u64,
+    pub auth: AuthConfig,
+}
+
+impl Default for ServerConfig {
+    fn default() -> Self {
+        Self {
+            listen: "0.0.0.0:8081".parse().expect("valid address"),
+            data_dir: PathBuf::from("./data"),
+            default_compatibility: "BACKWARD".into(),
+            cluster_id: None,
+            sync_writes: true,
+            max_body_bytes: 16 * 1024 * 1024,
+            exporter_poll_seconds: 10,
+            cache_max_entries: 20_000,
+            normalize: true,
+            schema_search_default_limit: 1000,
+            schema_search_max_limit: 1000,
+            subject_search_default_limit: 20_000,
+            subject_search_max_limit: 20_000,
+            auth: AuthConfig::default(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct AuthConfig {
+    pub enabled: bool,
+    pub realm: String,
+    pub users: Vec<UserConfig>,
+}
+
+impl Default for AuthConfig {
+    fn default() -> Self {
+        Self { enabled: false, realm: "SchemaRegistry".into(), users: Vec::new() }
+    }
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct UserConfig {
+    pub username: String,
+    /// bcrypt hash (recommended, see `hash-password`) or plaintext.
+    pub password: String,
+    #[serde(default = "default_roles")]
+    pub roles: Vec<Role>,
+}
+
+fn default_roles() -> Vec<Role> {
+    vec![Role::Readonly]
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Role {
+    Admin,
+    Write,
+    Readonly,
+}
+
+impl ServerConfig {
+    pub fn load(path: Option<&Path>) -> anyhow::Result<Self> {
+        let cfg: ServerConfig = match path {
+            Some(p) => {
+                let text = std::fs::read_to_string(p).map_err(|e| anyhow::anyhow!("reading {}: {e}", p.display()))?;
+                toml::from_str(&text).map_err(|e| anyhow::anyhow!("parsing {}: {e}", p.display()))?
+            }
+            None => ServerConfig::default(),
+        };
+        Ok(cfg)
+    }
+
+    pub fn validate(&self) -> anyhow::Result<()> {
+        crate::model::CompatibilityLevel::parse(&self.default_compatibility)
+            .map_err(|e| anyhow::anyhow!("default_compatibility: {}", e.message))?;
+        if self.auth.enabled && self.auth.users.is_empty() {
+            anyhow::bail!("auth.enabled = true but no [[auth.users]] are configured");
+        }
+        let mut seen = std::collections::HashSet::new();
+        for u in &self.auth.users {
+            if u.username.is_empty() || u.username.contains(':') {
+                anyhow::bail!("invalid username '{}'", u.username);
+            }
+            if !seen.insert(&u.username) {
+                anyhow::bail!("duplicate user '{}'", u.username);
+            }
+        }
+        Ok(())
+    }
+}

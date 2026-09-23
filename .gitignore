@@ -1,0 +1,9 @@
+target/
+/data/
+tests/java/target/
+tests/java/cp.txt
+tests/oracle/target/
+tests/oracle/cp.txt
+tests/.venv/
+tests/java/cp.txt
+.cargo/config.toml

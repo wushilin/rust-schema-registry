@@ -18,6 +18,7 @@ mod error;
 mod exporter;
 mod migrate;
 mod model;
+mod modegate;
 mod registry;
 mod schema;
 mod snapshot;

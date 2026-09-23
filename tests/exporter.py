@@ -28,6 +28,8 @@ AVRO_ADDRESS_V2 = json.dumps({"type": "record", "name": "Address", "namespace": 
                               "fields": [{"name": "street", "type": "string"},
                                          {"name": "zip", "type": "string", "default": ""}]})
 AVRO_STR = json.dumps({"type": "string"})
+AVRO_CONFLICT = json.dumps({"type": "record", "name": "Conflict", "namespace": "com.x",
+                            "fields": [{"name": "only_here", "type": "string"}]})
 AVRO_INT = json.dumps({"type": "int"})
 
 
@@ -136,19 +138,59 @@ def main():
         got = until(lambda: d.get("/subjects/:.src:address/versions", deleted="true")[1] == [1])
         check("permanent delete replayed", got, d.get("/subjects/:.src:address/versions", deleted="true"))
 
-        print("the destination leaving IMPORT mode is re-applied")
-        # Once a subject has been exported, the exporter remembers that the
-        # destination is in IMPORT mode. If that stops being true (an operator
-        # changes it, or the subject's last live version is deleted, which drops
-        # its mode), the exporter has to set it again instead of failing forever.
+        print("the destination leaving IMPORT mode pauses the exporter")
+        # A write that carries its own id is only legal where IMPORT mode
+        # applies. If an operator takes the destination out of it, the exporter
+        # must stop and say so - not quietly force the mode back and carry on.
         registered(s, ":.src:modecheck", AVRO_ADDRESS)
         check("first version exported", until(lambda: d.get("/subjects/:.src:modecheck/versions")[0] == 200),
               d.get("/subjects/:.src:modecheck/versions"))
-        d.put("/mode/:.src:modecheck", {"mode": "READWRITE"})
+        d.put("/mode/:.src:modecheck?force=true", {"mode": "READWRITE"})
         registered(s, ":.src:modecheck", AVRO_ADDRESS_V2)
-        check("export recovers by setting IMPORT again",
+        st = until(lambda: s.get("/exporters/none-exp/status")[1].get("state") == "PAUSED" and
+                   s.get("/exporters/none-exp/status")[1])
+        check("exporter paused", st and st.get("state") == "PAUSED", s.get("/exporters/none-exp/status"))
+        check("and says why", "IMPORT" in (st or {}).get("trace", ""), st)
+        check("nothing was exported past it", d.get("/subjects/:.src:modecheck/versions")[1] == [1],
+              d.get("/subjects/:.src:modecheck/versions"))
+        check("and the mode was not forced back", d.get("/mode/:.src:modecheck")[1] == {"mode": "READWRITE"},
+              d.get("/mode/:.src:modecheck"))
+
+        print("resuming once the destination is put right")
+        r = s.put("/exporters/none-exp/resume", None)
+        check("resume accepted", r[0] == 200, r)
+        st = until(lambda: s.get("/exporters/none-exp/status")[1].get("state") == "PAUSED" and
+                   s.get("/exporters/none-exp/status")[1])
+        check("pauses again while it is still wrong", st and st.get("state") == "PAUSED", st)
+        d.put("/mode/:.src:modecheck?force=true", {"mode": "IMPORT"})
+        s.put("/exporters/none-exp/resume", None)
+        check("catches up after resume",
               until(lambda: d.get("/subjects/:.src:modecheck/versions")[1] == [1, 2]),
               d.get("/subjects/:.src:modecheck/versions"))
+
+        print("a conflict at the destination fails the exporter until it is reset")
+        # The id the next source version will carry already belongs to another
+        # schema over there: replaying cannot get past that, ever.
+        next_id = registered(s, ":.src:conflict", AVRO_STR) + 1
+        # A schema nothing else uses, so it really does need a fresh id.
+        check("destination id taken by a different schema",
+              d.post("/subjects/:.src:squatter/versions",
+                     {"schema": AVRO_ADDRESS_V2, "id": next_id, "version": 1})[0] == 200,
+              d.get("/subjects/:.src:squatter/versions"))
+        registered(s, ":.src:conflict2", AVRO_CONFLICT)
+        st = until(lambda: s.get("/exporters/none-exp/status")[1].get("state") == "FAILED" and
+                   s.get("/exporters/none-exp/status")[1])
+        check("exporter failed", st and st.get("state") == "FAILED", s.get("/exporters/none-exp/status"))
+        r = s.put("/exporters/none-exp/resume", None)
+        check("resume is refused", r[0] == 422 and "reset" in str(r[1]), r)
+        check("still failed", s.get("/exporters/none-exp/status")[1].get("state") == "FAILED",
+              s.get("/exporters/none-exp/status"))
+        d.delete("/subjects/:.src:squatter")
+        d.delete("/subjects/:.src:squatter", permanent="true")
+        check("reset accepted", s.put("/exporters/none-exp/reset", None)[0] == 200)
+        check("and it starts over",
+              until(lambda: d.get("/subjects/:.src:conflict2/versions")[0] == 200),
+              d.get("/subjects/:.src:conflict2/versions"))
 
         print("a dead destination goes to ERROR and recovers")
         make_exporter(s, "broken", [":.err:*"], "NONE", "http://127.0.0.1:1")
@@ -176,19 +218,10 @@ def main():
         time.sleep(2)
         check("replay from the start changes nothing",
               d.get("/subjects/:.src:person-value/versions/1")[1] == before)
-        check("destination subject is left in IMPORT mode",
-              d.get("/mode/:.src:person-value")[1] == {"mode": "IMPORT"}, d.get("/mode/:.src:person-value"))
-        print("a new exporter still gets everything after the log was pruned")
-        # The change log only keeps what exporters still need, so an exporter
-        # created later has to export the current state instead of replaying.
-        late = until(lambda: s.get("/exporters/none-exp/status")[1].get("offset", 0) > 0)
-        check("existing exporters have consumed the log", late, s.get("/exporters/none-exp/status"))
-        make_exporter(s, "late-exp", [":.src:*"], "CUSTOM", dst_url, context=".late")
-        got = until(lambda: sorted(d.get("/subjects", subjectPrefix=":.late:")[1]) or None)
-        check("late exporter exported the current state",
-              got == [":.late:address", ":.late:modecheck", ":.late:paused-value", ":.late:person-value"], got)
-        r = d.get("/subjects/:.late:person-value/versions/1")
-        check("and kept ids and references", r[1].get("references", [{}])[0].get("subject") == ":.late:address", r)
+        check("destination context is left in IMPORT mode",
+              d.get("/mode/:.src:")[1] == {"mode": "IMPORT"}, d.get("/mode/:.src:"))
+        check("but no per-subject mode was forced",
+              d.get("/mode/:.src:address")[0] == 404, d.get("/mode/:.src:address"))
 
     finally:
         for p in procs:

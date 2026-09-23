@@ -478,7 +478,12 @@ function renderContexts() {
 
 // ---------- exporters ----------
 
-const STATE_TAG = { RUNNING: "ok", PAUSED: "", STARTING: "", ERROR: "bad" };
+const STATE_TAG = { RUNNING: "ok", PAUSED: "warn", STARTING: "", ERROR: "bad", FAILED: "bad" };
+const STATE_HINT = {
+  PAUSED: "stopped; resume picks up where it left off",
+  ERROR: "retrying",
+  FAILED: "the replay conflicts with the destination; only a reset can start it over",
+};
 
 function renderExporters() {
   if (!data.exporters.length) {
@@ -489,14 +494,15 @@ function renderExporters() {
       </tr></thead><tbody>${data.exporters.map((e) => `<tr>
         <td class="name"><a data-exp="${esc(e.name)}">${esc(e.name)}</a></td>
         <td><span class="tag ${STATE_TAG[e.state] ?? ""}">${esc(e.state)}</span>${
-          e.trace ? ` <span class="tag bad" title="${esc(e.trace)}">error</span>` : ""}</td>
+          e.trace ? ` <span class="tag bad" title="${esc(e.trace)}">why</span>` : ""}</td>
         <td class="num">${e.offset}</td>
         <td>${esc(e.config["schema.registry.url"] ?? "—")} <span class="tag">${esc(e.contextType)}${
           e.context ? " " + esc(e.context) : ""}</span></td>
         <td class="name">${esc(e.subjects.join(", "))}</td>
         <td class="act">
           <button data-exp-do="pause:${esc(e.name)}"${e.state === "PAUSED" ? " disabled" : ""}>Pause</button>
-          <button data-exp-do="resume:${esc(e.name)}"${e.state === "PAUSED" ? "" : " disabled"}>Resume</button>
+          <button data-exp-do="resume:${esc(e.name)}"${e.state === "PAUSED" ? "" : " disabled"}
+                  title="${e.state === "FAILED" ? "failed exporters must be reset" : "continue from where it stopped"}">Resume</button>
           <button data-exp-do="reset:${esc(e.name)}">Reset</button>
           <button class="danger" data-exp-del="${esc(e.name)}">Delete</button>
         </td>
@@ -506,7 +512,7 @@ function renderExporters() {
   $("exporters").querySelectorAll("[data-exp-do]").forEach((b) => b.onclick = async () => {
     const [action, name] = [b.dataset.expDo.split(":")[0], b.dataset.expDo.split(":").slice(1).join(":")];
     if (action === "reset" && !await confirmAction(`Reset ${name}`,
-      "<p>Rewinds the exporter to the start of the log: every schema it covers is exported again.</p>", "Reset")) return;
+      "<p>Rewinds the exporter to the start of the log: every schema it covers is exported again. This is the way out of FAILED, once the destination has been put right.</p>", "Reset")) return;
     act(`${name}: ${action}`, () => api(`/exporters/${enc(name)}/${action}`, { method: "PUT" }));
   });
   $("exporters").querySelectorAll("[data-exp-del]").forEach((b) => b.onclick = async () => {
@@ -522,7 +528,8 @@ function showExporter(name) {
   if (!e) return;
   modal(name, `
     <div class="grid">
-      <span>state</span><div><span class="tag ${STATE_TAG[e.state] ?? ""}">${esc(e.state)}</span></div>
+      <span>state</span><div><span class="tag ${STATE_TAG[e.state] ?? ""}">${esc(e.state)}</span>
+        ${STATE_HINT[e.state] ? `<span class="meta">${esc(STATE_HINT[e.state])}</span>` : ""}</div>
       <span>offset</span><div>${e.offset}${e.ts ? ` <span class="tag">updated ${esc(new Date(e.ts).toLocaleString())}</span>` : ""}</div>
       <span>context type</span><div>${esc(e.contextType)}${e.context ? ` <code>${esc(e.context)}</code>` : ""}</div>
       <span>subjects</span><div><code>${esc(e.subjects.join(", "))}</code></div>

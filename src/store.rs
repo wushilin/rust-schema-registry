@@ -337,7 +337,9 @@ impl Tx<'_> {
 
     /// Store schema content. `index` also maps its fingerprint to `id`
     /// (skipped when an imported id duplicates content that already has an id).
-    pub fn put_schema(&mut self, ctx: &str, id: u32, rec: &SchemaRecord, index: bool) -> ApiResult<()> {
+    /// Writing a schema or a version needs proof that the mode in scope allows
+    /// it (see `modegate`): the token is the check, not a comment.
+    pub fn put_schema(&mut self, ctx: &str, id: u32, rec: &SchemaRecord, index: bool, _: &crate::modegate::Allowed) -> ApiResult<()> {
         self.put(CF_SCHEMAS, &schema_key(ctx, id), rec)?;
         self.ops.push(Op::PutSchema { ctx: ctx.into(), id, rec: Arc::new(rec.clone()), index });
         if index {
@@ -346,7 +348,14 @@ impl Tx<'_> {
         Ok(())
     }
 
-    pub fn put_version(&mut self, ctx: &str, subject: &str, version: u32, rec: &VersionRecord) -> ApiResult<()> {
+    pub fn put_version(
+        &mut self,
+        ctx: &str,
+        subject: &str,
+        version: u32,
+        rec: &VersionRecord,
+        _: &crate::modegate::Allowed,
+    ) -> ApiResult<()> {
         self.put(CF_VERSIONS, &version_key(ctx, subject, version), rec)?;
         self.batch.put_cf(self.store.cf(CF_META), format!("ctx/{ctx}"), b"");
         self.ops.push(Op::PutVersion { ctx: ctx.into(), subject: subject.into(), version, rec: rec.clone() });

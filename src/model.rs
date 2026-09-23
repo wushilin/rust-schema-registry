@@ -491,8 +491,16 @@ pub struct ExporterUpdateRequest {
 pub enum ExporterState {
     Starting,
     Running,
+    /// Stopped: either an operator paused it, or the destination left IMPORT
+    /// mode, which no amount of retrying fixes. `resume` picks it up again
+    /// from where it stopped.
     Paused,
+    /// A transient failure - the destination is unreachable, say. Retried.
     Error,
+    /// The replay conflicts with what the destination already holds (an id or
+    /// version there is a different schema). Resuming cannot get past it, so
+    /// the exporter has to be `reset` and start over.
+    Failed,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

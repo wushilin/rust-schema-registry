@@ -6,15 +6,26 @@
 //! destination registry using the normal REST API in IMPORT mode, so schema
 //! ids and versions are preserved:
 //!
-//! 1. `PUT /mode/{dest-subject}?force=true {"mode":"IMPORT"}` (once per subject)
+//! 1. the destination context must be in IMPORT mode - that is what allows a
+//!    write to carry its own id and version. The exporter *checks* it; it only
+//!    sets it when the destination context is still empty, so a context an
+//!    operator has taken out of IMPORT mode is never quietly forced back in.
 //! 2. referenced subject-versions are exported first (recursively)
 //! 3. `POST /subjects/{dest-subject}/versions {schema, schemaType, references, id, version, ...}`
 //! 4. soft/hard deletes are replayed as `DELETE ...[?permanent=true]`
 //!
-//! Progress is committed after each batch; on failure the exporter goes to
-//! ERROR with a trace and is retried on the next poll tick, resuming from the
-//! failed event. Replays are idempotent on the destination, so at-least-once
-//! delivery is fine.
+//! Progress is committed after each batch. What a failure does depends on what
+//! kind it is:
+//!
+//! * transient (destination down, 5xx, timeout) -> ERROR, retried from the
+//!   failed event on the next tick. Replays are idempotent, so at-least-once
+//!   delivery is fine.
+//! * the destination is not in IMPORT mode -> PAUSED with a trace saying so.
+//!   Retrying cannot fix it and forcing the mode back would override the
+//!   operator, so it stops and waits for `resume`.
+//! * the replay conflicts with what the destination already holds (that id or
+//!   version is a different schema there) -> FAILED. Resuming would hit the
+//!   same wall, so the only way on is `reset`, which starts over.
 //!
 //! The log is pruned to what every exporter has already consumed, so it does
 //! not grow forever. An exporter whose next event has been pruned - a new one
@@ -44,7 +55,8 @@ pub async fn run(reg: Arc<Registry>, poll: Duration) {
             return;
         }
     };
-    let mut import_mode_set: HashSet<(String, String)> = HashSet::new();
+    // Destination contexts already checked to be in IMPORT mode.
+    let mut ready: HashSet<(String, String)> = HashSet::new();
     let mut last_prune = std::time::Instant::now();
     loop {
         // Register interest before scanning so a change during the scan isn't missed.
@@ -61,19 +73,19 @@ pub async fn run(reg: Arc<Registry>, poll: Duration) {
             }
         };
         for rec in exporters {
-            if rec.state == ExporterState::Paused {
+            // Paused and Failed both wait for an operator (resume / reset).
+            if matches!(rec.state, ExporterState::Paused | ExporterState::Failed) {
                 continue;
             }
-            match export_batch(&reg, &client, &rec, &mut import_mode_set).await {
+            match export_batch(&reg, &client, &rec, &mut ready).await {
                 Ok(progressed) => more |= progressed,
                 Err(e) => {
-                    // The destination may have left IMPORT mode (an operator
-                    // changed it, or its last live version was deleted, which
-                    // drops the subject's mode); re-send it on the retry.
+                    // Whatever went wrong, re-check the destination's mode
+                    // before the next attempt rather than assuming it.
                     if let Ok(dest) = Destination::new(&client, &rec.info, &reg.cluster_id) {
-                        import_mode_set.retain(|(base, _)| *base != dest.base);
+                        ready.retain(|(base, _)| *base != dest.base);
                     }
-                    tracing::warn!(exporter = %rec.info.name, "export failed: {e}");
+                    tracing::warn!(exporter = %rec.info.name, "export {}: {e}", e.state_word());
                 }
             }
         }
@@ -103,14 +115,68 @@ fn exporter_offsets(reg: &Arc<Registry>) -> u64 {
     exporters.iter().map(|e| e.offset).min().unwrap_or(log_seq).min(log_seq)
 }
 
+/// Why an export attempt stopped, and what that means for the exporter.
+#[derive(Debug)]
+pub struct Halt {
+    pub state: ExporterState,
+    pub trace: String,
+}
+
+impl Halt {
+    fn retry(trace: impl Into<String>) -> Self {
+        Self { state: ExporterState::Error, trace: trace.into() }
+    }
+    fn paused(trace: impl Into<String>) -> Self {
+        Self { state: ExporterState::Paused, trace: trace.into() }
+    }
+    fn failed(trace: impl Into<String>) -> Self {
+        Self { state: ExporterState::Failed, trace: trace.into() }
+    }
+    fn at(mut self, what: &str) -> Self {
+        self.trace = format!("{what}: {}", self.trace);
+        self
+    }
+    pub fn state_word(&self) -> &'static str {
+        match self.state {
+            ExporterState::Paused => "paused",
+            ExporterState::Failed => "failed",
+            _ => "failed (will retry)",
+        }
+    }
+}
+
+impl std::fmt::Display for Halt {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.trace)
+    }
+}
+
+impl From<anyhow::Error> for Halt {
+    fn from(e: anyhow::Error) -> Self {
+        Self::retry(e.to_string())
+    }
+}
+
+impl From<crate::error::ApiError> for Halt {
+    fn from(e: crate::error::ApiError) -> Self {
+        Self::retry(e.to_string())
+    }
+}
+
+impl From<tokio::task::JoinError> for Halt {
+    fn from(e: tokio::task::JoinError) -> Self {
+        Self::retry(e.to_string())
+    }
+}
+
 /// Export one batch for one exporter. Returns true if a full batch was
 /// processed (there may be more waiting).
 async fn export_batch(
     reg: &Arc<Registry>,
     client: &reqwest::Client,
     rec: &ExporterRecord,
-    import_mode_set: &mut HashSet<(String, String)>,
-) -> anyhow::Result<bool> {
+    ready: &mut HashSet<(String, String)>,
+) -> Result<bool, Halt> {
     if rec.offset < reg.store.log_floor()? {
         // The events this exporter still needed are gone: send the current
         // state instead and pick the log up from its end.
@@ -121,10 +187,10 @@ async fn export_batch(
             if !subject_matches(&rec.info.subjects, &ctx, &subject) {
                 continue;
             }
-            if let Err(e) = dest.export_version(reg, &ctx, &subject, version, import_mode_set, &mut exported, 0).await {
-                let trace = format!("bootstrap ({}:{version}): {e}", qualify(&ctx, &subject));
-                reg.exporter_progress(&rec.info.name, rec.offset, rec.offset, Some(trace.clone()))?;
-                anyhow::bail!(trace);
+            if let Err(e) = dest.export_version(reg, &ctx, &subject, version, ready, &mut exported, 0).await {
+                let halt = e.at(&format!("bootstrap ({}:{version})", qualify(&ctx, &subject)));
+                reg.exporter_state(&rec.info.name, rec.offset, rec.offset, halt.state, Some(halt.trace.clone()))?;
+                return Err(halt);
             }
         }
         reg.exporter_progress(&rec.info.name, rec.offset, now, None)?;
@@ -135,6 +201,7 @@ async fn export_batch(
         let from = rec.offset;
         tokio::task::spawn_blocking(move || reg.store.read_log(from, BATCH)).await??
     };
+
     if events.is_empty() {
         if rec.state == ExporterState::Error {
             reg.exporter_progress(&rec.info.name, rec.offset, rec.offset, None)?;
@@ -148,15 +215,17 @@ async fn export_batch(
         if subject_matches(&rec.info.subjects, &ev.ctx, &ev.subject) {
             let result = match ev.kind {
                 LogEventKind::Register => {
-                    dest.export_version(reg, &ev.ctx, &ev.subject, ev.version, import_mode_set, &mut exported, 0).await
+                    dest.export_version(reg, &ev.ctx, &ev.subject, ev.version, ready, &mut exported, 0).await
                 }
                 LogEventKind::SoftDelete => dest.delete(&ev.ctx, &ev.subject, ev.version, false).await,
                 LogEventKind::HardDelete => dest.delete(&ev.ctx, &ev.subject, ev.version, true).await,
             };
             if let Err(e) = result {
-                let trace = format!("event {seq} ({:?} {}:{}): {e}", ev.kind, qualify(&ev.ctx, &ev.subject), ev.version);
-                reg.exporter_progress(&rec.info.name, rec.offset, offset, Some(trace.clone()))?;
-                anyhow::bail!(trace);
+                let halt = e.at(&format!("event {seq} ({:?} {}:{})", ev.kind, qualify(&ev.ctx, &ev.subject), ev.version));
+                // Progress up to the event before this one, so a resume picks
+                // up exactly where it stopped.
+                reg.exporter_state(&rec.info.name, rec.offset, offset, halt.state, Some(halt.trace.clone()))?;
+                return Err(halt);
             }
         }
         offset = seq + 1;
@@ -261,15 +330,76 @@ impl<'a> Destination<'a> {
         anyhow::bail!("destination returned {status}: {body}")
     }
 
-    async fn ensure_import_mode(&self, dest_subject: &str, cache: &mut HashSet<(String, String)>) -> anyhow::Result<()> {
-        let key = (self.base.clone(), dest_subject.to_string());
-        if cache.contains(&key) {
+    /// The destination context's mode endpoint (`/mode` is the default context).
+    fn mode_path(dest_ctx: &str) -> String {
+        if dest_ctx == DEFAULT_CONTEXT { "/mode".to_string() } else { format!("/mode/{}", percent_encode_segment(&format!(":{dest_ctx}:"))) }
+    }
+
+    /// What the destination context's mode is right now, `None` if it has none.
+    async fn mode_of(&self, dest_ctx: &str) -> anyhow::Result<Option<String>> {
+        // 40401/40409: no mode configured at that scope.
+        let body = self.send(self.req(reqwest::Method::GET, &Self::mode_path(dest_ctx)), &[40401, 40409]).await?;
+        Ok(body.get("mode").and_then(Value::as_str).map(String::from))
+    }
+
+    /// The mode that actually applies to one destination subject: its own,
+    /// else its context's, else the global one (`defaultToGlobal`).
+    async fn effective_mode(&self, dest_subject: &str) -> anyhow::Result<Option<String>> {
+        let path = format!("/mode/{}?defaultToGlobal=true", percent_encode_segment(dest_subject));
+        let body = self.send(self.req(reqwest::Method::GET, &path), &[40401, 40409]).await?;
+        Ok(body.get("mode").and_then(Value::as_str).map(String::from))
+    }
+
+    /// A write that carries its own id and version is only legal where the
+    /// destination is in IMPORT mode. We check; we set the mode only for a
+    /// context that is still empty, so that an operator who takes a context
+    /// out of IMPORT mode is never overruled - the exporter pauses instead.
+    async fn ensure_import_mode(&self, dest_ctx: &str, ready: &mut HashSet<(String, String)>) -> Result<(), Halt> {
+        let key = (self.base.clone(), dest_ctx.to_string());
+        if ready.contains(&key) {
             return Ok(());
         }
-        let path = format!("/mode/{}?force=true", percent_encode_segment(dest_subject));
+        let ctx_name = qualify(dest_ctx, "");
+        if self.mode_of(dest_ctx).await?.as_deref() == Some("IMPORT") {
+            ready.insert(key);
+            return Ok(());
+        }
+        let existing = self
+            .send(
+                self.req(reqwest::Method::GET, &format!("/subjects?subjectPrefix={}&deleted=true", percent_encode_segment(&ctx_name))),
+                &[],
+            )
+            .await?;
+        if existing.as_array().is_some_and(|a| !a.is_empty()) {
+            return Err(Halt::paused(format!(
+                "destination context {ctx_name} is not in IMPORT mode and is not empty; \
+                 put it in IMPORT mode (PUT /mode/{ctx_name} {{\"mode\":\"IMPORT\"}}) and resume"
+            )));
+        }
+        // Empty destination: it is ours to prepare.
+        let path = format!("{}?force=true", Self::mode_path(dest_ctx));
         self.send(self.req(reqwest::Method::PUT, &path).json(&json!({"mode": "IMPORT"})), &[]).await?;
-        cache.insert(key);
+        ready.insert(key);
         Ok(())
+    }
+
+    /// Turn a rejected write into the state the exporter should stop in.
+    /// A destination that has left IMPORT mode and a replay that conflicts
+    /// with what is already there both come back as 42205, so the mode that
+    /// applies to that subject is re-read rather than the message parsed.
+    async fn classify(&self, e: anyhow::Error, dest_subject: &str) -> Halt {
+        let msg = e.to_string();
+        if !(msg.contains("\"error_code\":42205") || msg.contains("409 Conflict")) {
+            return Halt::retry(msg);
+        }
+        match self.effective_mode(dest_subject).await {
+            // Still in IMPORT mode, so this is the destination's own state
+            // disagreeing with the replay: nothing but a reset gets past it.
+            Ok(Some(m)) if m == "IMPORT" => Halt::failed(msg),
+            Ok(_) => Halt::paused(format!("destination {dest_subject} is not in IMPORT mode: {msg}")),
+            // Cannot tell: treat it as transient rather than stopping for good.
+            Err(_) => Halt::retry(msg),
+        }
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -279,10 +409,10 @@ impl<'a> Destination<'a> {
         ctx: &str,
         subject: &str,
         version: u32,
-        import_mode_set: &mut HashSet<(String, String)>,
+        ready: &mut HashSet<(String, String)>,
         exported: &mut HashSet<(String, String, u32)>,
         depth: usize,
-    ) -> anyhow::Result<()> {
+    ) -> Result<(), Halt> {
         if depth > 32 || !exported.insert((ctx.to_string(), subject.to_string(), version)) {
             return Ok(());
         }
@@ -297,13 +427,13 @@ impl<'a> Destination<'a> {
         for r in &rec.references {
             let target = QualifiedSubject::parse(&r.subject)?;
             let rctx = if r.subject.starts_with(':') { target.context.clone() } else { ctx.to_string() };
-            Box::pin(self.export_version(reg, &rctx, &target.subject, r.version.max(1) as u32, import_mode_set, exported, depth + 1))
-                .await?;
+            Box::pin(self.export_version(reg, &rctx, &target.subject, r.version.max(1) as u32, ready, exported, depth + 1)).await?;
             refs.push(json!({ "name": r.name, "subject": self.dest_subject(&rctx, &target.subject), "version": r.version }));
         }
 
+        let dest_ctx = self.dest_context(ctx);
         let dest_subject = self.dest_subject(ctx, subject);
-        self.ensure_import_mode(&dest_subject, import_mode_set).await?;
+        self.ensure_import_mode(&dest_ctx, ready).await?;
         let mut body = json!({
             "schema": rec.schema,
             "schemaType": rec.schema_type.as_str(),
@@ -318,7 +448,9 @@ impl<'a> Destination<'a> {
             body["ruleSet"] = r.clone();
         }
         let path = format!("/subjects/{}/versions", percent_encode_segment(&dest_subject));
-        self.send(self.req(reqwest::Method::POST, &path).json(&body), &[]).await?;
+        if let Err(e) = self.send(self.req(reqwest::Method::POST, &path).json(&body), &[]).await {
+            return Err(self.classify(e, &dest_subject).await);
+        }
         if vr.deleted {
             // Already soft-deleted at the source; mirror that too.
             self.delete(ctx, subject, version, false).await?;
@@ -326,14 +458,16 @@ impl<'a> Destination<'a> {
         Ok(())
     }
 
-    async fn delete(&self, ctx: &str, subject: &str, version: u32, permanent: bool) -> anyhow::Result<()> {
+    async fn delete(&self, ctx: &str, subject: &str, version: u32, permanent: bool) -> Result<(), Halt> {
         let dest_subject = self.dest_subject(ctx, subject);
         let mut path = format!("/subjects/{}/versions/{version}", percent_encode_segment(&dest_subject));
         if permanent {
             path.push_str("?permanent=true");
         }
         // Already gone / already soft-deleted / not soft-deleted-yet are all fine for a replay.
-        self.send(self.req(reqwest::Method::DELETE, &path), &[40401, 40402, 40406, 40407]).await?;
+        if let Err(e) = self.send(self.req(reqwest::Method::DELETE, &path), &[40401, 40402, 40406, 40407]).await {
+            return Err(self.classify(e, &dest_subject).await);
+        }
         Ok(())
     }
 }

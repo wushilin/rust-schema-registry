@@ -64,7 +64,7 @@ deletes, configs and modes out of a Confluent.
 | Contexts | `:.ctx:subject` naming, `/contexts`, `DELETE /contexts/{ctx}`, and the `/contexts/{ctx}/...` URL form |
 | Data contracts | `metadata`/`ruleSet` stored and returned; default/override metadata and rules merged from config; inherited from the previous version; rule sets validated (42210) |
 | Schema tags | `POST /subjects/{s}/versions/{v}/tags`: `tagsToAdd`/`tagsToRemove` for Avro, JSON Schema and Protobuf, `newVersion`, `metadata`, `rulesToMerge`/`rulesToRemove` |
-| Exporters | `/exporters` CRUD, `/status`, `/config`, `pause`/`resume`/`reset`; context types AUTO/CUSTOM/NONE/DEFAULT, subject globs, `subjectRenameFormat` |
+| Exporters | `/exporters` CRUD, `/status`, `/config`, `pause`/`resume`/`reset`; context types AUTO/CUSTOM/NONE/DEFAULT, subject globs, `subjectRenameFormat`; states RUNNING/PAUSED/ERROR/FAILED |
 | Auth | HTTP Basic, roles `admin` / `write` / `readonly` registry-wide or bound to subject patterns (`.eu::orders-*`), bcrypt or plaintext passwords |
 | Admin UI | `/admin`: one page over the same REST API - register schemas and new versions (with a compatibility check), subjects, versions and schemas, compatibility and mode per subject/context/global, contexts, exporters (pause/resume/reset/create/edit), soft and permanent deletes. Admin role only |
 | Migration | `schema-registry migrate --from URL --to URL`: copies every subject, version, id, reference, soft delete, config and mode from another registry |
@@ -337,6 +337,19 @@ python3 tests/http_conformance/run.py check URL          # the conformance corpu
 python3 tests/http_conformance/run.py record CONFLUENT_URL  # re-record golden.json
 ```
 
+### Exporter states
+
+An export carries the source's ids and versions, which is only legal where the
+destination is in IMPORT mode. The exporter checks that mode; it sets it only
+for a destination context that is still empty, so a context an operator has
+taken out of IMPORT mode is never quietly forced back in. What a failure means:
+
+| what happened | state | how it continues |
+|---|---|---|
+| the destination is unreachable, 5xx, a timeout | `ERROR` | retried from the failed event |
+| the destination is no longer in IMPORT mode | `PAUSED` | put it right, then `resume` - it carries on from where it stopped |
+| the replay conflicts with what the destination holds (an id there is a different schema) | `FAILED` | `resume` is refused; `reset` starts over |
+
 **Exporter tests** (`tests/exporter.py`): start a source and a destination
 (the destination with Basic auth) and check every context mapping - NONE
 keeps the source context, AUTO namespaces under the source cluster id,
@@ -350,6 +363,14 @@ registry-wide roles with bindings; checks what each may do and is refused
 `/subjects`, `/schemas`, `/contexts`, `/schemas/ids/{id}/subjects` and the
 admin UI all filtered to that caller - plus that an unparseable pattern stops
 the server from starting.
+
+**Mode rules** (`src/modegate.rs`): which operations a mode allows lives in
+one table, and the only way to get the token the store demands before writing
+a schema or a version is to consult it - a write path cannot forget the check,
+it has nothing to pass. (A gate in front of the routes would be wrong: what
+Confluent answers depends on registry state, e.g. a re-registration of a schema
+that already has that id answers 200 in READWRITE mode, and `DELETE /config/x`
+on a missing subject answers 404 before any mode is considered.)
 
 **Migration tests** (`tests/migrate.py`): fill a source with contexts,
 references, every schema type, soft-deleted versions, metadata, configs and

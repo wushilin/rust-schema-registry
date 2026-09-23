@@ -764,16 +764,13 @@ impl Registry {
     }
 
     /// `isReadOnlyMode` guard shared by every write except register.
-    fn check_not_read_only(&self, r: &Reader<'_>, q: Option<&QualifiedSubject>) -> ApiResult<()> {
+    fn check_not_read_only(&self, r: &Reader<'_>, q: Option<&QualifiedSubject>) -> ApiResult<crate::modegate::Allowed> {
         let mode = match q {
             Some(q) => self.mode_in_scope(r, q)?,
             None => self.global_mode(r)?,
         };
-        if matches!(mode, Mode::Readonly | Mode::ReadonlyOverride) {
-            let name = q.map(|q| q.qualified()).unwrap_or_else(|| "null".into());
-            return Err(ApiError::operation_not_permitted(format!("Subject {name} is in read-only mode")));
-        }
-        Ok(())
+        let name = q.map(|q| q.qualified()).unwrap_or_else(|| "null".into());
+        crate::modegate::check(crate::modegate::Intent::Modify, mode, &name)
     }
 
     /// `hasSubjects(subject, lookupDeleted)`: the subject has a (live) version;
@@ -1203,18 +1200,11 @@ impl Registry {
 
     /// `KafkaSchemaRegistry#register`, under the write lock.
     fn register_locked(&self, r: &Reader<'_>, q: &QualifiedSubject, mut d: Draft, normalize: bool) -> ApiResult<RegisterResponse> {
-        // checkRegisterMode
+        // checkRegisterMode: the same table the route-level gate uses, so a
+        // registration cannot slip past it by arriving through another path.
         let mode = self.mode_in_scope(r, q)?;
-        if matches!(mode, Mode::Readonly | Mode::ReadonlyOverride) {
-            return Err(ApiError::operation_not_permitted(format!("Subject {} is in read-only mode", q.qualified())));
-        }
-        if d.id >= 0 {
-            if mode != Mode::Import {
-                return Err(ApiError::operation_not_permitted(format!("Subject {} is not in import mode", q.qualified())));
-            }
-        } else if mode != Mode::Readwrite {
-            return Err(ApiError::operation_not_permitted(format!("Subject {} is not in read-write mode", q.qualified())));
-        }
+        let intent = if d.id >= 0 { crate::modegate::Intent::Import } else { crate::modegate::Intent::Write };
+        let allowed = &crate::modegate::check(intent, mode, &q.qualified())?;
         let import = mode == Mode::Import;
         let versions = r.list_versions(&q.context, &q.subject)?;
         let new_version = versions.iter().map(|(v, _)| *v).max().map_or(1, |m| m + 1);
@@ -1308,11 +1298,11 @@ impl Registry {
             },
         };
         // Like Confluent's hash index, the latest registration of a content wins.
-        tx.put_schema(&q.context, id, &rec, true)?;
+        tx.put_schema(&q.context, id, &rec, true, allowed)?;
         if id >= next_id {
             tx.set_next_id(&q.context, id + 1);
         }
-        tx.put_version(&q.context, &q.subject, version, &VersionRecord { id, deleted: false, ts: now_millis() })?;
+        tx.put_version(&q.context, &q.subject, version, &VersionRecord { id, deleted: false, ts: now_millis() }, allowed)?;
         for (t, v) in &c.targets {
             tx.put_refby(&t.context, &t.subject, *v, id);
         }
@@ -1853,7 +1843,7 @@ impl Registry {
         if !permanent && !self.has_subjects(r, &q, false)? {
             return Err(ApiError::subject_soft_deleted(&q.qualified()));
         }
-        self.check_not_read_only(r, Some(&q))?;
+        let allowed = self.check_not_read_only(r, Some(&q))?;
         let versions: Vec<(u32, VersionRecord)> =
             r.list_versions(&q.context, &q.subject)?.into_iter().filter(|(_, v)| permanent || !v.deleted).collect();
         for (v, vr) in &versions {
@@ -1866,7 +1856,7 @@ impl Registry {
         let scope = Self::scope_for(&q);
         if !permanent {
             for (v, vr) in &versions {
-                tx.put_version(&q.context, &q.subject, *v, &VersionRecord { deleted: true, ..vr.clone() })?;
+                tx.put_version(&q.context, &q.subject, *v, &VersionRecord { deleted: true, ..vr.clone() }, &allowed)?;
                 tx.append_log(&LogEvent {
                     ctx: q.context.clone(),
                     subject: q.subject.clone(),
@@ -1905,14 +1895,14 @@ impl Registry {
                 ApiError::subject_not_found(&q.qualified())
             });
         };
-        self.check_not_read_only(r, Some(&q))?;
+        let allowed = self.check_not_read_only(r, Some(&q))?;
         self.check_not_referenced(r, &q, version)?;
         if permanent && !vr.deleted {
             return Err(ApiError::version_not_soft_deleted(&q.qualified(), version));
         }
         let mut tx = self.store.tx()?;
         if !permanent {
-            tx.put_version(&q.context, &q.subject, version, &VersionRecord { deleted: true, ..vr.clone() })?;
+            tx.put_version(&q.context, &q.subject, version, &VersionRecord { deleted: true, ..vr.clone() }, &allowed)?;
             if !r.list_versions(&q.context, &q.subject)?.iter().any(|(v, x)| *v != version && !x.deleted) {
                 // That was the last live version: the subject's mode and config go too.
                 let scope = Self::scope_for(&q);
@@ -2403,13 +2393,23 @@ impl Registry {
         match action {
             "pause" => rec.state = ExporterState::Paused,
             "resume" => {
+                // A failed exporter conflicts with what the destination holds;
+                // picking up where it stopped would hit the same wall.
+                if rec.state == ExporterState::Failed {
+                    return Err(ApiError::operation_not_permitted(format!(
+                        "Exporter {name} has failed and cannot be resumed; reset it to start over. Last error: {}",
+                        rec.trace
+                    )));
+                }
                 rec.state = ExporterState::Running;
                 rec.trace.clear();
             }
             "reset" => {
+                // Start over from the beginning of the log, whatever state it
+                // was in: this is the way out of Failed.
                 rec.offset = 0;
                 rec.trace.clear();
-                if rec.state == ExporterState::Error {
+                if rec.state != ExporterState::Paused {
                     rec.state = ExporterState::Running;
                 }
             }
@@ -2424,23 +2424,32 @@ impl Registry {
     /// Called by the exporter worker. Only applies if the exporter still exists
     /// and wasn't reset/reconfigured concurrently (offset/state unchanged).
     pub fn exporter_progress(&self, name: &str, expected_offset: u64, new_offset: u64, error: Option<String>) -> ApiResult<()> {
+        let state = if error.is_some() { ExporterState::Error } else { ExporterState::Running };
+        self.exporter_state(name, expected_offset, new_offset, state, error)
+    }
+
+    /// Called by the exporter worker with the state its last attempt earned:
+    /// `Running`, `Error` (retried), `Paused` (the destination needs an
+    /// operator) or `Failed` (the replay conflicts; only a reset moves on).
+    /// Only applies if the exporter still exists and wasn't reset or paused
+    /// meanwhile (offset and state unchanged).
+    pub fn exporter_state(
+        &self,
+        name: &str,
+        expected_offset: u64,
+        new_offset: u64,
+        state: ExporterState,
+        trace: Option<String>,
+    ) -> ApiResult<()> {
         let _g = self.exporter_lock();
         let Some(mut rec) = self.store.get_exporter(name)? else { return Ok(()) };
-        if rec.offset != expected_offset || rec.state == ExporterState::Paused {
+        if rec.offset != expected_offset || matches!(rec.state, ExporterState::Paused | ExporterState::Failed) {
             return Ok(());
         }
         rec.offset = new_offset;
         rec.ts = now_millis();
-        match error {
-            Some(e) => {
-                rec.state = ExporterState::Error;
-                rec.trace = e;
-            }
-            None => {
-                rec.state = ExporterState::Running;
-                rec.trace.clear();
-            }
-        }
+        rec.state = state;
+        rec.trace = trace.unwrap_or_default();
         self.store.put_exporter(&rec)
     }
 

@@ -327,10 +327,14 @@ pub fn router(state: AppState, max_body_bytes: usize) -> Router {
         .route("/exporters/{name}/resume", put(exporters::resume))
         .route("/exporters/{name}/reset", put(exporters::reset))
         // administrative UI (admin role only)
-        .route("/_admin", get(admin::page))
-        .route("/_admin/", get(admin::page))
-        .route("/_admin/api/overview", get(admin::overview))
-        .route("/_admin/api/subjects/{subject}", get(admin::subject_detail))
+        .route("/admin", get(admin::page))
+        .route("/admin/", get(admin::page))
+        .route("/admin/api/overview", get(admin::overview))
+        .route("/admin/api/subjects/{subject}", get(admin::subject_detail))
+        // The UI used to live under /_admin; keep those links working.
+        .route("/_admin", get(admin::moved))
+        .route("/_admin/", get(admin::moved))
+        .route("/_admin/{*rest}", get(admin::moved))
         .fallback(not_found)
         .method_not_allowed_fallback(method_not_allowed);
 

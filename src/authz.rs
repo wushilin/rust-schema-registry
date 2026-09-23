@@ -243,14 +243,20 @@ pub fn target_of(path: &str) -> Target {
     match segs.as_slice() {
         ["subjects"] | ["schemas"] | ["contexts"] => Target::Listing,
         ["schemas", "ids", _, "subjects" | "versions"] => Target::Listing,
-        ["_admin"] | ["_admin", ""] | ["_admin", "api", "overview"] => Target::Listing,
+        ["admin"] | ["admin", ""] | ["admin", "api", "overview"] => Target::Listing,
+        ["_admin", ..] => Target::Listing,
         ["subjects", s, ..] => subject(s),
         ["compatibility", "subjects", s, ..] => subject(s),
         ["config" | "mode", s, ..] => subject(s),
         ["contexts", c, ..] => Target::Context(crate::context::normalize_context(&crate::api::percent_decode(c)).unwrap_or_default()),
-        ["_admin", "api", "subjects", s, ..] => subject(s),
+        ["admin", "api", "subjects", s, ..] => subject(s),
         _ => Target::Global,
     }
+}
+
+/// The admin UI, at its own path and at the one it used to live on.
+fn is_admin_ui(path: &str) -> bool {
+    path.starts_with("/admin") || path.starts_with("/_admin")
 }
 
 /// Is this request allowed?
@@ -261,7 +267,7 @@ pub fn authorized(p: &Principal, method: &axum::http::Method, path: &str) -> boo
         // Listings are allowed for anyone holding the role that path needs;
         // the handler then filters the response to what the caller may see.
         Target::Listing => {
-            return if path.starts_with("/_admin") { p.has_role_anywhere(Role::Admin) } else { p.has_any_role() };
+            return if is_admin_ui(path) { p.has_role_anywhere(Role::Admin) } else { p.has_any_role() };
         }
         Target::Global => p.roles.clone(),
     };
@@ -272,7 +278,7 @@ pub fn authorized(p: &Principal, method: &axum::http::Method, path: &str) -> boo
 fn allows(roles: &[Role], method: &axum::http::Method, path: &str) -> bool {
     use axum::http::Method;
     // The admin UI shows every subject, schema and setting at once: admins only.
-    if path.starts_with("/_admin") {
+    if is_admin_ui(path) {
         return roles.contains(&Role::Admin);
     }
     if roles.contains(&Role::Admin) {
@@ -353,9 +359,9 @@ mod tests {
         assert!(!authorized(&p, &Method::PUT, "/config"));
         assert!(!authorized(&p, &Method::POST, "/exporters"));
         // The admin UI opens for an admin of anything, and shows that much.
-        assert!(authorized(&p, &Method::GET, "/_admin"));
-        assert!(authorized(&p, &Method::GET, "/_admin/api/subjects/abc-1"));
-        assert!(!authorized(&p, &Method::GET, "/_admin/api/subjects/other"));
+        assert!(authorized(&p, &Method::GET, "/admin"));
+        assert!(authorized(&p, &Method::GET, "/admin/api/subjects/abc-1"));
+        assert!(!authorized(&p, &Method::GET, "/admin/api/subjects/other"));
         assert!(p.is_admin_of(".", "abc-1"));
         assert!(!p.is_admin_of(".", "xyz-1"), "a write binding is not an admin one");
     }
@@ -410,8 +416,10 @@ mod tests {
         assert_eq!(target_of("/schemas/ids/7"), Target::Global);
         assert_eq!(target_of("/schemas/ids/7/subjects"), Target::Listing);
         assert_eq!(target_of("/exporters/x/pause"), Target::Global);
-        assert_eq!(target_of("/_admin/api/overview"), Target::Listing);
-        assert_eq!(target_of("/_admin/api/subjects/foo"), Target::Subject(QualifiedSubject::new(".", "foo")));
+        assert_eq!(target_of("/admin/api/overview"), Target::Listing);
+        assert_eq!(target_of("/admin/api/subjects/foo"), Target::Subject(QualifiedSubject::new(".", "foo")));
+        // The old path only redirects, and needs the admin role to do so.
+        assert_eq!(target_of("/_admin/api/subjects/foo"), Target::Listing);
     }
 
     #[test]
@@ -428,9 +436,9 @@ mod tests {
         assert!(!authorized(&w, &Method::PUT, "/config"));
         assert!(!authorized(&w, &Method::PUT, "/config/:.eu:"));
         assert!(!authorized(&w, &Method::POST, "/exporters"));
-        assert!(!authorized(&ro, &Method::GET, "/_admin"));
-        assert!(!authorized(&w, &Method::GET, "/_admin/api/overview"));
-        assert!(authorized(&admin, &Method::GET, "/_admin"));
+        assert!(!authorized(&ro, &Method::GET, "/admin"));
+        assert!(!authorized(&w, &Method::GET, "/admin/api/overview"));
+        assert!(authorized(&admin, &Method::GET, "/admin"));
         assert!(authorized(&admin, &Method::POST, "/exporters"));
     }
 }

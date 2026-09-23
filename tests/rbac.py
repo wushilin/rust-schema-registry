@@ -147,24 +147,34 @@ def main():
         check("id -> subjects is filtered", all(s.startswith(":.eu:") for s in ids[1]), ids)
 
         print("the admin UI shows what the caller administers")
-        check("eu opens the admin UI", eu.get("/_admin")[0] == 200)
-        check("owner opens the admin UI", owner.get("/_admin")[0] == 200)
+        check("eu opens the admin UI", eu.get("/admin")[0] == 200)
+        check("owner opens the admin UI", owner.get("/admin")[0] == 200)
         plain = Client(url, auth=("plain", "plain-secret"))
-        check("a user who is admin of nothing does not", plain.get("/_admin")[0] == 403)
-        check("...and is refused the overview", plain.get("/_admin/api/overview")[0] == 403)
+        check("a user who is admin of nothing does not", plain.get("/admin")[0] == 403)
+        check("...and is refused the overview", plain.get("/admin/api/overview")[0] == 403)
         check("...but still reads subjects", len(plain.get("/subjects", subjectPrefix=":*:")[1]) == 6)
-        ov = eu.get("/_admin/api/overview", deleted="true")[1]
+        ov = eu.get("/admin/api/overview", deleted="true")[1]
         check("eu's overview holds only .eu", [r["subject"] for r in ov["subjects"]] == [":.eu:orders"],
               [r["subject"] for r in ov["subjects"]])
         check("eu's overview counts match what it shows", ov["counts"]["subjects"] == 1, ov["counts"])
         check("eu's overview lists only its context", [c["name"] for c in ov["contexts"]] == [".eu"],
               [c["name"] for c in ov["contexts"]])
-        ov = owner.get("/_admin/api/overview", deleted="true")[1]
+        ov = owner.get("/admin/api/overview", deleted="true")[1]
         shown = sorted(r["subject"] for r in ov["subjects"])
         check("owner's overview holds the subjects it administers", shown == ["abc-1", "def-1"], shown)
-        check("owner's subject detail works for abc-1", owner.get("/_admin/api/subjects/abc-1")[0] == 200)
-        check("owner's subject detail is refused for other-1", owner.get("/_admin/api/subjects/other-1")[0] == 403)
-        check("root's overview holds everything", len(root.get("/_admin/api/overview", deleted="true")[1]["subjects"]) == 6)
+        check("owner's subject detail works for abc-1", owner.get("/admin/api/subjects/abc-1")[0] == 200)
+        check("owner's subject detail is refused for other-1", owner.get("/admin/api/subjects/other-1")[0] == 403)
+        check("root's overview holds everything", len(root.get("/admin/api/overview", deleted="true")[1]["subjects"]) == 6)
+        check("the old /_admin path redirects", root.s.get(url + "/_admin", allow_redirects=False).status_code == 308)
+        check("and still needs the admin role", plain.s.get(url + "/_admin", allow_redirects=False).status_code == 403)
+
+        print("registering through the UI's own calls")
+        # The admin page registers with the public API, so a scoped admin can
+        # create subjects it owns and nothing else.
+        check("owner registers a new abc subject", owner.post("/subjects/abc-2/versions", {"schema": AVRO})[0] == 200)
+        check("owner may not create a foreign subject", owner.post("/subjects/nope-1/versions", {"schema": AVRO})[0] == 403)
+        check("owner checks compatibility on its own subject",
+              owner.post("/compatibility/subjects/abc-2/versions?verbose=true", {"schema": AVRO2})[0] == 200)
 
         print("a bad pattern is a startup error, not a silent grant")
         bad = os.path.join(tmp, "bad.toml")

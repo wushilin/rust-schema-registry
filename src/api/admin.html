@@ -108,6 +108,7 @@
       <input type="search" id="q" placeholder="Filter subjects (substring)" autocomplete="off">
       <label>context <select id="ctx"><option value="">all</option></select></label>
       <label><input type="checkbox" id="deleted"> include soft-deleted</label>
+      <button class="primary" id="new-schema">Register schema</button>
       <span class="meta" id="count"></span>
     </div>
     <div id="subjects"><div class="empty">Loading…</div></div>
@@ -297,7 +298,7 @@ async function showSubject(subject) {
   modal(subject, '<div class="empty">Loading…</div>');
   let d;
   try {
-    d = await api(`/_admin/api/subjects/${enc(subject)}`);
+    d = await api(`/admin/api/subjects/${enc(subject)}`);
   } catch (e) {
     return modal(subject, `<div class="error">${esc(e.message)}</div>`);
   }
@@ -310,6 +311,7 @@ async function showSubject(subject) {
         ${row.modeFrom === "subject" ? '<button id="d-unmode">Clear subject mode</button>' : '<span class="tag inherit">inherited</span>'}</div>
       <span>config</span><div><code>${d.config ? esc(JSON.stringify(d.config)) : "none"}</code></div>
     </div>
+    <div class="row"><button class="primary" id="d-newver">Register new version</button></div>
     ${d.versions.slice().reverse().map((v) => `
       <details class="ver"${v.version === row.latestVersion ? " open" : ""}>
         <summary><b>v${v.version}</b> <span class="tag">id ${v.id}</span> <span class="tag">${esc(v.schemaType)}</span>
@@ -332,6 +334,11 @@ async function showSubject(subject) {
       .then(() => showSubject(subject));
   $("mbody").querySelector('[data-do="d-mode"]').onchange = (e) =>
     putMode(enc(subject), e.target.value, subject).then(() => showSubject(subject));
+  $("d-newver").onclick = () => {
+    const latest = d.versions[d.versions.length - 1];
+    registerModal({ subject, schemaType: latest.schemaType, schema: pretty(latest.schema, latest.schemaType),
+                    references: latest.references });
+  };
   const unset = $("d-unset"), unmode = $("d-unmode");
   if (unset) unset.onclick = () => act(`${subject}: config cleared`,
     () => api(`/config/${enc(subject)}`, { method: "DELETE" })).then(() => showSubject(subject));
@@ -349,6 +356,81 @@ async function showSubject(subject) {
               () => api(`/subjects/${enc(subject)}/versions/${v}${perm ? "?permanent=true" : ""}`, { method: "DELETE" }));
     showSubject(subject);
   });
+}
+
+/// Register a schema: a first version of a new subject, or the next version of
+/// an existing one. Goes through POST /subjects/{s}/versions like any client,
+/// with the compatibility check one button away.
+function registerModal(seed = {}) {
+  const types = ["AVRO", "JSON", "PROTOBUF"];
+  const refs = seed.references?.length ? JSON.stringify(seed.references, null, 2) : "";
+  modal(seed.subject ? `New version of ${seed.subject}` : "Register schema", `
+    <div class="grid">
+      <span>subject</span>
+      <input id="r-subject" value="${esc(seed.subject ?? "")}" placeholder="orders-value, or :.eu:orders-value"
+             ${seed.subject ? "readonly" : ""} autocomplete="off">
+      <span>type</span>
+      <select id="r-type">${types.map((t) =>
+        `<option${t === (seed.schemaType ?? "AVRO") ? " selected" : ""}>${t}</option>`).join("")}</select>
+    </div>
+    <p class="meta">schema</p>
+    <textarea id="r-schema" rows="14" spellcheck="false" placeholder='{"type":"record","name":"User","fields":[]}'
+      >${esc(seed.schema ?? "")}</textarea>
+    <details class="ver" style="margin-top:10px">
+      <summary>references${refs ? " (carried over)" : ""}</summary>
+      <textarea id="r-refs" rows="5" spellcheck="false"
+        placeholder='[{"name": "com.x.Dep", "subject": "dep", "version": 1}]'>${esc(refs)}</textarea>
+    </details>
+    <div id="r-result"></div>`,
+    `<button id="r-check">Check compatibility</button>
+     <button id="r-cancel">Cancel</button>
+     <button class="primary" id="r-go">Register</button>`);
+
+  const body = () => {
+    const subject = $("r-subject").value.trim();
+    if (!subject) throw new Error("subject is required");
+    const schema = $("r-schema").value.trim();
+    if (!schema) throw new Error("schema is required");
+    const out = { schema, schemaType: $("r-type").value };
+    const refs = $("r-refs").value.trim();
+    if (refs) {
+      out.references = JSON.parse(refs);
+      if (!Array.isArray(out.references)) throw new Error("references must be a JSON array");
+    }
+    return [subject, out];
+  };
+  const show = (html, bad) => $("r-result").innerHTML = `<p class="${bad ? "error" : "meta"}">${html}</p>`;
+
+  $("r-cancel").onclick = () => $("modal").close();
+  $("r-check").onclick = async () => {
+    try {
+      const [subject, b] = body();
+      const v = await api(`/compatibility/subjects/${enc(subject)}/versions?verbose=true`, { method: "POST", body: b });
+      show(v.is_compatible
+        ? "compatible with every version this subject's compatibility level covers"
+        : `not compatible: ${esc((v.messages || []).join(" "))}`, !v.is_compatible);
+    } catch (e) {
+      show(esc(e.message), true);
+    }
+  };
+  $("r-go").onclick = async () => {
+    let subject, b;
+    try {
+      [subject, b] = body();
+    } catch (e) {
+      return show(esc(e.message), true);
+    }
+    try {
+      const r = await api(`/subjects/${enc(subject)}/versions`, { method: "POST", body: b });
+      say(`${subject}: registered id ${r.id}`);
+      $("modal").close();
+      await load();
+      showSubject(subject);
+    } catch (e) {
+      // A rejected registration is the interesting case: keep the form and the reason.
+      show(esc(e.message), true);
+    }
+  };
 }
 
 /// Schemas are stored as text; JSON-based ones read better indented.
@@ -532,7 +614,7 @@ function renderAll() {
 
 async function load() {
   try {
-    data = await api(`/_admin/api/overview?deleted=${$("deleted").checked}`);
+    data = await api(`/admin/api/overview?deleted=${$("deleted").checked}`);
     renderAll();
   } catch (e) {
     $("subjects").innerHTML = `<div class="error">${esc(e.message)}</div>`;
@@ -551,6 +633,7 @@ $("ctx").onchange = () => renderSubjects();
 $("deleted").onchange = load;
 $("refresh").onclick = load;
 $("new-exporter").onclick = newExporter;
+$("new-schema").onclick = () => registerModal();
 $("mclose").onclick = () => $("modal").close();
 load();
 </script>

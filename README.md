@@ -66,7 +66,7 @@ deletes, configs and modes out of a Confluent.
 | Schema tags | `POST /subjects/{s}/versions/{v}/tags`: `tagsToAdd`/`tagsToRemove` for Avro, JSON Schema and Protobuf, `newVersion`, `metadata`, `rulesToMerge`/`rulesToRemove` |
 | Exporters | `/exporters` CRUD, `/status`, `/config`, `pause`/`resume`/`reset`; context types AUTO/CUSTOM/NONE/DEFAULT, subject globs, `subjectRenameFormat` |
 | Auth | HTTP Basic, roles `admin` / `write` / `readonly` registry-wide or bound to subject patterns (`.eu::orders-*`), bcrypt or plaintext passwords |
-| Admin UI | `/_admin`: one page over the same REST API - subjects, versions and schemas, compatibility and mode per subject/context/global, contexts, exporters (pause/resume/reset/create/edit), soft and permanent deletes. Admin role only |
+| Admin UI | `/admin`: one page over the same REST API - register schemas and new versions (with a compatibility check), subjects, versions and schemas, compatibility and mode per subject/context/global, contexts, exporters (pause/resume/reset/create/edit), soft and permanent deletes. Admin role only |
 | Migration | `schema-registry migrate --from URL --to URL`: copies every subject, version, id, reference, soft delete, config and mode from another registry |
 
 ## Design decisions
@@ -255,7 +255,7 @@ Which roles apply is decided by what the request names:
 |---|---|
 | a subject (`/subjects/x/...`, `/config/x`, `/compatibility/subjects/x/...`) | registry-wide roles + bindings matching `x` |
 | a context (`/config/:.eu:`, `/mode/:.eu:`, `DELETE /contexts/.eu`) | registry-wide roles + bindings covering the whole context (`.eu::*`) |
-| a listing (`/subjects`, `/schemas`, `/contexts`, `/_admin`) | anyone holding a role; the **response is filtered** to what the caller may see |
+| a listing (`/subjects`, `/schemas`, `/contexts`, `/admin`) | anyone holding a role; the **response is filtered** to what the caller may see |
 | anything else: global config and mode, exporters, schema-by-id | registry-wide roles only |
 
 Filtering rather than refusing is what makes a scoped role usable: an admin of
@@ -269,13 +269,17 @@ exporters always need a registry-wide `admin`.
 
 ## Admin UI
 
-`/_admin` serves a single self-contained page - no build step, no assets, no
+`/admin` serves a single self-contained page - no build step, no assets, no
 outside requests - for looking at and operating the registry:
 
 * **Subjects**: every subject with its version count, latest version and id,
   schema type, effective compatibility and mode (and where each is inherited
   from). Open one to read every version's schema, references, metadata and
   rule set, see what references it, and soft- or permanently delete versions.
+* **Registering**: *Register schema* takes a subject, a type and the schema
+  (with references), checks compatibility on request, and registers it;
+  *Register new version* inside a subject starts from its latest schema. A
+  rejected registration keeps the form and shows the registry's reason.
 * **Contexts**: what each context holds, its own compatibility and mode, and
   deleting an empty one.
 * **Exporters**: state, offset, destination and the last error; pause, resume,
@@ -285,9 +289,10 @@ outside requests - for looking at and operating the registry:
 Changes go through the public REST API, so the UI can do nothing an admin
 could not do with `curl`, and every refusal is the registry's own error. It is
 restricted to the `admin` role - registry-wide, or over some subjects, in
-which case the page shows exactly those. Two JSON endpoints back it, `GET /_admin/api/overview` and
-`GET /_admin/api/subjects/{subject}`; `/_admin` is outside Confluent's URL
-namespace, so nothing else is shadowed.
+which case the page shows exactly those. Two JSON endpoints back it,
+`GET /admin/api/overview` and `GET /admin/api/subjects/{subject}`; no Confluent
+resource starts with `admin`, so nothing is shadowed. The UI first shipped
+under `/_admin`, which now redirects.
 
 ## Logically equal schemas share an id (on by default)
 

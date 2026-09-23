@@ -1,9 +1,10 @@
-//! `/_admin`: a read-only inspection UI (one embedded HTML page plus the two
-//! JSON endpoints it calls). Everything here is admin-only, see `auth`.
+//! `/admin`: the administrative UI (one embedded HTML page plus the two JSON
+//! endpoints it calls). Everything here is admin-only, see `authz`.
 //!
-//! The path is outside Confluent's namespace on purpose: `/_admin` collides
-//! with no REST resource, and the pre-routing filters in `rewrite` only touch
+//! The path is outside Confluent's namespace: no REST resource of theirs
+//! starts with `admin`, and the pre-routing filters in `rewrite` only touch
 //! `contexts/...` and the segment after `subjects`, so they leave it alone.
+//! The UI first shipped under `/_admin`, which now redirects here.
 
 use axum::extract::{Path, State};
 use axum::http::{HeaderValue, StatusCode, header};
@@ -34,4 +35,11 @@ pub async fn overview(State(st): State<AppState>, caller: Caller, p: Params) -> 
 
 pub async fn subject_detail(State(st): State<AppState>, Path(subject): Path<String>) -> ApiResult<Sr<Value>> {
     Ok(Sr(inline(&st, |r| r.admin_subject(&subject))?))
+}
+
+/// The old `/_admin...` path, kept as a redirect.
+pub async fn moved(uri: axum::http::Uri) -> Response {
+    let rest = uri.path().trim_start_matches("/_admin");
+    let query = uri.query().map(|q| format!("?{q}")).unwrap_or_default();
+    axum::response::Redirect::permanent(&format!("/admin{rest}{query}")).into_response()
 }

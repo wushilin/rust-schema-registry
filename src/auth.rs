@@ -94,6 +94,10 @@ fn authorized(roles: &[Role], method: &Method, path: &str) -> bool {
     if roles.contains(&Role::Admin) {
         return true;
     }
+    // The admin UI shows every subject, schema and setting at once: admins only.
+    if path.starts_with("/_admin") {
+        return false;
+    }
     let read_only_request = matches!(*method, Method::GET | Method::HEAD | Method::OPTIONS)
         || (*method == Method::POST
             && (path.starts_with("/compatibility/")
@@ -149,6 +153,10 @@ mod tests {
         let ro = [Role::Readonly];
         let w = [Role::Write];
         assert!(authorized(&ro, &Method::GET, "/subjects"));
+        // The admin UI is for admins, whatever the method.
+        assert!(!authorized(&ro, &Method::GET, "/_admin"));
+        assert!(!authorized(&w, &Method::GET, "/_admin/api/overview"));
+        assert!(authorized(&[Role::Admin], &Method::GET, "/_admin"));
         assert!(authorized(&ro, &Method::POST, "/subjects/foo"));
         assert!(authorized(&ro, &Method::POST, "/compatibility/subjects/foo/versions/latest"));
         assert!(!authorized(&ro, &Method::POST, "/subjects/foo/versions"));

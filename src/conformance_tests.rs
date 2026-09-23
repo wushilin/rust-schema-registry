@@ -779,3 +779,75 @@ fn serialized_protobuf_root_file_is_named_default() {
     let fd = prost_types::FileDescriptorProto::decode(base64::engine::general_purpose::STANDARD.decode(b64).unwrap().as_slice()).unwrap();
     assert_eq!(fd.name(), "default");
 }
+
+// ---------------- admin views ----------------
+
+/// A backward-compatible second version of `rec(name)`.
+fn evolve(r: &Registry, subject: &str, name: &str) -> u32 {
+    let schema = json!({"type": "record", "name": name,
+                        "fields": [{"name": "a", "type": "int"}, {"name": "b", "type": "int", "default": 0}]});
+    r.register(subject, req(schema.to_string()), false).expect("evolve").id
+}
+
+#[test]
+fn admin_overview_reports_subjects_contexts_and_where_settings_come_from() {
+    let (r, _d) = registry();
+    register(&r, "a-value", "A");
+    evolve(&r, "a-value", "A");
+    register(&r, ":.eu:b-value", "B");
+    register(&r, "gone-value", "G");
+    r.delete_subject("gone-value", false).unwrap();
+    let level = |l| crate::model::ConfigRecord { compatibility_level: Some(l), ..Default::default() };
+    r.set_config(Some("a-value"), level(CompatibilityLevel::Full)).unwrap();
+    r.set_config(Some(":.eu:"), level(CompatibilityLevel::None)).unwrap();
+
+    let v = r.admin_overview(None, true, 100).unwrap();
+    let rows = v["subjects"].as_array().unwrap();
+    let row = |s: &str| rows.iter().find(|x| x["subject"] == s).unwrap_or_else(|| panic!("{s} missing"));
+    assert_eq!(v["counts"]["subjects"], 3);
+    assert_eq!(v["counts"]["versions"], 4);
+    assert_eq!(row("a-value")["versions"], 2);
+    assert_eq!(row("a-value")["compatibility"], "FULL");
+    assert_eq!(row("a-value")["compatibilityFrom"], "subject");
+    // A context's own config is where its subjects read theirs from.
+    assert_eq!(row(":.eu:b-value")["compatibility"], "NONE");
+    assert_eq!(row(":.eu:b-value")["compatibilityFrom"], "context");
+    assert_eq!(row("gone-value")["deleted"], true);
+    assert_eq!(row("gone-value")["deletedVersions"], 1);
+
+    // Live subjects only, unless deleted rows are asked for.
+    let live = r.admin_overview(None, false, 100).unwrap();
+    assert!(live["subjects"].as_array().unwrap().iter().all(|x| x["subject"] != "gone-value"));
+
+    let contexts = v["contexts"].as_array().unwrap();
+    let eu = contexts.iter().find(|c| c["name"] == ".eu").unwrap();
+    assert_eq!(eu["subjects"], 1);
+    assert_eq!(eu["compatibility"], "NONE");
+    assert_eq!(eu["compatibilityFrom"], "own");
+    let default_ctx = contexts.iter().find(|c| c["name"] == ".").unwrap();
+    assert_eq!(default_ctx["subjects"], 1, "the soft-deleted subject is counted separately");
+    assert_eq!(default_ctx["deletedSubjects"], 1);
+
+    // `limit` caps the rows, not the counts.
+    let capped = r.admin_overview(None, true, 1).unwrap();
+    assert_eq!(capped["counts"]["shown"], 1);
+    assert_eq!(capped["counts"]["subjects"], 3);
+}
+
+#[test]
+fn admin_subject_shows_every_version_and_404s_for_unknown_subjects() {
+    let (r, _d) = registry();
+    register(&r, "s-value", "S");
+    evolve(&r, "s-value", "S");
+    r.delete_version("s-value", crate::registry::VersionSpec::Exact(1), false).unwrap();
+
+    let v = r.admin_subject("s-value").unwrap();
+    let versions = v["versions"].as_array().unwrap();
+    assert_eq!(versions.len(), 2, "soft-deleted versions are shown too");
+    assert_eq!(versions[0]["version"], 1);
+    assert_eq!(versions[0]["deleted"], true);
+    assert_eq!(versions[1]["deleted"], false);
+    assert!(versions[1]["schema"].as_str().unwrap().contains("\"b\""), "v2 is the evolved schema");
+
+    assert_eq!(r.admin_subject("nope").unwrap_err().code, 40401);
+}

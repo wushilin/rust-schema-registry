@@ -1,0 +1,558 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Schema Registry</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg: #fbfbfa; --panel: #fff; --line: #e3e3e0; --text: #1f1f1d; --muted: #6b6b66;
+    --accent: #3b5bdb; --warn: #b54708; --ok: #2b6a3f; --bad: #b42318;
+    --mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #17171a; --panel: #1f1f23; --line: #32323a; --text: #ecece8; --muted: #9a9aa2;
+            --accent: #8ea3ff; --warn: #f0a868; --ok: #7fd19a; --bad: #ff9c92; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.5 system-ui, -apple-system, sans-serif; }
+  header { padding: 12px 20px 0; border-bottom: 1px solid var(--line); background: var(--panel); }
+  .top { display: flex; flex-wrap: wrap; gap: 10px 22px; align-items: center; }
+  h1 { font-size: 15px; margin: 0; font-weight: 600; }
+  .meta { color: var(--muted); font-size: 12.5px; display: flex; gap: 16px; flex-wrap: wrap; align-items: center; }
+  .meta b { font-weight: 600; color: var(--text); }
+  .spacer { flex: 1; }
+  nav { display: flex; gap: 4px; margin-top: 10px; }
+  nav button { border: 1px solid transparent; border-bottom: none; border-radius: 7px 7px 0 0; background: none;
+               color: var(--muted); padding: 7px 14px; cursor: pointer; font: inherit; }
+  nav button[aria-selected=true] { background: var(--bg); border-color: var(--line); color: var(--text); font-weight: 600;
+                                   margin-bottom: -1px; padding-bottom: 8px; }
+  main { padding: 16px 20px 60px; }
+  .controls { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; align-items: center; }
+  input, select, textarea { font: inherit; padding: 5px 9px; border: 1px solid var(--line); border-radius: 6px;
+                            background: var(--panel); color: var(--text); }
+  textarea { font-family: var(--mono); font-size: 12.5px; width: 100%; }
+  input[type=search] { min-width: 240px; flex: 1 1 240px; }
+  label { color: var(--muted); display: flex; gap: 6px; align-items: center; white-space: nowrap; }
+  button { font: inherit; padding: 5px 11px; border-radius: 6px; border: 1px solid var(--line);
+           background: var(--panel); color: var(--text); cursor: pointer; }
+  button:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+  button:disabled { opacity: .45; cursor: not-allowed; }
+  button.danger:hover { border-color: var(--bad); color: var(--bad); }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  button.primary:hover { color: #fff; filter: brightness(1.1); }
+  table { width: 100%; border-collapse: collapse; background: var(--panel);
+          border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+  th, td { text-align: left; padding: 6px 10px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+  th { font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); font-weight: 600;
+       white-space: nowrap; user-select: none; }
+  th[data-k] { cursor: pointer; }
+  tr:last-child td { border-bottom: none; }
+  tbody tr:hover { background: color-mix(in srgb, var(--accent) 7%, transparent); }
+  td.name { font-family: var(--mono); word-break: break-all; }
+  td.name a { color: var(--accent); text-decoration: none; cursor: pointer; }
+  td.name a:hover { text-decoration: underline; }
+  td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  td.act { text-align: right; white-space: nowrap; }
+  td.act button { padding: 2px 8px; font-size: 12.5px; }
+  .tag { font-size: 11.5px; padding: 1px 6px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); }
+  .tag.inherit { opacity: .6; }
+  .tag.warn { color: var(--warn); border-color: currentColor; }
+  .tag.bad { color: var(--bad); border-color: currentColor; }
+  .tag.ok { color: var(--ok); border-color: currentColor; }
+  select.inline { padding: 2px 6px; font-size: 12.5px; }
+  .empty, .error { color: var(--muted); padding: 24px 4px; }
+  .error { color: var(--bad); font-family: var(--mono); font-size: 12.5px; }
+  dialog { border: 1px solid var(--line); border-radius: 10px; background: var(--panel); color: var(--text);
+           max-width: min(980px, 94vw); width: 100%; padding: 0; }
+  dialog::backdrop { background: rgba(0,0,0,.45); }
+  .dh { display: flex; justify-content: space-between; align-items: center; gap: 12px;
+        padding: 12px 18px; border-bottom: 1px solid var(--line); position: sticky; top: 0; background: var(--panel); z-index: 1; }
+  .dh h2 { font-size: 14px; margin: 0; font-family: var(--mono); word-break: break-all; }
+  .db { padding: 14px 18px; max-height: 72vh; overflow: auto; }
+  .df { display: flex; gap: 8px; justify-content: flex-end; padding: 12px 18px; border-top: 1px solid var(--line); }
+  .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 10px; }
+  .grid { display: grid; grid-template-columns: max-content 1fr; gap: 8px 12px; align-items: center; margin-bottom: 12px; }
+  .grid > span { color: var(--muted); }
+  .ver { border: 1px solid var(--line); border-radius: 8px; margin-bottom: 10px; }
+  .ver > summary { padding: 7px 12px; cursor: pointer; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .ver > summary b { font-variant-numeric: tabular-nums; }
+  .ver > summary .sp { flex: 1; }
+  pre { margin: 0; padding: 11px; background: var(--bg); border-top: 1px solid var(--line);
+        overflow: auto; font-family: var(--mono); font-size: 12.5px; white-space: pre-wrap; word-break: break-word; }
+  #toast { position: fixed; right: 18px; bottom: 18px; display: flex; flex-direction: column; gap: 8px; z-index: 10; }
+  #toast div { background: var(--panel); border: 1px solid var(--line); border-left: 3px solid var(--ok);
+               border-radius: 7px; padding: 8px 14px; box-shadow: 0 6px 20px rgba(0,0,0,.18); max-width: 420px; }
+  #toast div.bad { border-left-color: var(--bad); }
+</style>
+</head>
+<body>
+<header>
+  <div class="top">
+    <h1>Schema Registry</h1>
+    <div class="meta" id="meta"></div>
+    <span class="spacer"></span>
+    <button id="refresh">Refresh</button>
+  </div>
+  <nav id="tabs">
+    <button data-tab="subjects" aria-selected="true">Subjects</button>
+    <button data-tab="contexts" aria-selected="false">Contexts</button>
+    <button data-tab="exporters" aria-selected="false">Exporters</button>
+    <button data-tab="cluster" aria-selected="false">Cluster</button>
+  </nav>
+</header>
+<main>
+  <section id="tab-subjects">
+    <div class="controls">
+      <input type="search" id="q" placeholder="Filter subjects (substring)" autocomplete="off">
+      <label>context <select id="ctx"><option value="">all</option></select></label>
+      <label><input type="checkbox" id="deleted"> include soft-deleted</label>
+      <span class="meta" id="count"></span>
+    </div>
+    <div id="subjects"><div class="empty">Loading…</div></div>
+  </section>
+  <section id="tab-contexts" hidden><div id="contexts"></div></section>
+  <section id="tab-exporters" hidden>
+    <div class="controls"><button class="primary" id="new-exporter">New exporter</button></div>
+    <div id="exporters"></div>
+  </section>
+  <section id="tab-cluster" hidden><div id="cluster"></div></section>
+</main>
+
+<dialog id="modal">
+  <div class="dh"><h2 id="mtitle"></h2><button id="mclose">Close</button></div>
+  <div class="db" id="mbody"></div>
+  <div class="df" id="mfoot" hidden></div>
+</dialog>
+<div id="toast"></div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const enc = encodeURIComponent;
+const LEVELS = ["BACKWARD","BACKWARD_TRANSITIVE","FORWARD","FORWARD_TRANSITIVE","FULL","FULL_TRANSITIVE","NONE"];
+const MODES = ["READWRITE","READONLY","IMPORT"];
+const SR = "application/vnd.schemaregistry.v1+json";
+let data = null;                       // last overview
+let view = { sort: "subject", dir: 1, tab: "subjects" };
+
+// ---------- plumbing ----------
+
+async function api(path, opts = {}) {
+  const init = { method: opts.method || "GET", headers: { accept: SR } };
+  if (opts.body !== undefined) {
+    init.headers["content-type"] = SR;
+    init.body = JSON.stringify(opts.body);
+  }
+  const r = await fetch(path, init);
+  const text = await r.text();
+  let body = null;
+  try { body = text ? JSON.parse(text) : null; } catch { body = text; }
+  if (!r.ok) {
+    const err = new Error(body?.message || `HTTP ${r.status}${text ? ": " + text.slice(0, 200) : ""}`);
+    err.code = body?.error_code;
+    throw err;
+  }
+  return body;
+}
+
+function say(msg, bad) {
+  const el = document.createElement("div");
+  el.textContent = msg;
+  if (bad) el.className = "bad";
+  $("toast").append(el);
+  setTimeout(() => el.remove(), bad ? 8000 : 3500);
+}
+
+/// Run a mutation, report it, and reload. Returns true when it went through.
+async function act(description, fn) {
+  try {
+    await fn();
+    say(description);
+    await load();
+    return true;
+  } catch (e) {
+    say(`${description}: ${e.message}`, true);
+    return false;
+  }
+}
+
+function modal(title, html, footer) {
+  $("mtitle").textContent = title;
+  $("mbody").innerHTML = html;
+  $("mfoot").innerHTML = footer || "";
+  $("mfoot").hidden = !footer;
+  if (!$("modal").open) $("modal").showModal();
+}
+
+/// An in-page confirmation (never `window.confirm`, which freezes the page).
+function confirmAction(title, html, label) {
+  return new Promise((resolve) => {
+    modal(title, html, `<button id="cno">Cancel</button><button class="primary" id="cyes">${esc(label)}</button>`);
+    $("cno").onclick = () => { $("modal").close(); resolve(false); };
+    $("cyes").onclick = () => { $("modal").close(); resolve(true); };
+  });
+}
+
+/// A mode change that needs `force=true` is offered rather than done silently.
+/// `path` is the encoded subject or context, empty for the global mode.
+async function putMode(path, mode, what) {
+  const url = path ? `/mode/${path}` : "/mode";
+  try {
+    await api(url, { method: "PUT", body: { mode } });
+    say(`${what}: mode ${mode}`);
+    await load();
+  } catch (e) {
+    const forceable = await confirmAction("Mode change refused",
+      `<p>${esc(e.message)}</p><p>Retry with <code>force=true</code>? This skips the checks the registry
+       makes around IMPORT mode, and can leave ids and versions inconsistent.</p>`, "Force it");
+    if (!forceable) return;
+    await act(`${what}: mode ${mode} (forced)`, () => api(`${url}?force=true`, { method: "PUT", body: { mode } }));
+  }
+}
+
+const levelSelect = (current, onchange) =>
+  `<select class="inline" data-do="${onchange}">${LEVELS.map((l) =>
+    `<option${l === current ? " selected" : ""}>${l}</option>`).join("")}</select>`;
+const modeSelect = (current, onchange, extra = []) =>
+  `<select class="inline" data-do="${onchange}">${[...MODES, ...extra].map((m) =>
+    `<option${m === current ? " selected" : ""}>${m}</option>`).join("")}</select>`;
+
+// ---------- subjects ----------
+
+function renderSubjects() {
+  const q = $("q").value.trim().toLowerCase();
+  const ctx = $("ctx").value;
+  const rows = data.subjects
+    .filter((r) => (!q || r.subject.toLowerCase().includes(q)) && (!ctx || r.context === ctx))
+    .sort((a, b) => {
+      const av = a[view.sort] ?? "", bv = b[view.sort] ?? "";
+      return (typeof av === "number" ? av - bv : String(av).localeCompare(String(bv))) * view.dir;
+    });
+  $("count").textContent = data.counts.shown < data.counts.subjects
+    ? `${rows.length} shown (server capped at ${data.counts.shown} of ${data.counts.subjects})`
+    : `${rows.length} of ${data.counts.subjects}`;
+  if (!rows.length) {
+    $("subjects").innerHTML = '<div class="empty">No subjects match.</div>';
+    return;
+  }
+  const head = [["subject","subject"],["versions","versions"],["latestVersion","latest"],["latestId","id"],
+                ["schemaType","type"],["compatibility","compatibility"],["mode","mode"]];
+  $("subjects").innerHTML = `<table><thead><tr>${
+    head.map(([k, l]) => `<th data-k="${k}">${l}${view.sort === k ? (view.dir > 0 ? " ▲" : " ▼") : ""}</th>`).join("")
+  }<th></th></tr></thead><tbody>${rows.map((r) => `<tr>
+    <td class="name"><a data-subject="${esc(r.subject)}">${esc(r.subject)}</a>${
+      r.alias ? ` <span class="tag">alias → ${esc(r.alias)}</span>` : ""}${
+      r.deleted ? ' <span class="tag bad">soft-deleted</span>' : ""}</td>
+    <td class="num">${r.versions}${r.deletedVersions ? ` <span class="tag warn">${r.deletedVersions} del</span>` : ""}</td>
+    <td class="num">${r.latestVersion ?? "—"}</td>
+    <td class="num">${r.latestId ?? "—"}</td>
+    <td>${esc(r.schemaType ?? "—")}</td>
+    <td>${levelSelect(r.compatibility, `subject-compat:${esc(r.subject)}`)}
+        <span class="tag ${r.compatibilityFrom === "subject" ? "" : "inherit"}">${esc(r.compatibilityFrom)}</span>${
+        r.normalize ? ' <span class="tag">normalize</span>' : ""}</td>
+    <td>${modeSelect(r.mode, `subject-mode:${esc(r.subject)}`)}${
+        r.modeFrom === "subject" ? "" : ' <span class="tag inherit">inherited</span>'}</td>
+    <td class="act"><button data-subject="${esc(r.subject)}">Detail</button>
+        <button class="danger" data-delete="${esc(r.subject)}">${r.deleted ? "Delete permanently" : "Delete"}</button></td>
+  </tr>`).join("")}</tbody></table>`;
+
+  $("subjects").querySelectorAll("th[data-k]").forEach((th) => th.onclick = () => {
+    view.dir = view.sort === th.dataset.k ? -view.dir : 1;
+    view.sort = th.dataset.k;
+    renderSubjects();
+  });
+  $("subjects").querySelectorAll("[data-subject]").forEach((el) => el.onclick = () => showSubject(el.dataset.subject));
+  $("subjects").querySelectorAll("[data-delete]").forEach((el) => el.onclick = () => deleteSubject(el.dataset.delete));
+  $("subjects").querySelectorAll("select[data-do]").forEach((sel) => sel.onchange = () => {
+    const [what, subject] = [sel.dataset.do.split(":")[0], sel.dataset.do.slice(sel.dataset.do.indexOf(":") + 1)];
+    if (what === "subject-compat") {
+      act(`${subject}: compatibility ${sel.value}`,
+          () => api(`/config/${enc(subject)}`, { method: "PUT", body: { compatibility: sel.value } }));
+    } else {
+      putMode(enc(subject), sel.value, subject);
+    }
+  });
+}
+
+async function deleteSubject(subject) {
+  const row = data.subjects.find((r) => r.subject === subject) || {};
+  const gone = !!row.deleted;                             // every version is soft-deleted already
+  const ok = await confirmAction(`Delete ${subject}`,
+    `<p>${gone
+      ? "This subject is already soft-deleted. Deleting it permanently removes every version and its ids; clients holding those ids will fail."
+      : "A soft delete hides the subject but keeps its schemas, so it can be restored by re-registering. A permanent delete cannot be undone."}</p>
+     <div class="row"><label><input type="checkbox" id="perm"${gone ? " checked" : ""}> permanent</label></div>`,
+    "Delete");
+  if (!ok) return;
+  const perm = document.getElementById("perm")?.checked;
+  await act(`deleted ${subject}${perm ? " permanently" : ""}`, async () => {
+    if (perm && !gone) await api(`/subjects/${enc(subject)}`, { method: "DELETE" });
+    await api(`/subjects/${enc(subject)}${perm ? "?permanent=true" : ""}`, { method: "DELETE" });
+  });
+}
+
+async function showSubject(subject) {
+  modal(subject, '<div class="empty">Loading…</div>');
+  let d;
+  try {
+    d = await api(`/_admin/api/subjects/${enc(subject)}`);
+  } catch (e) {
+    return modal(subject, `<div class="error">${esc(e.message)}</div>`);
+  }
+  const row = data.subjects.find((r) => r.subject === subject) || {};
+  modal(subject, `
+    <div class="grid">
+      <span>compatibility</span><div>${levelSelect(d.effectiveCompatibility, "d-compat")}
+        ${d.config ? '<button id="d-unset">Clear subject config</button>' : '<span class="tag inherit">inherited</span>'}</div>
+      <span>mode</span><div>${modeSelect(d.mode, "d-mode")}
+        ${row.modeFrom === "subject" ? '<button id="d-unmode">Clear subject mode</button>' : '<span class="tag inherit">inherited</span>'}</div>
+      <span>config</span><div><code>${d.config ? esc(JSON.stringify(d.config)) : "none"}</code></div>
+    </div>
+    ${d.versions.slice().reverse().map((v) => `
+      <details class="ver"${v.version === row.latestVersion ? " open" : ""}>
+        <summary><b>v${v.version}</b> <span class="tag">id ${v.id}</span> <span class="tag">${esc(v.schemaType)}</span>
+          ${v.deleted ? '<span class="tag warn">soft-deleted</span>' : ""}
+          ${v.references.length ? `<span class="tag">${v.references.length} refs</span>` : ""}
+          ${v.referencedBy.length ? `<span class="tag bad">referenced by v${v.referencedBy.join(", v")}</span>` : ""}
+          ${v.metadata ? '<span class="tag">metadata</span>' : ""}${v.ruleSet ? '<span class="tag">ruleSet</span>' : ""}
+          <span class="sp"></span>
+          <button class="danger" data-delv="${v.version}" data-perm="${v.deleted}">${v.deleted ? "Delete permanently" : "Delete version"}</button>
+        </summary>
+        <pre>${esc(pretty(v.schema, v.schemaType))}</pre>
+        ${v.references.length ? `<pre>references: ${esc(JSON.stringify(v.references, null, 2))}</pre>` : ""}
+        ${v.metadata ? `<pre>metadata: ${esc(JSON.stringify(v.metadata, null, 2))}</pre>` : ""}
+        ${v.ruleSet ? `<pre>ruleSet: ${esc(JSON.stringify(v.ruleSet, null, 2))}</pre>` : ""}
+      </details>`).join("")}`);
+
+  $("mbody").querySelector('[data-do="d-compat"]').onchange = (e) =>
+    act(`${subject}: compatibility ${e.target.value}`,
+        () => api(`/config/${enc(subject)}`, { method: "PUT", body: { compatibility: e.target.value } }))
+      .then(() => showSubject(subject));
+  $("mbody").querySelector('[data-do="d-mode"]').onchange = (e) =>
+    putMode(enc(subject), e.target.value, subject).then(() => showSubject(subject));
+  const unset = $("d-unset"), unmode = $("d-unmode");
+  if (unset) unset.onclick = () => act(`${subject}: config cleared`,
+    () => api(`/config/${enc(subject)}`, { method: "DELETE" })).then(() => showSubject(subject));
+  if (unmode) unmode.onclick = () => act(`${subject}: mode cleared`,
+    () => api(`/mode/${enc(subject)}`, { method: "DELETE" })).then(() => showSubject(subject));
+
+  $("mbody").querySelectorAll("[data-delv]").forEach((b) => b.onclick = async (e) => {
+    e.preventDefault();
+    const v = b.dataset.delv, perm = b.dataset.perm === "true";
+    const ok = await confirmAction(`Delete ${subject} v${v}`,
+      perm ? "<p>This version is soft-deleted. Removing it permanently frees its id and cannot be undone.</p>"
+           : "<p>A soft delete hides the version; it can be restored by re-registering the same schema.</p>", "Delete");
+    if (!ok) return showSubject(subject);
+    await act(`deleted ${subject} v${v}${perm ? " permanently" : ""}`,
+              () => api(`/subjects/${enc(subject)}/versions/${v}${perm ? "?permanent=true" : ""}`, { method: "DELETE" }));
+    showSubject(subject);
+  });
+}
+
+/// Schemas are stored as text; JSON-based ones read better indented.
+function pretty(schema, type) {
+  if (type === "PROTOBUF") return schema;
+  try { return JSON.stringify(JSON.parse(schema), null, 2); } catch { return schema; }
+}
+
+// ---------- contexts ----------
+
+function renderContexts() {
+  $("contexts").innerHTML = `<table><thead><tr>
+      <th>context</th><th>subjects</th><th>versions</th><th>compatibility</th><th>mode</th><th></th>
+    </tr></thead><tbody>${data.contexts.map((c) => `<tr>
+      <td class="name">${esc(c.name)}${c.name === "." ? ' <span class="tag">default</span>' : ""}</td>
+      <td class="num">${c.subjects}${c.deletedSubjects ? ` <span class="tag warn">${c.deletedSubjects} del</span>` : ""}</td>
+      <td class="num">${c.versions}</td>
+      <td>${levelSelect(c.compatibility, `ctx-compat:${esc(c.name)}`)}
+          <span class="tag ${c.compatibilityFrom === "own" ? "" : "inherit"}">${esc(c.compatibilityFrom)}</span></td>
+      <td>${modeSelect(c.mode, `ctx-mode:${esc(c.name)}`, c.name === "." ? ["READONLY_OVERRIDE"] : [])}
+          <span class="tag ${c.modeFrom === "own" ? "" : "inherit"}">${esc(c.modeFrom)}</span></td>
+      <td class="act">${c.name === "." ? "" :
+        `<button class="danger" data-delctx="${esc(c.name)}"${c.subjects + c.deletedSubjects ? " disabled title='context is not empty'" : ""}>Delete</button>`}</td>
+    </tr>`).join("")}</tbody></table>
+    <p class="meta">A context is its own registry: its compatibility and mode are not inherited from the global
+    settings, and the default context (<code>.</code>) is where the global ones apply.</p>`;
+
+  $("contexts").querySelectorAll("select[data-do]").forEach((sel) => sel.onchange = () => {
+    const [what, name] = [sel.dataset.do.split(":")[0], sel.dataset.do.split(":").slice(1).join(":")];
+    const path = name === "." ? "" : `:${name}:`;         // global settings are the default context's
+    if (what === "ctx-compat") {
+      act(`${name}: compatibility ${sel.value}`,
+          () => api(`/config/${enc(path)}`.replace(/\/$/, ""), { method: "PUT", body: { compatibility: sel.value } }));
+    } else {
+      putMode(enc(path), sel.value, name);
+    }
+  });
+  $("contexts").querySelectorAll("[data-delctx]").forEach((b) => b.onclick = async () => {
+    const name = b.dataset.delctx;
+    if (!await confirmAction(`Delete context ${name}`,
+      "<p>Deletes the (empty) context and the configuration and mode set on it.</p>", "Delete")) return;
+    act(`deleted context ${name}`, () => api(`/contexts/${enc(name)}`, { method: "DELETE" }));
+  });
+}
+
+// ---------- exporters ----------
+
+const STATE_TAG = { RUNNING: "ok", PAUSED: "", STARTING: "", ERROR: "bad" };
+
+function renderExporters() {
+  if (!data.exporters.length) {
+    $("exporters").innerHTML = '<div class="empty">No exporters. An exporter copies schemas from this registry to another one (schema linking).</div>';
+  } else {
+    $("exporters").innerHTML = `<table><thead><tr>
+        <th>name</th><th>state</th><th>offset</th><th>destination</th><th>subjects</th><th></th>
+      </tr></thead><tbody>${data.exporters.map((e) => `<tr>
+        <td class="name"><a data-exp="${esc(e.name)}">${esc(e.name)}</a></td>
+        <td><span class="tag ${STATE_TAG[e.state] ?? ""}">${esc(e.state)}</span>${
+          e.trace ? ` <span class="tag bad" title="${esc(e.trace)}">error</span>` : ""}</td>
+        <td class="num">${e.offset}</td>
+        <td>${esc(e.config["schema.registry.url"] ?? "—")} <span class="tag">${esc(e.contextType)}${
+          e.context ? " " + esc(e.context) : ""}</span></td>
+        <td class="name">${esc(e.subjects.join(", "))}</td>
+        <td class="act">
+          <button data-exp-do="pause:${esc(e.name)}"${e.state === "PAUSED" ? " disabled" : ""}>Pause</button>
+          <button data-exp-do="resume:${esc(e.name)}"${e.state === "PAUSED" ? "" : " disabled"}>Resume</button>
+          <button data-exp-do="reset:${esc(e.name)}">Reset</button>
+          <button class="danger" data-exp-del="${esc(e.name)}">Delete</button>
+        </td>
+      </tr>`).join("")}</tbody></table>`;
+  }
+  $("exporters").querySelectorAll("[data-exp]").forEach((a) => a.onclick = () => showExporter(a.dataset.exp));
+  $("exporters").querySelectorAll("[data-exp-do]").forEach((b) => b.onclick = async () => {
+    const [action, name] = [b.dataset.expDo.split(":")[0], b.dataset.expDo.split(":").slice(1).join(":")];
+    if (action === "reset" && !await confirmAction(`Reset ${name}`,
+      "<p>Rewinds the exporter to the start of the log: every schema it covers is exported again.</p>", "Reset")) return;
+    act(`${name}: ${action}`, () => api(`/exporters/${enc(name)}/${action}`, { method: "PUT" }));
+  });
+  $("exporters").querySelectorAll("[data-exp-del]").forEach((b) => b.onclick = async () => {
+    const name = b.dataset.expDel;
+    if (!await confirmAction(`Delete exporter ${name}`,
+      "<p>Stops the exporter and forgets its position. Schemas already exported stay on the destination.</p>", "Delete")) return;
+    act(`deleted exporter ${name}`, () => api(`/exporters/${enc(name)}`, { method: "DELETE" }));
+  });
+}
+
+function showExporter(name) {
+  const e = data.exporters.find((x) => x.name === name);
+  if (!e) return;
+  modal(name, `
+    <div class="grid">
+      <span>state</span><div><span class="tag ${STATE_TAG[e.state] ?? ""}">${esc(e.state)}</span></div>
+      <span>offset</span><div>${e.offset}${e.ts ? ` <span class="tag">updated ${esc(new Date(e.ts).toLocaleString())}</span>` : ""}</div>
+      <span>context type</span><div>${esc(e.contextType)}${e.context ? ` <code>${esc(e.context)}</code>` : ""}</div>
+      <span>subjects</span><div><code>${esc(e.subjects.join(", "))}</code></div>
+      <span>rename format</span><div><code>${esc(e.subjectRenameFormat ?? "none")}</code></div>
+    </div>
+    ${e.trace ? `<pre class="error">${esc(e.trace)}</pre>` : ""}
+    <p class="meta">config</p>
+    <textarea id="exp-config" rows="8">${esc(JSON.stringify(e.config, null, 2))}</textarea>`,
+    `<button id="exp-save">Save config</button>`);
+  $("exp-save").onclick = async () => {
+    let cfg;
+    try { cfg = JSON.parse($("exp-config").value); } catch (err) { return say(`config: ${err.message}`, true); }
+    if (await act(`${name}: config updated`, () => api(`/exporters/${enc(name)}/config`, { method: "PUT", body: cfg }))) {
+      $("modal").close();
+    }
+  };
+}
+
+function newExporter() {
+  modal("New exporter", `
+    <div class="grid">
+      <span>name</span><input id="e-name" placeholder="my-exporter">
+      <span>subjects</span><input id="e-subjects" value="*" placeholder="* or a comma-separated list">
+      <span>context type</span><select id="e-ctxtype"><option>AUTO</option><option>CUSTOM</option><option>NONE</option></select>
+      <span>context</span><input id="e-ctx" placeholder="only for CUSTOM, e.g. .from-prod">
+      <span>rename format</span><input id="e-rename" placeholder="optional, e.g. \${subject}-copy">
+    </div>
+    <p class="meta">config (the destination registry, and credentials if it needs them)</p>
+    <textarea id="e-config" rows="6">{
+  "schema.registry.url": "http://localhost:8081"
+}</textarea>`,
+    `<button id="e-cancel">Cancel</button><button class="primary" id="e-create">Create</button>`);
+  $("e-cancel").onclick = () => $("modal").close();
+  $("e-create").onclick = async () => {
+    let config;
+    try { config = JSON.parse($("e-config").value); } catch (err) { return say(`config: ${err.message}`, true); }
+    const body = {
+      name: $("e-name").value.trim(),
+      subjects: $("e-subjects").value.split(",").map((s) => s.trim()).filter(Boolean),
+      contextType: $("e-ctxtype").value,
+      config,
+    };
+    if ($("e-ctx").value.trim()) body.context = $("e-ctx").value.trim();
+    if ($("e-rename").value.trim()) body.subjectRenameFormat = $("e-rename").value.trim();
+    if (await act(`created exporter ${body.name}`, () => api("/exporters", { method: "POST", body }))) $("modal").close();
+  };
+}
+
+// ---------- cluster ----------
+
+function renderCluster() {
+  const g = data.global;
+  $("cluster").innerHTML = `
+    <div class="grid" style="max-width:620px">
+      <span>cluster id</span><div><code>${esc(data.clusterId)}</code></div>
+      <span>version</span><div>${esc(data.version)}</div>
+      <span>subjects</span><div>${data.counts.subjects} in ${data.contexts.length} context(s)</div>
+      <span>versions</span><div>${data.counts.versions}</div>
+      <span>global compatibility</span><div>${levelSelect(g.compatibility, "g-compat")}</div>
+      <span>global mode</span><div>${modeSelect(g.mode, "g-mode", ["READONLY_OVERRIDE"])}</div>
+      <span>normalize by default</span><div>${g.normalize ? "yes" : "no"}</div>
+    </div>
+    <p class="meta">READONLY_OVERRIDE makes the whole registry read-only, contexts and subject modes included.
+    Global settings apply to the default context only; every other context carries its own.</p>`;
+  $("cluster").querySelector('[data-do="g-compat"]').onchange = (e) =>
+    act(`global compatibility ${e.target.value}`, () => api("/config", { method: "PUT", body: { compatibility: e.target.value } }));
+  $("cluster").querySelector('[data-do="g-mode"]').onchange = (e) => putMode("", e.target.value, "global");
+}
+
+// ---------- shell ----------
+
+function renderAll() {
+  $("meta").innerHTML = [
+    `cluster <b>${esc(data.clusterId)}</b>`,
+    `<b>${data.counts.subjects}</b> subjects`,
+    `<b>${data.counts.versions}</b> versions`,
+    `<b>${data.contexts.length}</b> contexts`,
+    `global <b>${esc(data.global.compatibility)}</b> / <b>${esc(data.global.mode)}</b>`,
+    data.exporters.length ? `<b>${data.exporters.length}</b> exporters` : "",
+  ].filter(Boolean).map((x) => `<span>${x}</span>`).join("");
+  const sel = $("ctx"), keep = sel.value;
+  sel.innerHTML = '<option value="">all</option>' + data.contexts.map((c) => `<option>${esc(c.name)}</option>`).join("");
+  sel.value = keep;
+  renderSubjects();
+  renderContexts();
+  renderExporters();
+  renderCluster();
+}
+
+async function load() {
+  try {
+    data = await api(`/_admin/api/overview?deleted=${$("deleted").checked}`);
+    renderAll();
+  } catch (e) {
+    $("subjects").innerHTML = `<div class="error">${esc(e.message)}</div>`;
+  }
+}
+
+$("tabs").onclick = (e) => {
+  const b = e.target.closest("button[data-tab]");
+  if (!b) return;
+  view.tab = b.dataset.tab;
+  $("tabs").querySelectorAll("button").forEach((x) => x.setAttribute("aria-selected", String(x === b)));
+  for (const t of ["subjects", "contexts", "exporters", "cluster"]) $(`tab-${t}`).hidden = t !== view.tab;
+};
+$("q").oninput = () => renderSubjects();
+$("ctx").onchange = () => renderSubjects();
+$("deleted").onchange = load;
+$("refresh").onclick = load;
+$("new-exporter").onclick = newExporter;
+$("mclose").onclick = () => $("modal").close();
+load();
+</script>
+</body>
+</html>

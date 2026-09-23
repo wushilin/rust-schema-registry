@@ -2,6 +2,7 @@
 //! blocking pool (RocksDB and schema compilation are synchronous), call the
 //! registry, and render JSON with Confluent's media type.
 
+mod admin;
 mod exporters;
 mod handlers;
 pub mod jackson;
@@ -293,6 +294,11 @@ pub fn router(state: AppState, max_body_bytes: usize) -> Router {
         .route("/exporters/{name}/pause", put(exporters::pause))
         .route("/exporters/{name}/resume", put(exporters::resume))
         .route("/exporters/{name}/reset", put(exporters::reset))
+        // administrative UI (admin role only)
+        .route("/_admin", get(admin::page))
+        .route("/_admin/", get(admin::page))
+        .route("/_admin/api/overview", get(admin::overview))
+        .route("/_admin/api/subjects/{subject}", get(admin::subject_detail))
         .fallback(not_found)
         .method_not_allowed_fallback(method_not_allowed);
 

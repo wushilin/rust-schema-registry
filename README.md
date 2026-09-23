@@ -66,6 +66,7 @@ deletes, configs and modes out of a Confluent.
 | Schema tags | `POST /subjects/{s}/versions/{v}/tags`: `tagsToAdd`/`tagsToRemove` for Avro, JSON Schema and Protobuf, `newVersion`, `metadata`, `rulesToMerge`/`rulesToRemove` |
 | Exporters | `/exporters` CRUD, `/status`, `/config`, `pause`/`resume`/`reset`; context types AUTO/CUSTOM/NONE/DEFAULT, subject globs, `subjectRenameFormat` |
 | Auth | HTTP Basic, roles `admin` / `write` / `readonly`, bcrypt or plaintext passwords |
+| Admin UI | `/_admin`: one page over the same REST API - subjects, versions and schemas, compatibility and mode per subject/context/global, contexts, exporters (pause/resume/reset/create/edit), soft and permanent deletes. Admin role only |
 | Migration | `schema-registry migrate --from URL --to URL`: copies every subject, version, id, reference, soft delete, config and mode from another registry |
 
 ## Design decisions
@@ -221,7 +222,31 @@ See `config.example.toml`. Key settings: `listen`, `data_dir`,
 Roles: `admin` can do everything. `write` can read, register and delete
 schemas, and set subject-level config and mode. `readonly` can do GETs plus
 lookup and compatibility tests. Verified bcrypt credentials are cached in
-memory, so the ~100 ms hash only runs once per credential.
+memory, so the ~100 ms hash only runs once per credential. Roles are
+registry-wide: there are no per-subject role bindings (Confluent's RBAC lives
+in its MDS, not in the registry).
+
+## Admin UI
+
+`/_admin` serves a single self-contained page - no build step, no assets, no
+outside requests - for looking at and operating the registry:
+
+* **Subjects**: every subject with its version count, latest version and id,
+  schema type, effective compatibility and mode (and where each is inherited
+  from). Open one to read every version's schema, references, metadata and
+  rule set, see what references it, and soft- or permanently delete versions.
+* **Contexts**: what each context holds, its own compatibility and mode, and
+  deleting an empty one.
+* **Exporters**: state, offset, destination and the last error; pause, resume,
+  reset, edit the config, create and delete.
+* **Cluster**: cluster id, counts, global compatibility and mode.
+
+Changes go through the public REST API, so the UI can do nothing an admin
+could not do with `curl`, and every refusal is the registry's own error. It is
+restricted to the `admin` role: the overview shows every subject and setting
+at once. Two JSON endpoints back it, `GET /_admin/api/overview` and
+`GET /_admin/api/subjects/{subject}`; `/_admin` is outside Confluent's URL
+namespace, so nothing else is shadowed.
 
 ## Logically equal schemas share an id (on by default)
 

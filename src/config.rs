@@ -84,8 +84,27 @@ pub struct UserConfig {
     pub username: String,
     /// bcrypt hash (recommended, see `hash-password`) or plaintext.
     pub password: String,
+    /// Roles that apply everywhere.
     #[serde(default = "default_roles")]
     pub roles: Vec<Role>,
+    /// Roles that apply only to the subjects they name. A user can hold
+    /// several, one per role, and they add to `roles` rather than limiting it.
+    #[serde(default)]
+    pub bindings: Vec<RoleBinding>,
+}
+
+/// `[[auth.users.bindings]]`: one role, scoped to a set of subject patterns.
+///
+/// A pattern is `context::subject`, both sides accepting `*` as a wildcard:
+/// `.::orders-value` (that subject in the default context), `.::test*`,
+/// `.eu::*` (everything in `.eu`, and that context's own settings), `*::*`
+/// (everywhere, i.e. the same as a global role). A pattern without `::` is
+/// read as a subject in the default context.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RoleBinding {
+    pub role: Role,
+    pub subjects: Vec<String>,
 }
 
 fn default_roles() -> Vec<Role> {
@@ -125,6 +144,18 @@ impl ServerConfig {
             }
             if !seen.insert(&u.username) {
                 anyhow::bail!("duplicate user '{}'", u.username);
+            }
+            for b in &u.bindings {
+                if b.subjects.is_empty() {
+                    anyhow::bail!("user '{}': a binding needs at least one subject pattern", u.username);
+                }
+                for p in &b.subjects {
+                    crate::authz::Pattern::parse(p)
+                        .map_err(|e| anyhow::anyhow!("user '{}': subject pattern '{p}': {e}", u.username))?;
+                }
+            }
+            if u.roles.is_empty() && u.bindings.is_empty() {
+                anyhow::bail!("user '{}' has no roles and no bindings", u.username);
             }
         }
         Ok(())

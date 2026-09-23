@@ -27,6 +27,8 @@ exporter_poll_seconds = 10
 enabled = false
 realm = "SchemaRegistry"
 
+# Roles apply to the whole registry:
+#
 # [[auth.users]]
 # username = "admin"
 # password = "$2b$12$..."        # schema-registry hash-password '...'
@@ -41,3 +43,36 @@ realm = "SchemaRegistry"
 # username = "app"
 # password = "$2b$12$..."
 # roles = ["readonly"]
+
+# ...and a role can also be bound to subjects. Bindings add to `roles`, one
+# entry per role, and a pattern is `context::subject` with `*` as a wildcard:
+#
+#   .::orders-value   that subject in the default context
+#   .::test*          every subject starting with "test" in the default context
+#   .eu::*            everything in the .eu context, and that context's own
+#                     compatibility and mode
+#   *::*              everywhere (the same as a registry-wide role)
+#
+# A pattern without `::` is read as a subject in the default context.
+# Listings (/subjects, /schemas, /contexts and the /_admin UI) are filtered to
+# what the caller may see, so a scoped user sees their own subjects and nothing
+# else. Global config and mode, contexts and exporters stay with `roles`.
+#
+# [[auth.users]]
+# username = "team-a"
+# password = "$2b$12$..."
+# roles = ["readonly"]           # reads everything...
+# [[auth.users.bindings]]
+# role = "admin"                 # ...and owns its own subjects
+# subjects = [".::abc*", ".::def*"]
+# [[auth.users.bindings]]
+# role = "write"
+# subjects = [".::xyz-*"]
+#
+# [[auth.users]]
+# username = "eu-team"
+# password = "$2b$12$..."
+# roles = []                     # nothing registry-wide: only what it is bound to
+# [[auth.users.bindings]]
+# role = "admin"
+# subjects = [".eu::*"]

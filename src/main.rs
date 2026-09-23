@@ -3,6 +3,7 @@
 
 mod api;
 mod auth;
+mod authz;
 mod config;
 #[cfg(test)]
 mod compat_level_tests;

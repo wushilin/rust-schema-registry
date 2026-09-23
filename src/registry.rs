@@ -2061,7 +2061,15 @@ impl Registry {
 
     /// One row per subject for the admin UI: how many versions it has, which
     /// compatibility level and mode apply, and where those come from.
-    pub fn admin_overview(&self, prefix: Option<&str>, deleted: bool, limit: usize) -> ApiResult<Value> {
+    /// `visible` decides which subjects the caller is shown: the admin UI
+    /// lists exactly the subjects that caller administers.
+    pub fn admin_overview(
+        &self,
+        prefix: Option<&str>,
+        deleted: bool,
+        limit: usize,
+        visible: &dyn Fn(&str, &str) -> bool,
+    ) -> ApiResult<Value> {
         let r = &self.reader();
         let p = Self::parse_prefix(prefix)?;
         let contexts = self.contexts_matching(r, &p.context)?;
@@ -2070,6 +2078,9 @@ impl Registry {
         for ctx in &contexts {
             for name in r.list_subject_names(ctx)? {
                 if !name.starts_with(&p.subject) {
+                    continue;
+                }
+                if !visible(ctx, &name) {
                     continue;
                 }
                 let q = QualifiedSubject::new(ctx, &name);
@@ -2141,7 +2152,7 @@ impl Registry {
         Ok(json!({
             "clusterId": self.cluster_id,
             "version": env!("CARGO_PKG_VERSION"),
-            "contexts": self.admin_contexts(r)?,
+            "contexts": self.admin_contexts(r, visible)?,
             "global": {
                 "compatibility": self.config_of(r, None)?.and_then(|c| c.compatibility_level).unwrap_or(self.default_compatibility).as_str(),
                 "normalize": self.normalize_default,
@@ -2154,12 +2165,15 @@ impl Registry {
     }
 
     /// One row per context: how much it holds and what is configured on it.
-    fn admin_contexts(&self, r: &Reader<'_>) -> ApiResult<Vec<Value>> {
+    fn admin_contexts(&self, r: &Reader<'_>, visible: &dyn Fn(&str, &str) -> bool) -> ApiResult<Vec<Value>> {
         let global_mode = self.global_mode(r)?;
         let mut out = Vec::new();
         for ctx in r.list_contexts()? {
             let (mut subjects, mut deleted_subjects, mut versions) = (0usize, 0usize, 0usize);
             for name in r.list_subject_names(&ctx)? {
+                if !visible(&ctx, &name) {
+                    continue;
+                }
                 let vs = r.list_versions(&ctx, &name)?;
                 versions += vs.len();
                 if vs.iter().any(|(_, v)| !v.deleted) {
@@ -2177,6 +2191,11 @@ impl Registry {
             // server default, not to the global config: settings are resolved
             // by first match, never merged.
             let effective = cfg.as_ref().and_then(|c| c.compatibility_level).unwrap_or(self.default_compatibility);
+            // A context the caller can see nothing in is not listed - unless
+            // they administer the whole context, which includes the empty ones.
+            if subjects + deleted_subjects == 0 && !visible(&ctx, "") {
+                continue;
+            }
             out.push(json!({
                 "name": ctx,
                 "subjects": subjects,

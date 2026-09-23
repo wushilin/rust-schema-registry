@@ -65,7 +65,7 @@ deletes, configs and modes out of a Confluent.
 | Data contracts | `metadata`/`ruleSet` stored and returned; default/override metadata and rules merged from config; inherited from the previous version; rule sets validated (42210) |
 | Schema tags | `POST /subjects/{s}/versions/{v}/tags`: `tagsToAdd`/`tagsToRemove` for Avro, JSON Schema and Protobuf, `newVersion`, `metadata`, `rulesToMerge`/`rulesToRemove` |
 | Exporters | `/exporters` CRUD, `/status`, `/config`, `pause`/`resume`/`reset`; context types AUTO/CUSTOM/NONE/DEFAULT, subject globs, `subjectRenameFormat` |
-| Auth | HTTP Basic, roles `admin` / `write` / `readonly`, bcrypt or plaintext passwords |
+| Auth | HTTP Basic, roles `admin` / `write` / `readonly` registry-wide or bound to subject patterns (`.eu::orders-*`), bcrypt or plaintext passwords |
 | Admin UI | `/_admin`: one page over the same REST API - subjects, versions and schemas, compatibility and mode per subject/context/global, contexts, exporters (pause/resume/reset/create/edit), soft and permanent deletes. Admin role only |
 | Migration | `schema-registry migrate --from URL --to URL`: copies every subject, version, id, reference, soft delete, config and mode from another registry |
 
@@ -222,9 +222,50 @@ See `config.example.toml`. Key settings: `listen`, `data_dir`,
 Roles: `admin` can do everything. `write` can read, register and delete
 schemas, and set subject-level config and mode. `readonly` can do GETs plus
 lookup and compatibility tests. Verified bcrypt credentials are cached in
-memory, so the ~100 ms hash only runs once per credential. Roles are
-registry-wide: there are no per-subject role bindings (Confluent's RBAC lives
-in its MDS, not in the registry).
+memory, so the ~100 ms hash only runs once per credential.
+
+### Role bindings
+
+A role can be held registry-wide (`roles = [...]`) or bound to subjects. A
+user may hold several bindings, one per role, and they add to `roles` rather
+than limiting them - so "reads everything, owns `abc*` and `def*`, writes
+`xyz-*`" is one user:
+
+```toml
+[[auth.users]]
+username = "team-a"
+password = "$2b$12$..."
+roles = ["readonly"]
+[[auth.users.bindings]]
+role = "admin"
+subjects = [".::abc*", ".::def*"]
+[[auth.users.bindings]]
+role = "write"
+subjects = [".::xyz-*"]
+```
+
+A pattern is `context::subject`, both sides accepting `*`: `.::orders-value`,
+`.::test*`, `.eu::*` (a whole context), `*::*` (everywhere). Without `::` it
+is a subject in the default context. An unparseable pattern stops the server
+at startup rather than granting something unintended.
+
+Which roles apply is decided by what the request names:
+
+| the request is about | roles that count |
+|---|---|
+| a subject (`/subjects/x/...`, `/config/x`, `/compatibility/subjects/x/...`) | registry-wide roles + bindings matching `x` |
+| a context (`/config/:.eu:`, `/mode/:.eu:`, `DELETE /contexts/.eu`) | registry-wide roles + bindings covering the whole context (`.eu::*`) |
+| a listing (`/subjects`, `/schemas`, `/contexts`, `/_admin`) | anyone holding a role; the **response is filtered** to what the caller may see |
+| anything else: global config and mode, exporters, schema-by-id | registry-wide roles only |
+
+Filtering rather than refusing is what makes a scoped role usable: an admin of
+`abc*` sees `abc*` in `/subjects` and in the admin UI, and the UI lists exactly
+the subjects that caller administers, so nothing it offers can come back 403.
+
+Two deliberate limits. `GET /schemas/ids/{id}` is not subject-scoped - ids are
+a registry-wide namespace and serializers fetch them constantly - so any
+authenticated caller may read a schema by id. And global settings, contexts and
+exporters always need a registry-wide `admin`.
 
 ## Admin UI
 
@@ -243,8 +284,8 @@ outside requests - for looking at and operating the registry:
 
 Changes go through the public REST API, so the UI can do nothing an admin
 could not do with `curl`, and every refusal is the registry's own error. It is
-restricted to the `admin` role: the overview shows every subject and setting
-at once. Two JSON endpoints back it, `GET /_admin/api/overview` and
+restricted to the `admin` role - registry-wide, or over some subjects, in
+which case the page shows exactly those. Two JSON endpoints back it, `GET /_admin/api/overview` and
 `GET /_admin/api/subjects/{subject}`; `/_admin` is outside Confluent's URL
 namespace, so nothing else is shadowed.
 
@@ -279,10 +320,11 @@ If bindgen cannot find libclang, point `LIBCLANG_PATH` at it.
 ## Testing
 
 ```
-cargo test                                    # 107 tests, including the HTTP conformance replay
-tests/run_integration.sh                      # e2e + exporter + official Python and Java clients (with auth)
+cargo test                                    # 116 tests, including the HTTP conformance replay
+tests/run_integration.sh                      # e2e + exporter + rbac + official Python and Java clients (with auth)
 python3 tests/exporter.py                     # schema linking: a source exporting into a destination
 python3 tests/migrate.py [--source URL]       # a full copy between two registries
+python3 tests/rbac.py                         # roles and role bindings over HTTP
 tests/exporter_cli.sh [/path/to/confluent]    # the official `confluent` CLI driving the exporter API
 tests/confluent_tools.sh [/path/to/confluent-7.9.0]  # Confluent's console producers/consumers over real Kafka
 tests/run_integration.sh --against URL [u:p]  # the client suites against any registry (e.g. Confluent)
@@ -296,6 +338,13 @@ keeps the source context, AUTO namespaces under the source cluster id,
 DEFAULT flattens, CUSTOM plus `subjectRenameFormat` - with ids, versions and
 cross-context references preserved, soft and permanent deletes replayed,
 pause/resume/reset, and recovery from a dead destination.
+
+**Role-binding tests** (`tests/rbac.py`): one server whose users mix
+registry-wide roles with bindings; checks what each may do and is refused
+(subjects, contexts, global settings, exporters) and what each is *shown* -
+`/subjects`, `/schemas`, `/contexts`, `/schemas/ids/{id}/subjects` and the
+admin UI all filtered to that caller - plus that an unparseable pattern stops
+the server from starting.
 
 **Migration tests** (`tests/migrate.py`): fill a source with contexts,
 references, every schema type, soft-deleted versions, metadata, configs and

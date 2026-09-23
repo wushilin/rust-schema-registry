@@ -801,7 +801,7 @@ fn admin_overview_reports_subjects_contexts_and_where_settings_come_from() {
     r.set_config(Some("a-value"), level(CompatibilityLevel::Full)).unwrap();
     r.set_config(Some(":.eu:"), level(CompatibilityLevel::None)).unwrap();
 
-    let v = r.admin_overview(None, true, 100).unwrap();
+    let v = r.admin_overview(None, true, 100, &|_, _| true).unwrap();
     let rows = v["subjects"].as_array().unwrap();
     let row = |s: &str| rows.iter().find(|x| x["subject"] == s).unwrap_or_else(|| panic!("{s} missing"));
     assert_eq!(v["counts"]["subjects"], 3);
@@ -816,7 +816,7 @@ fn admin_overview_reports_subjects_contexts_and_where_settings_come_from() {
     assert_eq!(row("gone-value")["deletedVersions"], 1);
 
     // Live subjects only, unless deleted rows are asked for.
-    let live = r.admin_overview(None, false, 100).unwrap();
+    let live = r.admin_overview(None, false, 100, &|_, _| true).unwrap();
     assert!(live["subjects"].as_array().unwrap().iter().all(|x| x["subject"] != "gone-value"));
 
     let contexts = v["contexts"].as_array().unwrap();
@@ -829,7 +829,7 @@ fn admin_overview_reports_subjects_contexts_and_where_settings_come_from() {
     assert_eq!(default_ctx["deletedSubjects"], 1);
 
     // `limit` caps the rows, not the counts.
-    let capped = r.admin_overview(None, true, 1).unwrap();
+    let capped = r.admin_overview(None, true, 1, &|_, _| true).unwrap();
     assert_eq!(capped["counts"]["shown"], 1);
     assert_eq!(capped["counts"]["subjects"], 3);
 }

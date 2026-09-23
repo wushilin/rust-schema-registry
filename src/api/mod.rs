@@ -112,6 +112,38 @@ impl<S: Send + Sync, T: DeserializeOwned> FromRequest<S> for Body<T> {
     }
 }
 
+/// Who is asking. Listings are filtered to what this caller may see; with
+/// authentication off every request carries an unrestricted caller.
+pub struct Caller(pub std::sync::Arc<crate::authz::Principal>);
+
+impl Caller {
+    /// Keep only the subjects this caller may see. `subject_of` reads the
+    /// context-qualified subject out of each item.
+    pub fn filter<T>(&self, items: Vec<T>, subject_of: impl Fn(&T) -> &str) -> Vec<T> {
+        if self.0.sees_everything() {
+            return items;
+        }
+        items
+            .into_iter()
+            .filter(|x| match crate::context::QualifiedSubject::parse(subject_of(x)) {
+                Ok(q) => self.0.can_see_subject(&q.context, &q.subject),
+                Err(_) => false,
+            })
+            .collect()
+    }
+}
+
+impl<S: Send + Sync> axum::extract::FromRequestParts<S> for Caller {
+    type Rejection = std::convert::Infallible;
+
+    async fn from_request_parts(parts: &mut axum::http::request::Parts, _: &S) -> Result<Self, Self::Rejection> {
+        Ok(Caller(match parts.extensions.get::<std::sync::Arc<crate::authz::Principal>>() {
+            Some(p) => p.clone(),
+            None => std::sync::Arc::new(crate::authz::Principal::unrestricted()),
+        }))
+    }
+}
+
 /// Query parameters, Confluent style (`?deleted=true`). Keeps repeated keys in `pairs`.
 pub struct Params(pub HashMap<String, String>, pub Vec<(String, String)>);
 

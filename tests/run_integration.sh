@@ -10,6 +10,7 @@
 #   exporter   tests/exporter.py        schema linking between two instances: every context mapping,
 #                                        renaming, replayed deletes, error/resume
 #   migrate    tests/migrate.py         `schema-registry migrate` copying a whole registry
+#   rbac       tests/rbac.py            roles and role bindings: what each user may do, and is shown
 #   cli        tests/exporter_cli.sh    the official `confluent` CLI driving the exporter API
 #   tools      tests/confluent_tools.sh Confluent's own console producers/consumers and load tool,
 #                                        over a real Kafka (needs CONFLUENT_HOME)
@@ -26,7 +27,7 @@ set -uo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 R_e2e="not run"; R_exporter="not run"; R_python="not run"; R_java="not run"
-R_cli="not run"; R_tools="not run"; R_migrate="not run"
+R_cli="not run"; R_tools="not run"; R_migrate="not run"; R_rbac="not run"
 EXTERNAL_URL=""
 EXTERNAL_AUTH=""
 if [[ "${1:-}" == "--against" ]]; then
@@ -59,6 +60,13 @@ if [[ -z "$EXTERNAL_URL" ]]; then
     (cd tests && python3 migrate.py) && R_migrate=pass || R_migrate=FAIL
   else
     R_migrate=skipped
+  fi
+
+  say "rbac (roles, bindings and filtered listings)"
+  if python3 -c "import requests" 2>/dev/null; then
+    (cd tests && python3 rbac.py) && R_rbac=pass || R_rbac=FAIL
+  else
+    R_rbac=skipped
   fi
 
   say "confluent CLI exporter (skipped without the CLI)"
@@ -122,7 +130,7 @@ fi
 
 say "summary"
 status=0
-for pair in "e2e:$R_e2e" "exporter:$R_exporter" "migrate:$R_migrate" "cli:$R_cli" "tools:$R_tools" "python:$R_python" "java:$R_java"; do
+for pair in "e2e:$R_e2e" "exporter:$R_exporter" "migrate:$R_migrate" "rbac:$R_rbac" "cli:$R_cli" "tools:$R_tools" "python:$R_python" "java:$R_java"; do
   printf '  %-8s %s\n' "${pair%%:*}" "${pair#*:}"
   [[ "${pair#*:}" == "FAIL" ]] && status=1
 done

@@ -7,7 +7,7 @@ use axum::http::{HeaderValue, StatusCode, header};
 use axum::response::{IntoResponse, Response};
 use serde_json::{Value, json};
 
-use super::{AppState, JsonBody, Params, Sr, blocking, inline, jackson, java_int};
+use super::{AppState, Caller, JsonBody, Params, Sr, blocking, inline, jackson, java_int};
 use crate::error::{ApiError, ApiResult};
 use crate::model::{CompatibilityLevel, ConfigUpdateRequest, Mode, ModeUpdateRequest, RegisterSchemaRequest, TagSchemaRequest};
 use crate::registry::VersionSpec;
@@ -62,7 +62,7 @@ pub async fn schema_types() -> Sr<Value> {
 
 // ---------------- schemas ----------------
 
-pub async fn list_schemas(State(st): State<AppState>, p: Params) -> ApiResult<Response> {
+pub async fn list_schemas(State(st): State<AppState>, caller: Caller, p: Params) -> ApiResult<Response> {
     let prefix = p.get("subjectPrefix").map(String::from);
     let (deleted, latest, aliases) = (p.flag("deleted"), p.flag("latestOnly"), p.flag("aliases"));
     let rule_type = p.get("ruleType").map(String::from);
@@ -70,6 +70,7 @@ pub async fn list_schemas(State(st): State<AppState>, p: Params) -> ApiResult<Re
     p.int("offset", 0)?;
     p.int("limit", -1)?;
     let list = inline(&st, |r| r.list_schemas(prefix.as_deref(), deleted, latest, aliases, rule_type.as_deref()))?;
+    let list = caller.filter(list, |e| e.subject.as_str());
     Ok(Sr(p.page_capped(list, l.schema_default, l.schema_max)?).into_response())
 }
 
@@ -90,31 +91,43 @@ pub async fn schema_by_id_raw(State(st): State<AppState>, Path(id): Path<String>
     Ok(raw_schema(view.schema))
 }
 
-pub async fn schema_id_subjects(State(st): State<AppState>, Path(id): Path<String>, p: Params) -> ApiResult<Response> {
+pub async fn schema_id_subjects(
+    State(st): State<AppState>,
+    Path(id): Path<String>,
+    caller: Caller,
+    p: Params,
+) -> ApiResult<Response> {
     let id = parse_id(&id)?;
     let subject = p.get("subject").map(String::from);
     let deleted = p.flag("deleted");
     let list = inline(&st, |r| r.id_subjects(id, subject.as_deref(), deleted))?;
-    Ok(Sr(list).into_response())
+    Ok(Sr(caller.filter(list, |s| s.as_str())).into_response())
 }
 
-pub async fn schema_id_versions(State(st): State<AppState>, Path(id): Path<String>, p: Params) -> ApiResult<Response> {
+pub async fn schema_id_versions(
+    State(st): State<AppState>,
+    Path(id): Path<String>,
+    caller: Caller,
+    p: Params,
+) -> ApiResult<Response> {
     let id = parse_id(&id)?;
     let subject = p.get("subject").map(String::from);
     let deleted = p.flag("deleted");
     let list = inline(&st, |r| r.id_versions(id, subject.as_deref(), deleted))?;
-    Ok(Sr(list).into_response())
+    Ok(Sr(caller.filter(list, |v| v.subject.as_str())).into_response())
 }
 
 // ---------------- subjects ----------------
 
-pub async fn list_subjects(State(st): State<AppState>, p: Params) -> ApiResult<Response> {
+pub async fn list_subjects(State(st): State<AppState>, caller: Caller, p: Params) -> ApiResult<Response> {
     let prefix = p.get("subjectPrefix").map(String::from);
     let (deleted, deleted_only) = (p.flag("deleted"), p.flag("deletedOnly"));
     let l = st.registry.limits;
     p.int("offset", 0)?;
     p.int("limit", -1)?;
     let list = inline(&st, |r| r.list_subjects(prefix.as_deref(), deleted, deleted_only))?;
+    // Paging applies to what this caller can see, so a scoped user gets whole pages.
+    let list = caller.filter(list, |s| s.as_str());
     Ok(Sr(p.page_capped(list, l.subject_default, l.subject_max)?).into_response())
 }
 
@@ -353,8 +366,9 @@ pub async fn delete_subject_mode(State(st): State<AppState>, Path(s): Path<Strin
 
 // ---------------- contexts ----------------
 
-pub async fn list_contexts(State(st): State<AppState>) -> ApiResult<Response> {
+pub async fn list_contexts(State(st): State<AppState>, caller: Caller) -> ApiResult<Response> {
     let list = inline(&st, |r| r.list_contexts())?;
+    let list: Vec<String> = list.into_iter().filter(|c| caller.0.can_see_context(c)).collect();
     Ok(Sr(list).into_response())
 }
 

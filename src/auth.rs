@@ -5,16 +5,19 @@
 //! * `readonly` - GET requests plus the side-effect-free POSTs
 //!                (schema lookup and compatibility tests)
 //!
+//! A role can be held registry-wide or bound to subject patterns; which roles
+//! apply to a given request, and how listings are filtered, is [`crate::authz`].
+//!
 //! Passwords may be stored as bcrypt hashes (`$2a$`/`$2b$`/`$2y$`, produced by
 //! `schema-registry hash-password`) or plaintext. bcrypt is deliberately slow
 //! (~100ms), and serializers can hit the registry often, so successful
 //! verifications are cached in memory keyed by SHA-256(user:password).
 
 use std::collections::{HashMap, HashSet};
-use std::sync::RwLock;
+use std::sync::{Arc, RwLock};
 
 use axum::extract::{Request, State};
-use axum::http::{HeaderValue, Method, header};
+use axum::http::{HeaderValue, header};
 use axum::middleware::Next;
 use axum::response::{IntoResponse, Response};
 use base64::Engine;
@@ -22,19 +25,21 @@ use sha2::{Digest, Sha256};
 use subtle::ConstantTimeEq;
 
 use crate::api::AppState;
-use crate::config::{AuthConfig, Role};
+use crate::authz::Principal;
+use crate::config::AuthConfig;
 use crate::error::ApiError;
 
 pub struct Auth {
     enabled: bool,
     realm: String,
-    users: HashMap<String, (String, Vec<Role>)>,
+    users: HashMap<String, (String, Arc<Principal>)>,
     verified: RwLock<HashSet<[u8; 32]>>,
 }
 
 impl Auth {
     pub fn new(cfg: &AuthConfig) -> Self {
-        let users = cfg.users.iter().map(|u| (u.username.clone(), (u.password.clone(), u.roles.clone()))).collect();
+        let users =
+            cfg.users.iter().map(|u| (u.username.clone(), (u.password.clone(), Arc::new(Principal::from_user(u))))).collect();
         Self { enabled: cfg.enabled, realm: cfg.realm.clone(), users, verified: RwLock::new(HashSet::new()) }
     }
 
@@ -43,20 +48,20 @@ impl Auth {
     }
 
     /// Fast path: credentials already verified (no bcrypt). `None` = unknown, not "invalid".
-    fn cached(&self, header_value: &str) -> Option<&[Role]> {
+    fn cached(&self, header_value: &str) -> Option<Arc<Principal>> {
         let (user, password) = decode_basic(header_value)?;
-        let (stored, roles) = self.users.get(&user)?;
+        let (stored, principal) = self.users.get(&user)?;
         let key = cache_key(&user, &password, stored);
-        self.verified.read().ok()?.contains(&key).then_some(roles.as_slice())
+        self.verified.read().ok()?.contains(&key).then(|| principal.clone())
     }
 
-    /// Returns the user's roles if the credentials are valid.
-    fn authenticate(&self, header_value: &str) -> Option<&[Role]> {
+    /// Returns what the caller may do, if the credentials are valid.
+    fn authenticate(&self, header_value: &str) -> Option<Arc<Principal>> {
         let (user, password) = decode_basic(header_value)?;
-        let (stored, roles) = self.users.get(&user)?;
+        let (stored, principal) = self.users.get(&user)?;
         let cache_key = cache_key(&user, &password, stored);
         if self.verified.read().map(|s| s.contains(&cache_key)).unwrap_or(false) {
-            return Some(roles);
+            return Some(principal.clone());
         }
         let ok = if stored.starts_with("$2a$") || stored.starts_with("$2b$") || stored.starts_with("$2y$") {
             bcrypt::verify(&password, stored).unwrap_or(false)
@@ -70,7 +75,7 @@ impl Auth {
                 }
                 s.insert(cache_key);
             }
-            Some(roles)
+            Some(principal.clone())
         } else {
             None
         }
@@ -89,50 +94,27 @@ fn cache_key(user: &str, password: &str, stored: &str) -> [u8; 32] {
     Sha256::digest(format!("{user}\0{password}\0{stored}").as_bytes()).into()
 }
 
-/// Is this request allowed for the given roles?
-fn authorized(roles: &[Role], method: &Method, path: &str) -> bool {
-    if roles.contains(&Role::Admin) {
-        return true;
-    }
-    // The admin UI shows every subject, schema and setting at once: admins only.
-    if path.starts_with("/_admin") {
-        return false;
-    }
-    let read_only_request = matches!(*method, Method::GET | Method::HEAD | Method::OPTIONS)
-        || (*method == Method::POST
-            && (path.starts_with("/compatibility/")
-                || (path.starts_with("/subjects/") && !path.ends_with("/versions"))));
-    if read_only_request {
-        return !roles.is_empty();
-    }
-    if roles.contains(&Role::Write) {
-        // Writers manage schemas and subject-scoped settings, not global ones or exporters.
-        // `/config/{subject}` is subject-scoped; `/config` (global) and `/config/:.ctx:` (context) are not.
-        let subject_scoped = (path.starts_with("/config/") || path.starts_with("/mode/")) && !path.ends_with(':');
-        return path.starts_with("/subjects/") || subject_scoped;
-    }
-    false
-}
-
-pub async fn middleware(State(st): State<AppState>, req: Request, next: Next) -> Response {
+pub async fn middleware(State(st): State<AppState>, mut req: Request, next: Next) -> Response {
     let auth = &st.auth;
     if !auth.enabled {
         return next.run(req).await;
     }
     let creds = req.headers().get(header::AUTHORIZATION).and_then(|v| v.to_str().ok()).map(String::from);
     let Some(creds) = creds else { return challenge(auth) };
-    let roles = match auth.cached(&creds) {
-        Some(r) => Some(r.to_vec()),
+    let principal = match auth.cached(&creds) {
+        Some(p) => Some(p),
         None => {
             // First sight of these credentials: bcrypt is CPU-heavy, keep it off the async workers.
             let auth2 = st.auth.clone();
-            tokio::task::spawn_blocking(move || auth2.authenticate(&creds).map(|r| r.to_vec())).await.ok().flatten()
+            tokio::task::spawn_blocking(move || auth2.authenticate(&creds)).await.ok().flatten()
         }
     };
-    let Some(roles) = roles else { return challenge(auth) };
-    if !authorized(&roles, req.method(), req.uri().path()) {
+    let Some(principal) = principal else { return challenge(auth) };
+    if !crate::authz::authorized(&principal, req.method(), req.uri().path()) {
         return ApiError::forbidden("User is denied operation on this resource").into_response();
     }
+    // Handlers filter what they return to what this caller may see.
+    req.extensions_mut().insert(principal);
     next.run(req).await
 }
 
@@ -149,35 +131,22 @@ mod tests {
     use super::*;
 
     #[test]
-    fn role_rules() {
-        let ro = [Role::Readonly];
-        let w = [Role::Write];
-        assert!(authorized(&ro, &Method::GET, "/subjects"));
-        // The admin UI is for admins, whatever the method.
-        assert!(!authorized(&ro, &Method::GET, "/_admin"));
-        assert!(!authorized(&w, &Method::GET, "/_admin/api/overview"));
-        assert!(authorized(&[Role::Admin], &Method::GET, "/_admin"));
-        assert!(authorized(&ro, &Method::POST, "/subjects/foo"));
-        assert!(authorized(&ro, &Method::POST, "/compatibility/subjects/foo/versions/latest"));
-        assert!(!authorized(&ro, &Method::POST, "/subjects/foo/versions"));
-        assert!(authorized(&w, &Method::POST, "/subjects/foo/versions"));
-        assert!(authorized(&w, &Method::PUT, "/config/foo"));
-        assert!(!authorized(&w, &Method::PUT, "/config"));
-        assert!(!authorized(&w, &Method::POST, "/exporters"));
-        assert!(authorized(&[Role::Admin], &Method::POST, "/exporters"));
-    }
-
-    #[test]
     fn verifies_plain_and_bcrypt() {
         let cfg = AuthConfig {
             enabled: true,
             realm: "r".into(),
             users: vec![
-                crate::config::UserConfig { username: "a".into(), password: "pw".into(), roles: vec![Role::Admin] },
+                crate::config::UserConfig {
+                    username: "a".into(),
+                    password: "pw".into(),
+                    roles: vec![crate::config::Role::Admin],
+                    bindings: vec![],
+                },
                 crate::config::UserConfig {
                     username: "b".into(),
                     password: bcrypt::hash("secret", 4).unwrap(),
-                    roles: vec![Role::Readonly],
+                    roles: vec![crate::config::Role::Readonly],
+                    bindings: vec![],
                 },
             ],
         };

@@ -146,7 +146,15 @@ different build - and into Confluent - so it never encodes anything about the
 on-disk layout. Restore replays it through IMPORT mode, which is what
 `migrate.rs` already does; a dump is just another source for that path.
 
-## 7. Exporters
+## 7. Logging
+
+One record per mutation and per request, with fields rather than prose.
+**Records go to stdout, warnings and errors to stderr**, and `log_format =
+"json"` writes the same fields as one object per line. Reads are `debug`
+unless `log_reads` is on - they are the traffic, and an INFO line per read at
+130k reads a second is not a log, it is a denial of service.
+
+## 8. Exporters
 
 * An export carries the source's ids, which is only legal where the
   destination is in IMPORT mode. **Check that mode; never force it.** Setting
@@ -158,7 +166,7 @@ on-disk layout. Restore replays it through IMPORT mode, which is what
 * Both refusals arrive as `42205`. Classify by re-reading the destination's
   effective mode (`?defaultToGlobal=true`), never by parsing message text.
 
-## 8. Style
+## 9. Style
 
 * Comments explain **why**, not what. No comment that restates the code.
 * Doc comments on modules and non-obvious functions; name the Confluent method
@@ -170,8 +178,11 @@ on-disk layout. Restore replays it through IMPORT mode, which is what
   any width, and a blanket reformat buries a real change in thousands of lines.
   Match the surrounding formatting by hand; ~140 columns, one statement a line.
 * Tests read as documentation: the name says the behaviour, the body shows it.
+* A python test under `tests/` takes the binary as `argv[1]`; `e2e.py` reads
+  it from there. A suite that strips argv gets the stale debug build and will
+  quietly test yesterday's code.
 
-## 9. Operational facts
+## 10. Operational facts
 
 * Deployed at `wushilin@192.168.44.99`, under processmaster:
   `/opt/services/systemd/processmaster/auto_services/schema-registry/`
@@ -186,7 +197,7 @@ on-disk layout. Restore replays it through IMPORT mode, which is what
   instance. `.new` must stay in IMPORT mode for it to run.
 * Ask before touching data on that host. It holds subjects that are not ours.
 
-## 10. Working agreements
+## 11. Working agreements
 
 * Share a design before implementing anything structural; implement after
   agreement, not before.

@@ -43,10 +43,12 @@ impl Containers {
         Self { routes, by_name: registries }
     }
 
+    #[allow(dead_code)] // for an admin view across containers
     pub fn all(&self) -> impl Iterator<Item = (&TenantId, &Arc<Registry>)> {
         self.by_name.iter()
     }
 
+    #[allow(dead_code)] // same
     pub fn get(&self, name: &TenantId) -> Option<&Arc<Registry>> {
         self.by_name.get(name)
     }

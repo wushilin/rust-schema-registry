@@ -108,7 +108,6 @@ pub struct Registry {
     /// Parsed request schemas by hash(type, text, references), for repeated register/lookup.
     parsed_by_text: Cache<[u8; 32], Arc<ParsedSchema>>,
     locks: Locks,
-    exporter_lock: Mutex<()>,
     pub default_compatibility: CompatibilityLevel,
     /// Server-wide default for `normalize` (see `ServerConfig::normalize`).
     normalize_default: bool,
@@ -632,6 +631,9 @@ const CONTEXT_STRIPES: usize = 64;
 pub(crate) struct Locks {
     container: std::sync::RwLock<()>,
     contexts: [Mutex<()>; CONTEXT_STRIPES],
+    /// Exporter records: their own lock, shared with the worker's cursor
+    /// writes, so a busy export never waits behind a registration.
+    exporters: Mutex<()>,
     /// Held only around the snapshot swap in `commit`, never around an fsync.
     publish: Mutex<()>,
 }
@@ -641,14 +643,19 @@ impl Default for Locks {
         Self {
             container: std::sync::RwLock::new(()),
             contexts: [const { Mutex::new(()) }; CONTEXT_STRIPES],
+            exporters: Mutex::new(()),
             publish: Mutex::new(()),
         }
     }
 }
 
+/// Held for as long as the mutation runs; the guards are never read, they are
+/// dropped.
+#[allow(dead_code)]
 pub(crate) enum WriteGuard<'a> {
     Container(std::sync::RwLockWriteGuard<'a, ()>),
     Context(std::sync::RwLockReadGuard<'a, ()>, std::sync::MutexGuard<'a, ()>),
+    Exporters(std::sync::MutexGuard<'a, ()>),
 }
 
 impl Locks {
@@ -665,6 +672,7 @@ impl Locks {
         use crate::mutations::Target;
         let ctx = match target {
             Target::Global => return self.container.try_write().ok().map(WriteGuard::Container),
+            Target::Exporters => return self.exporters.try_lock().ok().map(WriteGuard::Exporters),
             Target::Context(ctx) => ctx.as_str(),
             Target::Subject(q) => q.context.as_str(),
         };
@@ -678,6 +686,9 @@ impl Locks {
         let ctx = match target {
             Target::Global => {
                 return WriteGuard::Container(self.container.write().unwrap_or_else(|e| e.into_inner()));
+            }
+            Target::Exporters => {
+                return WriteGuard::Exporters(self.exporters.lock().unwrap_or_else(|e| e.into_inner()));
             }
             Target::Context(ctx) => ctx.as_str(),
             Target::Subject(q) => q.context.as_str(),
@@ -704,7 +715,6 @@ impl Registry {
             parsed_by_id: Cache::new(cache_max_entries),
             parsed_by_text: Cache::new(cache_max_entries),
             locks: Locks::default(),
-            exporter_lock: Mutex::new(()),
             default_compatibility,
             normalize_default,
             cluster_id,
@@ -2114,113 +2124,24 @@ impl Registry {
 
     // ---------------- exporters ----------------
 
+    /// The worker's own bookkeeping takes the exporter lock directly: a cursor
+    /// written after every batch is not a mutation, and running it through the
+    /// engine would make an export wait behind registrations.
     fn exporter_lock(&self) -> std::sync::MutexGuard<'_, ()> {
-        self.exporter_lock.lock().unwrap_or_else(|e| e.into_inner())
+        self.locks.exporters.lock().unwrap_or_else(|e| e.into_inner())
     }
 
-    fn validate_exporter(info: &ExporterInfo) -> ApiResult<()> {
-        let valid_name = !info.name.is_empty()
-            && info.name.len() <= 256
-            && info.name.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.'));
-        if !valid_name {
-            return Err(ApiError::invalid_exporter(format!("Invalid exporter name '{}'", info.name)));
-        }
-        match info.context_type.as_str() {
-            "AUTO" | "NONE" | "DEFAULT" => {}
-            "CUSTOM" => {
-                if info.context.as_deref().is_none_or(|c| crate::context::normalize_context(c).is_none()) {
-                    return Err(ApiError::invalid_exporter("Context type CUSTOM requires a valid 'context'"));
-                }
-            }
-            other => return Err(ApiError::invalid_exporter(format!("Invalid context type '{other}'"))),
-        }
-        if !info.config.get("schema.registry.url").and_then(Value::as_str).is_some_and(|s| !s.is_empty()) {
-            return Err(ApiError::invalid_exporter("Missing required config 'schema.registry.url'"));
-        }
-        if info.subjects.is_empty() {
-            return Err(ApiError::invalid_exporter("Exporter 'subjects' must not be empty"));
-        }
-        // CUSTOM and DEFAULT map every source context onto one destination
-        // context. Since ids are per context (each starts at 1), two source
-        // contexts would collide there and the import could not keep ids.
-        if matches!(info.context_type.as_str(), "CUSTOM" | "DEFAULT") {
-            let mut contexts: Vec<String> = Vec::new();
-            for p in &info.subjects {
-                let q = QualifiedSubject::parse(p)?;
-                if q.is_wildcard() {
-                    return Err(ApiError::invalid_exporter(format!(
-                        "Exporter '{}' with contextType {} cannot use the context wildcard ':*:': ids are per context and could not be preserved in '{}'",
-                        info.name,
-                        info.context_type,
-                        info.context.as_deref().unwrap_or(DEFAULT_CONTEXT)
-                    )));
-                }
-                if !contexts.contains(&q.context) {
-                    contexts.push(q.context);
-                }
-            }
-            if contexts.len() > 1 {
-                return Err(ApiError::invalid_exporter(format!(
-                    "Exporter '{}' with contextType {} would merge contexts {} into one destination context; ids are per context and could not be preserved",
-                    info.name,
-                    info.context_type,
-                    contexts.join(", ")
-                )));
-            }
-        }
-        Ok(())
-    }
-
+    /// The exporter verbs, in `mutations::exporters`.
     pub fn create_exporter(&self, req: ExporterUpdateRequest) -> ApiResult<String> {
-        let _g = self.exporter_lock();
-        let name = req.name.clone().unwrap_or_default();
-        if self.store.get_exporter(&name)?.is_some() {
-            return Err(ApiError::exporter_exists(&name));
-        }
-        let info = ExporterInfo {
-            name: name.clone(),
-            subjects: req.subjects.unwrap_or_else(|| vec!["*".into()]),
-            context_type: req.context_type.map(|c| c.to_ascii_uppercase()).unwrap_or_else(|| "AUTO".into()),
-            context: req.context,
-            subject_rename_format: req.subject_rename_format,
-            config: req.config.unwrap_or_default(),
-        };
-        Self::validate_exporter(&info)?;
-        self.store.put_exporter(
-            &ExporterRecord { info, state: ExporterState::Running, offset: 0, ts: now_millis(), trace: String::new() },
-            &crate::modegate::Allowed::not_schema_state(),
-        )?;
-        self.changes.notify_waiters();
-        Ok(name)
+        crate::engine::run(self, crate::mutations::CreateExporter::new(req))
     }
 
     pub fn update_exporter(&self, name: &str, req: ExporterUpdateRequest) -> ApiResult<String> {
-        let _g = self.exporter_lock();
-        let mut rec = self.store.get_exporter(name)?.ok_or_else(|| ApiError::exporter_not_found(name))?;
-        if let Some(s) = req.subjects {
-            rec.info.subjects = s;
-        }
-        if let Some(c) = req.context_type {
-            rec.info.context_type = c.to_ascii_uppercase();
-        }
-        if req.context.is_some() {
-            rec.info.context = req.context;
-        }
-        if req.subject_rename_format.is_some() {
-            rec.info.subject_rename_format = req.subject_rename_format;
-        }
-        if let Some(cfg) = req.config {
-            rec.info.config.extend(cfg);
-        }
-        Self::validate_exporter(&rec.info)?;
-        rec.ts = now_millis();
-        self.store.put_exporter(&rec, &crate::modegate::Allowed::not_schema_state())?;
-        self.changes.notify_waiters();
-        Ok(name.to_string())
+        crate::engine::run(self, crate::mutations::UpdateExporter::new(name, req))
     }
 
     pub fn update_exporter_config(&self, name: &str, cfg: serde_json::Map<String, Value>) -> ApiResult<String> {
-        self.update_exporter(name, ExporterUpdateRequest { config: Some(cfg), ..Default::default() })
+        crate::engine::run(self, crate::mutations::UpdateExporter::config_only(name, cfg))
     }
 
     pub fn get_exporter(&self, name: &str) -> ApiResult<ExporterRecord> {
@@ -2232,44 +2153,13 @@ impl Registry {
     }
 
     pub fn delete_exporter(&self, name: &str) -> ApiResult<()> {
-        let _g = self.exporter_lock();
-        self.get_exporter(name)?;
-        self.store.delete_exporter(name, &crate::modegate::Allowed::not_schema_state())
+        crate::engine::run(self, crate::mutations::DeleteExporter::new(name))
     }
 
     /// Pause / resume / reset.
+    /// Pause / resume / reset.
     pub fn exporter_transition(&self, name: &str, action: &str) -> ApiResult<String> {
-        let _g = self.exporter_lock();
-        let mut rec = self.get_exporter(name)?;
-        match action {
-            "pause" => rec.state = ExporterState::Paused,
-            "resume" => {
-                // A failed exporter conflicts with what the destination holds;
-                // picking up where it stopped would hit the same wall.
-                if rec.state == ExporterState::Failed {
-                    return Err(ApiError::operation_not_permitted(format!(
-                        "Exporter {name} has failed and cannot be resumed; reset it to start over. Last error: {}",
-                        rec.trace
-                    )));
-                }
-                rec.state = ExporterState::Running;
-                rec.trace.clear();
-            }
-            "reset" => {
-                // Start over from the beginning of the log, whatever state it
-                // was in: this is the way out of Failed.
-                rec.offset = 0;
-                rec.trace.clear();
-                if rec.state != ExporterState::Paused {
-                    rec.state = ExporterState::Running;
-                }
-            }
-            _ => return Err(ApiError::unprocessable(format!("unknown action {action}"))),
-        }
-        rec.ts = now_millis();
-        self.store.put_exporter(&rec, &crate::modegate::Allowed::not_schema_state())?;
-        self.changes.notify_waiters();
-        Ok(name.to_string())
+        crate::engine::run(self, crate::mutations::TransitionExporter::new(name, action))
     }
 
     /// Called by the exporter worker. Only applies if the exporter still exists

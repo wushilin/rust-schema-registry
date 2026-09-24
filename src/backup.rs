@@ -52,6 +52,7 @@ pub struct Dump {
 
 impl Dump {
     /// Which versions of a subject are live (everything else was soft-deleted).
+    #[cfg(test)]
     fn live(&self, subject: &str) -> Vec<u32> {
         self.subjects
             .get(subject)

@@ -15,6 +15,7 @@ pub mod delete_context;
 pub mod delete_subject;
 pub mod delete_subject_config;
 pub mod delete_subject_version;
+pub mod exporters;
 pub mod register_schema;
 pub mod set_mode;
 pub mod update_compatibility;
@@ -23,6 +24,7 @@ pub use delete_context::DeleteContext;
 pub use delete_subject::DeleteSubject;
 pub use delete_subject_config::DeleteSubjectConfig;
 pub use delete_subject_version::DeleteSubjectVersion;
+pub use exporters::{CreateExporter, DeleteExporter, TransitionExporter, UpdateExporter};
 pub use register_schema::RegisterSchema;
 pub use set_mode::{DeleteMode, SetMode};
 pub use update_compatibility::UpdateCompatibility;
@@ -42,8 +44,11 @@ pub enum Target {
     Subject(QualifiedSubject),
     /// A context's own settings, or the context itself.
     Context(String),
-    /// The registry as a whole: global config and mode, exporters.
+    /// The registry as a whole: global config and mode.
     Global,
+    /// The exporter records. Their own lock, because the worker writes its
+    /// cursor after every batch and must not wait behind a registration.
+    Exporters,
 }
 
 /// When the mode is checked. Confluent sometimes answers from state before it
@@ -72,6 +77,8 @@ pub enum Write {
     PutMode { scope: Scope, mode: Mode },
     DeleteMode { scope: Scope },
     DeleteContext { ctx: String },
+    PutExporter { rec: crate::model::ExporterRecord },
+    DeleteExporter { name: String },
 }
 
 /// What a verb decided to do.
@@ -168,6 +175,11 @@ impl<'a> ReadView<'a> {
         &self.reader
     }
 
+    /// An exporter record, which lives in the store rather than the snapshot.
+    pub fn exporter(&self, name: &str) -> ApiResult<Option<crate::model::ExporterRecord>> {
+        self.reg.store.get_exporter(name)
+    }
+
     /// The stored config for exactly this scope, with no fallback.
     pub fn config(&self, scope: &Scope) -> ApiResult<Option<ConfigRecord>> {
         self.reader.get_config(scope)
@@ -186,7 +198,7 @@ impl<'a> ReadView<'a> {
         match target {
             Target::Subject(q) => self.reg.mode_in_scope(&self.reader, q),
             Target::Context(ctx) => self.reg.mode_in_scope(&self.reader, &QualifiedSubject::new(ctx, "")),
-            Target::Global => self.reg.global_mode_in(&self.reader),
+            Target::Global | Target::Exporters => self.reg.global_mode_in(&self.reader),
         }
     }
 }
@@ -198,7 +210,7 @@ impl Target {
         match self {
             Target::Subject(q) => q.qualified(),
             Target::Context(ctx) => QualifiedSubject::new(ctx, "").qualified(),
-            Target::Global => "null".to_string(),
+            Target::Global | Target::Exporters => "null".to_string(),
         }
     }
 }

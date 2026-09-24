@@ -43,7 +43,6 @@ pub struct Shared {
 #[derive(Clone)]
 pub struct AppState {
     pub registry: Arc<Registry>,
-    pub auth: Arc<Auth>,
 }
 
 impl axum::extract::FromRequestParts<Shared> for AppState {
@@ -55,7 +54,8 @@ impl axum::extract::FromRequestParts<Shared> for AppState {
             .get::<Arc<Registry>>()
             .cloned()
             .ok_or_else(|| ApiError::internal("request reached a handler without a host container"))?;
-        Ok(AppState { registry, auth: shared.auth.clone() })
+        let _ = shared;
+        Ok(AppState { registry })
     }
 }
 

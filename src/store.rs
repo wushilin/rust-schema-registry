@@ -277,8 +277,9 @@ pub struct Store {
 }
 
 impl Store {
-    /// Open a store and take the `default` container - the whole registry for
-    /// a deployment that configures no containers.
+    /// Open a store and take the `default` container. The server builds its
+    /// containers from configuration, so this is the tests' shortcut.
+    #[cfg(test)]
     pub fn open(path: &Path, sync_writes: bool) -> anyhow::Result<Self> {
         Ok(PhysicalStore::open(path, sync_writes)?.container(TenantId::default_tenant()))
     }
@@ -406,11 +407,6 @@ impl Store {
     pub fn put_exporter(&self, rec: &ExporterRecord, _: &crate::modegate::Allowed) -> ApiResult<()> {
         let key = self.key(rec.info.name.as_bytes());
         self.db.db.put_cf(self.db.cf(CF_EXPORTERS), key, serde_json::to_vec(rec)?)?;
-        Ok(())
-    }
-
-    pub fn delete_exporter(&self, name: &str, _: &crate::modegate::Allowed) -> ApiResult<()> {
-        self.db.db.delete_cf(self.db.cf(CF_EXPORTERS), self.key(name.as_bytes()))?;
         Ok(())
     }
 
@@ -627,6 +623,15 @@ impl Tx<'_> {
         let key = self.store.key(&scope.key());
         self.batch.delete_cf(self.store.db.cf(CF_MODE), key);
         self.ops.push(Op::DeleteMode { scope: scope.clone() });
+    }
+
+    pub fn put_exporter(&mut self, rec: &ExporterRecord, _: &crate::modegate::Allowed) -> ApiResult<()> {
+        self.put(CF_EXPORTERS, rec.info.name.as_bytes(), rec)
+    }
+
+    pub fn delete_exporter(&mut self, name: &str, _: &crate::modegate::Allowed) {
+        let key = self.store.key(name.as_bytes());
+        self.batch.delete_cf(self.store.db.cf(CF_EXPORTERS), key);
     }
 
     pub fn append_log(&mut self, ev: &LogEvent) -> ApiResult<()> {

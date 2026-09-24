@@ -98,6 +98,8 @@ fn apply<T>(reg: &Registry, plan: Plan<T>, allowed: &modegate::Allowed) -> ApiRe
             Write::PutMode { scope, mode } => tx.put_mode(scope, *mode, allowed)?,
             Write::DeleteMode { scope } => tx.delete_mode(scope, allowed),
             Write::DeleteContext { ctx } => tx.delete_context(ctx, allowed),
+            Write::PutExporter { rec } => tx.put_exporter(rec, allowed)?,
+            Write::DeleteExporter { name } => tx.delete_exporter(name, allowed),
         }
     }
     for e in &plan.events {

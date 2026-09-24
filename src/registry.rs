@@ -103,7 +103,8 @@ pub struct Registry {
     /// Schema bodies by (context, id). Bounded; content under an id is immutable.
     bodies: Cache<(String, u32), Arc<SchemaRecord>>,
     /// Parsed stored schemas by (context, id), for compatibility checks and formatting.
-    parsed_by_id: Cache<(String, u32), Arc<ParsedSchema>>,
+    /// Parsed stored schemas by (context, id, what its references resolved to).
+    parsed_by_id: Cache<(String, u32, [u8; 32]), Arc<ParsedSchema>>,
     /// Parsed request schemas by hash(type, text, references), for repeated register/lookup.
     parsed_by_text: Cache<[u8; 32], Arc<ParsedSchema>>,
     write_lock: Mutex<()>,
@@ -939,17 +940,53 @@ impl Registry {
         Ok(rec.schema.clone())
     }
 
+    /// Parse a stored schema, through the cache.
+    ///
+    /// Content under an id never changes (registering over an id is refused,
+    /// and a hard delete removes versions, not bodies), so `(context, id)`
+    /// would be enough for the schema itself. It is not enough for the parse:
+    /// that also depends on what the schema's references resolved to, and a
+    /// reference is a (subject, version) pair whose content *can* change -
+    /// hard-delete the referrer, then re-import its target differently, and
+    /// the same id would parse against something new. Keying on the resolved
+    /// closure as well makes a stale entry impossible to look up rather than
+    /// merely unlikely.
     fn parse_record(&self, r: &Reader<'_>, ctx: &str, id: u32, rec: &SchemaRecord) -> ApiResult<Arc<ParsedSchema>> {
-        let key = (ctx.to_string(), id);
+        let resolved = self.resolve_stored(r, ctx, &rec.references)?;
+        let key = (ctx.to_string(), id, Self::deps_fingerprint(&resolved));
         if let Some(p) = self.parsed_by_id.get(&key) {
             return Ok(p);
         }
-        let resolved = self.resolve_stored(r, ctx, &rec.references)?;
         let parsed = schema::parse_with(rec.schema_type, &rec.schema, &resolved, false)
             .map_err(|e| ApiError::internal(format!("stored schema no longer parses: {e}")))?;
         let parsed = Arc::new(parsed);
         self.parsed_by_id.insert(key, parsed.clone());
         Ok(parsed)
+    }
+
+    /// Parse a stored schema by id, for tests that need to see whether the
+    /// cache handed back the same parse.
+    #[cfg(test)]
+    pub(crate) fn parse_for_test(&self, ctx: &str, id: u32) -> ApiResult<Arc<ParsedSchema>> {
+        let r = &self.reader();
+        let rec = r.get_schema(ctx, id)?.ok_or_else(ApiError::schema_not_found)?;
+        self.parse_record(r, ctx, id, &rec)
+    }
+
+    /// What a schema's references resolved to, as a cache key component.
+    /// A schema without references - the common case - costs nothing.
+    fn deps_fingerprint(resolved: &[ResolvedRef]) -> [u8; 32] {
+        if resolved.is_empty() {
+            return [0; 32];
+        }
+        let mut h = Sha256::new();
+        for r in resolved {
+            h.update([0]);
+            h.update(&r.name);
+            h.update([1]);
+            h.update(&r.schema);
+        }
+        h.finalize().into()
     }
 
     // ---------------- compatibility ----------------

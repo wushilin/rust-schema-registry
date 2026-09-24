@@ -912,3 +912,58 @@ fn every_write_entry_point_consults_the_mode_table() {
     refused(r.set_config(Some(":.empty:"), crate::model::ConfigRecord::default()).unwrap_err());
     r.delete_context(".empty").expect("an empty context is not schema state");
 }
+
+#[test]
+fn a_parsed_schema_is_cached_against_what_its_references_resolved_to() {
+    // The parse of an id depends on what its references resolve to, and that
+    // content can be replaced underneath it: hard-delete the referrer, then
+    // re-import its target differently. Keyed on (context, id) alone, the
+    // second parse would be the first one's answer.
+    let (r, _d) = registry();
+    let dep = |field: &str| {
+        json!({"type": "record", "name": "Dep", "namespace": "com.x", "fields": [{"name": field, "type": "int"}]})
+            .to_string()
+    };
+    let holder = json!({
+        "type": "record", "name": "Holder", "namespace": "com.x",
+        "fields": [{"name": "d", "type": "com.x.Dep"}]
+    })
+    .to_string();
+
+    r.register("dep", req(dep("a")), false).unwrap();
+    let holder_id = r
+        .register(
+            "holder",
+            RegisterSchemaRequest {
+                schema: Some(holder),
+                references: Some(vec![
+                    SchemaReference { name: "com.x.Dep".into(), subject: "dep".into(), version: 1 }.into(),
+                ]),
+                ..Default::default()
+            },
+            false,
+        )
+        .unwrap()
+        .id;
+
+    use crate::registry::VersionSpec;
+    use std::sync::Arc;
+
+    let first = r.parse_for_test(".", holder_id).unwrap();
+    assert!(Arc::ptr_eq(&first, &r.parse_for_test(".", holder_id).unwrap()), "unchanged references must hit the cache");
+
+    // Remove the referrer (a live one would block the next step), then give
+    // `dep` version 1 a different shape under a fresh id.
+    r.delete_version("holder", VersionSpec::Exact(1), false).unwrap();
+    r.delete_version("holder", VersionSpec::Exact(1), true).unwrap();
+    r.delete_version("dep", VersionSpec::Exact(1), false).unwrap();
+    r.delete_version("dep", VersionSpec::Exact(1), true).unwrap();
+    r.set_mode(Some("dep"), Mode::Import, true).unwrap();
+    r.register("dep", import_req(dep("b"), 50, Some(1)), false).unwrap();
+    r.set_mode(Some("dep"), Mode::Readwrite, true).unwrap();
+
+    // The holder's body is still there (bodies are never deleted), and parsing
+    // it now resolves the *current* dep, so the cached parse must not be used.
+    let after = r.parse_for_test(".", holder_id).unwrap();
+    assert!(!Arc::ptr_eq(&first, &after), "a parse built against the old dep was reused");
+}

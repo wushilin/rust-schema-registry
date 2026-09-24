@@ -66,10 +66,61 @@ deletes, configs and modes out of a Confluent.
 | Schema tags | `POST /subjects/{s}/versions/{v}/tags`: `tagsToAdd`/`tagsToRemove` for Avro, JSON Schema and Protobuf, `newVersion`, `metadata`, `rulesToMerge`/`rulesToRemove` |
 | Exporters | `/exporters` CRUD, `/status`, `/config`, `pause`/`resume`/`reset`; context types AUTO/CUSTOM/NONE/DEFAULT, subject globs, `subjectRenameFormat`; states RUNNING/PAUSED/ERROR/FAILED |
 | Auth | HTTP Basic, roles `admin` / `write` / `readonly` registry-wide or bound to subject patterns (`.eu::orders-*`), bcrypt or plaintext passwords |
+| Host containers | several logically separate registries in one process and one store, keyed by a prefix on every row (contexts, subjects, ids, config, modes, exporters and the change log). One implicit `default` container unless configured |
 | Admin UI | `/admin`: one page over the same REST API - register schemas and new versions (with a compatibility check), subjects, versions and schemas, compatibility and mode per subject/context/global, contexts, exporters (pause/resume/reset/create/edit), soft and permanent deletes. Admin role only |
 | Migration | `schema-registry migrate --from URL --to URL`: copies every subject, version, id, reference, soft delete, config and mode from another registry |
 
+## How it is built
+
+Three principles, in the order they matter.
+
+**1. A rule is enforced by the shape of the code, not by remembering to call
+it.** Every bug this server has had in its rules was the same bug: a check that
+lived at a call site. So the rules live in one place each, and the code is
+arranged so that skipping one does not compile.
+
+| rule | where it lives | why it cannot be skipped |
+|---|---|---|
+| which operations a mode allows | `modegate.rs`, one table over (intent, mode) | every store write that defines registry state demands an `Allowed`, and only consulting that table produces one. Exemptions are named - `is_a_mode_change()`, `not_schema_state()` - so `grep` lists everything that skips it |
+| who may do what, and see what | `authz.rs`, pure functions over (principal, target, intent) | the target is read off the request; listings are filtered by the same predicate that authorizes, so "shown" and "allowed" cannot drift |
+| one container's rows | `store.rs`, `Store` prefixes every key | nothing above the store builds a key, so one container cannot name another's rows |
+| when a change is legal, locked, logged, published | `engine.rs`, one pipeline | a verb declares; the engine performs. A verb that forgot a step never had the step to forget |
+
+**2. A change is a verb, and verbs are data.** Each mutation is its own file in
+`mutations/`: it declares what it touches, what kind of change it is, when the
+mode should be checked, and turns a snapshot into a plan (writes + log events +
+answer). `plan()` takes no lock, writes nothing and reads no clock, so a verb is
+tested by comparing plans - no server, no port, no waiting. The engine is the
+only code that sequences a write, so ordering exists once rather than per
+handler. (Verbs are being moved onto it a slice at a time; `registry.rs` still
+holds the ones that have not moved.)
+
+**3. Confluent's answers are the specification, including their order.**
+Compatibility is checked by replaying 1,553 recorded request/response pairs
+from a live Confluent 7.9. That corpus has twice rejected designs that were
+cleaner than what shipped - most usefully a mode gate in front of the routes,
+which is wrong because Confluent answers some requests from state before it
+considers the mode at all (`POST /subjects/x/versions` with an id that already
+matches is 200 in READWRITE mode; `DELETE /config/x` on a missing subject is
+404, not the read-only error). Anything that reorders those answers is a
+regression, however tidy it looks.
+
 ## Design decisions
+
+**Where things live.**
+
+```
+src/http (api/)   transport: axum, media types, Jersey/Jackson quirks, URI rewrite
+src/auth.rs       authentication: Basic, bcrypt cache
+src/authz.rs      authorization: roles, bindings, targets, visibility
+src/store.rs      PhysicalStore (RocksDB) + Store (one host container's view)
+src/snapshot.rs   the read model: immutable metadata, swapped per commit
+src/mutations/    one file per verb: what it touches, and its plan
+src/engine.rs     the one path a change takes
+src/modegate.rs   the mode table, and the token the store demands
+src/exporter.rs   a change-log subscriber that ships schemas elsewhere
+src/schema/       Avro, JSON Schema, Protobuf: parsing, normalization, compatibility
+```
 
 **RocksDB is the source of truth; memory is the read model.** Confluent keeps
 its state in a Kafka topic and rebuilds an in-memory cache on startup. With a

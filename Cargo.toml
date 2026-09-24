@@ -1,6 +1,6 @@
 [package]
 name = "rust-schema-registry"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2024"
 license = "Apache-2.0"
 description = "A Confluent-compatible Schema Registry: single node, RocksDB storage, contexts, exporters and IMPORT mode"

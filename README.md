@@ -579,7 +579,7 @@ If bindgen cannot find libclang, point `LIBCLANG_PATH` at it.
 ## Testing
 
 ```
-cargo test                                    # 116 tests, including the HTTP conformance replay
+cargo test                                    # 150 tests, including the HTTP conformance replay
 tests/run_integration.sh                      # e2e + exporter + rbac + official Python and Java clients (with auth)
 python3 tests/exporter.py                     # schema linking: a source exporting into a destination
 python3 tests/migrate.py [--source URL]       # a full copy between two registries
@@ -795,6 +795,11 @@ Schema GUIDs (`/schemas/guids`) are a Confluent 8 feature and are not part of
 the 7.9 API this server targets. The exporter API is modeled on Confluent
 Platform's schema linking, which Confluent's community edition does not ship
 (it returns 404), so it could not be conformance-tested the same way.
+
+## Releases
+
+See [CHANGELOG.md](CHANGELOG.md). A data directory from 0.1.0 is migrated in
+place the first time 0.2.0 opens it - restartable, and one-way.
 
 ## License
 

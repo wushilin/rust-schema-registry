@@ -13,6 +13,7 @@
 #   rbac       tests/rbac.py            roles and role bindings: what each user may do, and is shown
 #   containers tests/containers.py      host containers: two registries in one process, sharing nothing
 #   backup     tests/backup.py          the logical dump: backup, wipe, restore, compare
+#   proxy      tests/proxy.py           PROXY protocol v1/v2, who gets logged, and /metrics
 #   cli        tests/exporter_cli.sh    the official `confluent` CLI driving the exporter API
 #   tools      tests/confluent_tools.sh Confluent's own console producers/consumers and load tool,
 #                                        over a real Kafka (needs CONFLUENT_HOME)
@@ -29,7 +30,7 @@ set -uo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 R_e2e="not run"; R_exporter="not run"; R_python="not run"; R_java="not run"
-R_cli="not run"; R_tools="not run"; R_migrate="not run"; R_rbac="not run"; R_containers="not run"; R_backup="not run"
+R_cli="not run"; R_tools="not run"; R_migrate="not run"; R_rbac="not run"; R_containers="not run"; R_backup="not run"; R_proxy="not run"
 EXTERNAL_URL=""
 EXTERNAL_AUTH=""
 if [[ "${1:-}" == "--against" ]]; then
@@ -76,6 +77,13 @@ if [[ -z "$EXTERNAL_URL" ]]; then
     (cd tests && python3 backup.py ../target/debug/schema-registry) && R_backup=pass || R_backup=FAIL
   else
     R_backup=skipped
+  fi
+
+  say "proxy protocol and metrics"
+  if python3 -c "import requests" 2>/dev/null; then
+    (cd tests && python3 proxy.py ../target/debug/schema-registry) && R_proxy=pass || R_proxy=FAIL
+  else
+    R_proxy=skipped
   fi
 
   say "containers (host containers sharing one store)"
@@ -146,7 +154,7 @@ fi
 
 say "summary"
 status=0
-for pair in "e2e:$R_e2e" "exporter:$R_exporter" "migrate:$R_migrate" "rbac:$R_rbac" "containers:$R_containers" "backup:$R_backup" "cli:$R_cli" "tools:$R_tools" "python:$R_python" "java:$R_java"; do
+for pair in "e2e:$R_e2e" "exporter:$R_exporter" "migrate:$R_migrate" "rbac:$R_rbac" "containers:$R_containers" "backup:$R_backup" "proxy:$R_proxy" "cli:$R_cli" "tools:$R_tools" "python:$R_python" "java:$R_java"; do
   printf '  %-8s %s\n' "${pair%%:*}" "${pair#*:}"
   [[ "${pair#*:}" == "FAIL" ]] && status=1
 done

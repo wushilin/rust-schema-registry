@@ -100,7 +100,10 @@ pub async fn middleware(State(shared): State<crate::api::Shared>, mut req: Reque
         return next.run(req).await;
     }
     let creds = req.headers().get(header::AUTHORIZATION).and_then(|v| v.to_str().ok()).map(String::from);
-    let Some(creds) = creds else { return challenge(auth) };
+    let Some(creds) = creds else {
+        return challenge(auth);
+    };
+    let creds_for_log = creds.clone();
     let principal = match auth.cached(&creds) {
         Some(p) => Some(p),
         None => {
@@ -109,7 +112,13 @@ pub async fn middleware(State(shared): State<crate::api::Shared>, mut req: Reque
             tokio::task::spawn_blocking(move || auth2.authenticate(&creds)).await.ok().flatten()
         }
     };
-    let Some(principal) = principal else { return challenge(auth) };
+    let Some(principal) = principal else {
+        // Worth knowing who is guessing, and from where.
+        let who = decode_basic(&creds_for_log).map(|(u, _)| u).unwrap_or_default();
+        let client = req.extensions().get::<crate::api::ClientAddr>().map(|c| c.0.to_string()).unwrap_or_default();
+        tracing::warn!(user = %who, client, path = %req.uri().path(), "authentication failed");
+        return challenge(auth);
+    };
     // Which container this request reached was decided before authentication;
     // a user who is not bound to it gets nothing, whatever the Host said.
     if let Some(reg) = req.extensions().get::<std::sync::Arc<crate::registry::Registry>>()

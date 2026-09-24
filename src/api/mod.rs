@@ -69,18 +69,22 @@ pub async fn access_log(req: Request, next: axum::middleware::Next) -> Response 
     let path = req.uri().path().to_string();
     let container = req.extensions().get::<Arc<Registry>>().map(|r| r.container().to_string()).unwrap_or_default();
     let verbose = req.extensions().get::<LogReads>().is_some_and(|l| l.0);
+    // Whoever the accept loop decided is on the other end - the address from a
+    // believed PROXY header, or the socket's.
+    let client = req.extensions().get::<ClientAddr>().map(|c| c.0.to_string()).unwrap_or_default();
     let resp = next.run(req).await;
     let status = resp.status().as_u16();
     let elapsed_us = started.elapsed().as_micros() as u64;
+    crate::metrics::metrics().request(method.as_str(), &crate::metrics::route_shape(&path), status, &container, elapsed_us);
     let read = matches!(method, axum::http::Method::GET | axum::http::Method::HEAD | axum::http::Method::OPTIONS);
     if status >= 500 {
-        tracing::error!(%method, path, status, container, elapsed_us, "request failed");
+        tracing::error!(%method, path, status, container, client, elapsed_us, "request failed");
     } else if status >= 400 {
-        tracing::warn!(%method, path, status, container, elapsed_us, "request refused");
+        tracing::warn!(%method, path, status, container, client, elapsed_us, "request refused");
     } else if read && !verbose {
-        tracing::debug!(%method, path, status, container, elapsed_us, "request");
+        tracing::debug!(%method, path, status, container, client, elapsed_us, "request");
     } else {
-        tracing::info!(%method, path, status, container, elapsed_us, "request");
+        tracing::info!(%method, path, status, container, client, elapsed_us, "request");
     }
     resp
 }
@@ -89,6 +93,11 @@ pub async fn access_log(req: Request, next: axum::middleware::Next) -> Response 
 /// does not need the whole configuration.
 #[derive(Clone, Copy)]
 pub struct LogReads(pub bool);
+
+/// Who is on the other end: from the PROXY header when one was believed, and
+/// from the socket otherwise. Put on every request by the accept loop.
+#[derive(Clone, Copy)]
+pub struct ClientAddr(pub std::net::SocketAddr);
 
 /// Resolve the `Host` header to a container, once, in front of everything.
 pub async fn route_container(
@@ -416,6 +425,8 @@ pub fn router(shared: Shared, max_body_bytes: usize) -> Router {
         .route("/admin/api/subjects/{subject}", get(admin::subject_detail))
         .route("/admin/api/backup", get(admin::backup))
         .route("/admin/api/restore", post(admin::restore))
+        // Counters and gauges, in Prometheus' text format.
+        .route("/metrics", get(metrics_endpoint))
         // The UI used to live under /_admin; keep those links working.
         .route("/_admin", get(admin::moved))
         .route("/_admin/", get(admin::moved))
@@ -430,6 +441,17 @@ pub fn router(shared: Shared, max_body_bytes: usize) -> Router {
         // every other connection carry on.
         .layer(tower_http::catch_panic::CatchPanicLayer::custom(on_panic))
         .with_state(shared)
+}
+
+/// `GET /metrics`: what the whole process has been doing, every container
+/// included. Aggregate counts only - no subject names, no schemas - so any
+/// authenticated caller may scrape it.
+async fn metrics_endpoint(axum::extract::State(shared): axum::extract::State<Shared>) -> Response {
+    let body = crate::metrics::metrics().render(&shared.containers);
+    let mut resp = (StatusCode::OK, body).into_response();
+    resp.headers_mut()
+        .insert(header::CONTENT_TYPE, HeaderValue::from_static("text/plain; version=0.0.4; charset=utf-8"));
+    resp
 }
 
 /// Turn a panic into Confluent's error shape, and log it with the payload.

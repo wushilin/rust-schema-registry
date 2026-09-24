@@ -68,7 +68,9 @@ deletes, configs and modes out of a Confluent.
 | Auth | HTTP Basic, roles `admin` / `write` / `readonly` registry-wide or bound to subject patterns (`.eu::orders-*`), bcrypt or plaintext passwords |
 | Host containers | several logically separate registries in one process and one store, chosen by the `Host` header and separated by a prefix on every row - contexts, subjects, ids, config, modes, exporters and the change log. One implicit `default` container unless configured ([how](#host-containers-several-registries-one-process)) |
 | Backup / restore | `schema-registry backup --from URL` and `restore --from dump --to URL`, plus `GET /admin/api/backup` and `POST /admin/api/restore`: a newline-delimited JSON dump of subjects, versions, ids, references, metadata, rule sets, config, modes and exporters |
-| Logging | one record per mutation and per request, as text or JSON; records on stdout, warnings and errors on stderr |
+| Logging | one record per mutation and per request, with the client address, as text or JSON; records on stdout, warnings and errors on stderr |
+| Metrics | `GET /metrics` in Prometheus' text format: requests and mutations by shape and outcome, durations, and per-container gauges |
+| Behind a proxy | PROXY protocol v1 and v2, auto-detected from the first bytes, believed only from configured networks |
 | Admin UI | `/admin`: one page over the same REST API - register schemas and new versions (with a compatibility check), subjects, versions and schemas, compatibility and mode per subject/context/global, contexts, exporters (pause/resume/reset/create/edit), soft and permanent deletes. Admin role only |
 | Migration | `schema-registry migrate --from URL --to URL`: copies every subject, version, id, reference, soft delete, config and mode from another registry |
 
@@ -448,6 +450,30 @@ subject drops that subject's settings. Re-running is safe - registering the
 same id and version again is a no-op - and unknown record types are skipped,
 so a newer build's dump still restores what an older one understands.
 
+## Behind a proxy
+
+When something sits in front - a load balancer, a TLS terminator - the address
+the socket reports is the proxy's. The PROXY protocol fixes that by writing the
+original addresses as **the first bytes of the connection**, before a TLS
+handshake and long before HTTP, so this server reads them straight off the
+accepted socket. Both versions are recognised by those bytes, so one listener
+serves proxied and direct connections without being told which to expect.
+
+```toml
+proxy_protocol = "auto"                               # auto | off | required
+proxy_trust    = "192.168.44.0/24;127.0.0.1/32"       # or a list
+```
+
+**A header is only believed from a trusted network.** Anyone can write those
+bytes, so believing them from the open internet would let a client choose what
+appears in the log. From an untrusted peer nothing is read: the bytes stay in
+the stream and are parsed as the HTTP they claimed not to be, which fails. The
+default trust set is loopback and the private ranges.
+
+`required` refuses a connection without a header, for a port only the proxy
+should reach. If TLS is ever terminated here rather than in front, it wraps the
+stream *after* this - the header comes first, always.
+
 ## Logging
 
 One record per mutation (`verb`, `container`, `elapsed_us`, and on refusal
@@ -459,6 +485,30 @@ writes one JSON object per line with the same fields.
 Reads are the bulk of the traffic, so they are recorded at `debug` unless
 `log_reads = true`; writes and failures are always recorded. `RUST_LOG` still
 works for anything finer.
+
+## Metrics
+
+`GET /metrics` returns Prometheus' text format - counts and timings the process
+has accumulated, plus gauges read from the containers at scrape time:
+
+```
+sr_requests_total{method="POST",route="/subjects/*/versions",container="prod",status="200"} 41
+sr_request_duration_seconds_bucket{method="GET",route="/subjects",container="prod",le="0.001"} 1180
+sr_mutations_total{verb="RegisterSchema",container="prod",outcome="refused"} 3
+sr_subjects{container="prod"} 214
+sr_versions{container="prod"} 337
+sr_exporter_up{container="prod",exporter="to-dr",state="RUNNING"} 1
+sr_exporter_offset{container="prod",exporter="to-dr"} 9418
+```
+
+Labels are deliberately coarse: a route is reported as its **shape**
+(`/subjects/*/versions`), never with the subject in it, because a label that
+grows with the registry is how monitoring becomes the thing that falls over.
+Mutations are counted by verb and outcome, which is the engine's view - one
+record per attempted change, refusals included.
+
+It carries aggregate counts only, no subject names and no schemas, so any
+authenticated caller may scrape it.
 
 ## Admin UI
 
@@ -557,6 +607,12 @@ and one data directory - independent ids for the same subject name, contexts
 and settings that do not leak, one read-only while the other writes, the admin
 view scoped to one, a user bound to one refused in the other whatever `Host`
 it claims, an unknown host 421, and all of it surviving a restart.
+
+**Proxy and metrics tests** (`tests/proxy.py`): real sockets - a direct
+connection, a v1 header, a v2 header, a v2 health check, and a client on an
+untrusted address claiming to be a proxy - checking which address each is
+logged under, that the claim is refused rather than believed, and that
+`/metrics` counts what happened without a subject name reaching a label.
 
 **Role-binding tests** (`tests/rbac.py`): one server whose users mix
 registry-wide roles with bindings; checks what each may do and is refused

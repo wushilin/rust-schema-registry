@@ -46,6 +46,20 @@ pub struct ServerConfig {
     /// Log every request, not only writes and failures. Reads are the bulk of
     /// the traffic, so this is off unless someone is looking for something.
     pub log_reads: bool,
+    /// `auto` (the default), `off` or `required`: whether to read a PROXY
+    /// protocol header from the first bytes of a connection.
+    pub proxy_protocol: String,
+    /// Whose PROXY headers are believed, as CIDRs. Written either as a list
+    /// or as one string with `;` or `,` between them:
+    ///
+    /// ```toml
+    /// proxy_trust = "192.168.44.0/24;127.0.0.1/32"
+    /// ```
+    ///
+    /// Defaults to loopback and the private ranges - a proxy on the LAN, never
+    /// a client on the internet.
+    #[serde(deserialize_with = "one_or_many")]
+    pub proxy_trust: Vec<String>,
     pub auth: AuthConfig,
     /// Host containers: several logically separate registries in one process
     /// and one store. Without any, there is one named `default` that answers
@@ -86,6 +100,8 @@ impl Default for ServerConfig {
             schema_search_max_limit: 1000,
             subject_search_default_limit: 20_000,
             subject_search_max_limit: 20_000,
+            proxy_protocol: "auto".into(),
+            proxy_trust: crate::proxy_protocol::DEFAULT_TRUSTED.iter().map(|s| s.to_string()).collect(),
             log_format: "text".into(),
             log_reads: false,
             auth: AuthConfig::default(),
@@ -142,6 +158,25 @@ pub struct RoleBinding {
     pub subjects: Vec<String>,
 }
 
+/// A setting that is naturally a list but is often written as one line:
+/// `"192.168.44.0/24;127.0.0.1/32"` and `["192.168.44.0/24", "127.0.0.1/32"]`
+/// mean the same thing.
+fn one_or_many<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Vec<String>, D::Error> {
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum OneOrMany {
+        One(String),
+        Many(Vec<String>),
+    }
+    let split = |s: &str| -> Vec<String> {
+        s.split([';', ',']).map(str::trim).filter(|p| !p.is_empty()).map(String::from).collect()
+    };
+    Ok(match OneOrMany::deserialize(d)? {
+        OneOrMany::One(s) => split(&s),
+        OneOrMany::Many(v) => v.iter().flat_map(|s| split(s)).collect(),
+    })
+}
+
 fn default_roles() -> Vec<Role> {
     vec![Role::Readonly]
 }
@@ -167,6 +202,8 @@ impl ServerConfig {
     }
 
     pub fn validate(&self) -> anyhow::Result<()> {
+        crate::proxy_protocol::Mode::parse(&self.proxy_protocol).map_err(|e| anyhow::anyhow!(e))?;
+        crate::proxy_protocol::Trusted::parse(&self.proxy_trust).map_err(|e| anyhow::anyhow!("proxy_trust: {e}"))?;
         if !matches!(self.log_format.as_str(), "text" | "json") {
             anyhow::bail!("log_format must be 'text' or 'json', not '{}'", self.log_format);
         }

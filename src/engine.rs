@@ -31,6 +31,12 @@ pub fn run<M: Mutation>(reg: &Registry, m: M) -> ApiResult<M::Output> {
     let verb = std::any::type_name::<M>().rsplit("::").next().unwrap_or("mutation");
     let result = run_inner(reg, m);
     let elapsed_us = started.elapsed().as_micros() as u64;
+    crate::metrics::metrics().mutation(
+        verb,
+        reg.container().as_str(),
+        if result.is_ok() { "ok" } else { "refused" },
+        elapsed_us,
+    );
     match &result {
         Ok(_) => tracing::info!(verb, container = %reg.container(), elapsed_us, "mutation"),
         Err(e) => tracing::warn!(

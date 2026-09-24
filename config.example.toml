@@ -23,6 +23,23 @@ cache_max_entries = 20000
 max_body_bytes = 16777216
 exporter_poll_seconds = 10
 
+# The PROXY protocol: when something sits in front (a load balancer, a TLS
+# terminator), it writes the original client address as the first bytes of the
+# connection - before TLS, long before HTTP. Both versions are recognised by
+# those bytes, so one listener serves proxied and direct connections.
+#
+#   auto     (default) read a header when a trusted peer sends one
+#   off      never look; the socket is the client
+#   required a trusted peer must send one, for a port only the proxy reaches
+proxy_protocol = "auto"
+
+# Whose headers are believed. Anyone can write those bytes, so a client on the
+# internet must not be able to choose what appears in the log. Either form:
+#   proxy_trust = "192.168.44.0/24;127.0.0.1/32"
+#   proxy_trust = ["192.168.44.0/24", "127.0.0.1/32"]
+# Defaults to loopback and the private ranges.
+# proxy_trust = "127.0.0.0/8;10.0.0.0/8;172.16.0.0/12;192.168.0.0/16"
+
 # Records go to stdout, warnings and errors to stderr. `json` writes one JSON
 # object per line with the same fields as the readable layout.
 log_format = "text"

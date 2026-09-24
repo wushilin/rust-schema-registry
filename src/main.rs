@@ -19,10 +19,12 @@ mod context;
 mod engine;
 mod error;
 mod exporter;
+mod metrics;
 mod migrate;
 mod model;
 mod modegate;
 mod mutations;
+mod proxy_protocol;
 mod registry;
 mod schema;
 mod snapshot;
@@ -269,18 +271,72 @@ async fn main() -> anyhow::Result<()> {
     let app = api::service(api::Shared { containers, auth, log_reads: cfg.log_reads }, cfg.max_body_bytes);
 
     let listener = tokio::net::TcpListener::bind(cfg.listen).await?;
+    let mode = proxy_protocol::Mode::parse(&cfg.proxy_protocol).map_err(|e| anyhow::anyhow!(e))?;
+    let trusted = Arc::new(proxy_protocol::Trusted::parse(&cfg.proxy_trust).map_err(|e| anyhow::anyhow!(e))?);
     tracing::info!(
         listen = %cfg.listen,
         data_dir = %cfg.data_dir.display(),
         containers = %container_names,
         auth = cfg.auth.enabled,
+        proxy_protocol = %cfg.proxy_protocol,
         "schema registry started"
     );
-    axum::serve(listener, app.into_make_service())
-        .with_graceful_shutdown(async {
-            let _ = tokio::signal::ctrl_c().await;
-            tracing::info!("shutting down");
-        })
-        .await?;
-    Ok(())
+    serve(listener, app, mode, trusted).await
 }
+
+/// Accept connections ourselves rather than through `axum::serve`, because the
+/// PROXY header is the first thing on the socket and has to be read before
+/// anything else looks at the bytes. TLS, if it is ever terminated here, wraps
+/// the stream this returns - after the header, never before.
+async fn serve(
+    listener: tokio::net::TcpListener,
+    app: axum::Router,
+    mode: proxy_protocol::Mode,
+    trusted: Arc<proxy_protocol::Trusted>,
+) -> anyhow::Result<()> {
+    let mut shutdown = Box::pin(tokio::signal::ctrl_c());
+    loop {
+        let (socket, peer) = tokio::select! {
+            accepted = listener.accept() => match accepted {
+                Ok(pair) => pair,
+                // One failed accept (a file descriptor limit, a reset) is not
+                // a reason to stop serving the rest.
+                Err(e) => {
+                    tracing::warn!(error = %e, "accept failed");
+                    continue;
+                }
+            },
+            _ = &mut shutdown => {
+                tracing::info!("shutting down");
+                return Ok(());
+            }
+        };
+        let app = app.clone();
+        let trusted = trusted.clone();
+        tokio::spawn(async move {
+            let (stream, client) = match proxy_protocol::accept(socket, peer, mode, &trusted).await {
+                Ok(pair) => pair,
+                Err(e) => {
+                    tracing::warn!(%peer, error = %e, "rejected connection");
+                    return;
+                }
+            };
+            // Every request on this connection carries who asked, whether that
+            // came from a header or from the socket.
+            let svc = hyper::service::service_fn(move |mut req: hyper::Request<hyper::body::Incoming>| {
+                req.extensions_mut().insert(api::ClientAddr(client));
+                let mut app = app.clone();
+                async move { tower::Service::call(&mut app, req).await }
+            });
+            let io = hyper_util::rt::TokioIo::new(stream);
+            if let Err(e) = hyper_util::server::conn::auto::Builder::new(hyper_util::rt::TokioExecutor::new())
+                .serve_connection_with_upgrades(io, svc)
+                .await
+            {
+                tracing::debug!(%client, error = %e, "connection ended");
+            }
+        });
+    }
+}
+
+

@@ -13,10 +13,10 @@
 //! forget a step, and the `Allowed` token the store demands is produced here -
 //! a verb never sees it and so cannot fabricate one.
 //!
-//! Locking is still the registry-wide write lock. Per-target locks (parallel
-//! writes to unrelated subjects) belong here too, but only once every verb
-//! runs through this engine: while legacy paths take the global lock directly,
-//! a finer lock here would not be serialising against them.
+//! The lock a mutation takes follows from its target, so writes to different
+//! contexts - and to different host containers - run at the same time. See
+//! `registry::Locks` for what is excluded and why it is a context rather than
+//! a subject.
 
 use crate::error::ApiResult;
 use crate::modegate;
@@ -30,9 +30,11 @@ pub fn run<M: Mutation>(reg: &Registry, m: M) -> ApiResult<M::Output> {
     if let Some(out) = m.fast_path(&ReadView::new(reg))? {
         return Ok(out);
     }
-    let _guard = reg.write_lock();
-    let view = ReadView::new(reg);
     let target = m.target();
+    // Only what this mutation touches: writers to other contexts, and to other
+    // host containers, are not waiting on this one.
+    let _guard = reg.write_lock(&target);
+    let view = ReadView::new(reg);
     let mode = view.mode_for(&target)?;
     let gate = |()| modegate::check(m.intent(), mode, &target.scope_name());
 

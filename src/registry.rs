@@ -738,7 +738,7 @@ impl Registry {
     }
 
     /// `getMode(subject)`: a global READONLY_OVERRIDE wins, else exactly this scope's mode.
-    fn mode_of(&self, r: &Reader<'_>, q: Option<&QualifiedSubject>) -> ApiResult<Option<Mode>> {
+    pub(crate) fn mode_of_scope(&self, r: &Reader<'_>, q: Option<&QualifiedSubject>) -> ApiResult<Option<Mode>> {
         let global = self.global_mode_in(r)?;
         if global == Mode::ReadonlyOverride {
             return Ok(Some(global));
@@ -764,19 +764,9 @@ impl Registry {
         Ok(parent.unwrap_or(Mode::Readwrite))
     }
 
-    /// `isReadOnlyMode` guard shared by every write except register.
-    fn check_not_read_only(&self, r: &Reader<'_>, q: Option<&QualifiedSubject>) -> ApiResult<crate::modegate::Allowed> {
-        let mode = match q {
-            Some(q) => self.mode_in_scope(r, q)?,
-            None => self.global_mode_in(r)?,
-        };
-        let name = q.map(|q| q.qualified()).unwrap_or_else(|| "null".into());
-        crate::modegate::check(crate::modegate::Intent::Modify, mode, &name)
-    }
-
     /// `hasSubjects(subject, lookupDeleted)`: the subject has a (live) version;
     /// a context-only name (`:.ctx:`) matches any subject in the context.
-    fn has_subjects(&self, r: &Reader<'_>, q: &QualifiedSubject, deleted: bool) -> ApiResult<bool> {
+    pub(crate) fn has_subjects(&self, r: &Reader<'_>, q: &QualifiedSubject, deleted: bool) -> ApiResult<bool> {
         let any = |vs: Vec<(u32, VersionRecord)>| vs.iter().any(|(_, v)| deleted || !v.deleted);
         if any(r.list_versions(&q.context, &q.subject)?) {
             return Ok(true);
@@ -792,7 +782,7 @@ impl Registry {
     }
 
     /// `hasSubjects(null, ..)`: any subject anywhere.
-    fn has_any_subject(&self, r: &Reader<'_>, deleted: bool) -> ApiResult<bool> {
+    pub(crate) fn has_any_subject(&self, r: &Reader<'_>, deleted: bool) -> ApiResult<bool> {
         for ctx in r.list_contexts()? {
             for name in r.list_subject_names(&ctx)? {
                 if r.list_versions(&ctx, &name)?.iter().any(|(_, v)| deleted || !v.deleted) {
@@ -804,7 +794,7 @@ impl Registry {
     }
 
     /// `get(subject, version, returnDeleted)`: `latest` is the newest live version.
-    fn get_exact(&self, r: &Reader<'_>, q: &QualifiedSubject, spec: VersionSpec, deleted: bool) -> ApiResult<Option<(u32, VersionRecord)>> {
+    pub(crate) fn get_exact(&self, r: &Reader<'_>, q: &QualifiedSubject, spec: VersionSpec, deleted: bool) -> ApiResult<Option<(u32, VersionRecord)>> {
         let vs = r.list_versions(&q.context, &q.subject)?;
         Ok(match spec {
             VersionSpec::Latest => vs.into_iter().rev().find(|(_, v)| !v.deleted),
@@ -1698,7 +1688,7 @@ impl Registry {
 
     // ---------------- deletes ----------------
 
-    fn check_not_referenced(&self, r: &Reader<'_>, q: &QualifiedSubject, version: u32) -> ApiResult<()> {
+    pub(crate) fn check_not_referenced(&self, r: &Reader<'_>, q: &QualifiedSubject, version: u32) -> ApiResult<()> {
         if !self.live_referrers(r, &q.context, &q.subject, version)?.is_empty() {
             return Err(ApiError::reference_exists(format!(
                 "One or more references exist to the schema {{magic=1,keytype=SCHEMA,subject={},version={version}}}.",
@@ -1752,120 +1742,17 @@ impl Registry {
         Ok((writes, event))
     }
 
-    /// The same delete, applied straight to a transaction. Goes away with the
-    /// last verb that still writes without the engine.
-    fn hard_delete_rows(
-        &self,
-        r: &Reader<'_>,
-        tx: &mut crate::store::Tx<'_>,
-        q: &QualifiedSubject,
-        version: u32,
-        vr: &VersionRecord,
-        also_removed: &HashSet<(String, u32)>,
-        allowed: &crate::modegate::Allowed,
-    ) -> ApiResult<()> {
-        use crate::mutations::Write;
-        let (writes, event) = self.hard_delete_writes(r, q, version, vr, also_removed)?;
-        for w in writes {
-            match w {
-                Write::DeleteVersion { ctx, subject, version, id } => tx.delete_version(&ctx, &subject, version, id, allowed),
-                Write::DeleteRefby { ctx, subject, version, id } => tx.delete_refby(&ctx, &subject, version, id),
-                _ => unreachable!("hard_delete_writes plans only deletes"),
-            }
-        }
-        tx.append_log(&event)?;
-        Ok(())
-    }
-
     /// `DELETE /subjects/{subject}` (`SubjectsResource#deleteSubject`, then `deleteSubject`).
+    /// `deleteSubject`, in `mutations::DeleteSubject`.
     pub fn delete_subject(&self, subject: &str, permanent: bool) -> ApiResult<Vec<u32>> {
-        let q = QualifiedSubject::parse(subject)?;
-        let _guard = self.write_lock();
-        let r = &self.reader();
-        if !self.has_subjects(r, &q, true)? {
-            return Err(ApiError::subject_not_found(&q.qualified()));
-        }
-        if !permanent && !self.has_subjects(r, &q, false)? {
-            return Err(ApiError::subject_soft_deleted(&q.qualified()));
-        }
-        let allowed = self.check_not_read_only(r, Some(&q))?;
-        let versions: Vec<(u32, VersionRecord)> =
-            r.list_versions(&q.context, &q.subject)?.into_iter().filter(|(_, v)| permanent || !v.deleted).collect();
-        for (v, vr) in &versions {
-            self.check_not_referenced(r, &q, *v)?;
-            if permanent && !vr.deleted {
-                return Err(ApiError::subject_not_soft_deleted(&q.qualified()));
-            }
-        }
-        let mut tx = self.store.tx()?;
-        let scope = Self::scope_for(&q);
-        if !permanent {
-            for (v, vr) in &versions {
-                tx.put_version(&q.context, &q.subject, *v, &VersionRecord { deleted: true, ..vr.clone() }, &allowed)?;
-                tx.append_log(&LogEvent {
-                    ctx: q.context.clone(),
-                    subject: q.subject.clone(),
-                    version: *v,
-                    id: vr.id,
-                    kind: LogEventKind::SoftDelete,
-                })?;
-            }
-            tx.delete_mode(&scope, &allowed);
-            tx.delete_config(&scope, &allowed);
-        } else {
-            let all: HashSet<(String, u32)> = versions.iter().map(|(v, _)| (q.subject.clone(), *v)).collect();
-            for (v, vr) in &versions {
-                self.hard_delete_rows(r, &mut tx, &q, *v, vr, &all, &allowed)?;
-            }
-        }
-        self.commit(tx)?;
-        Ok(versions.iter().map(|(v, _)| *v).collect())
+        crate::engine::run(self, crate::mutations::DeleteSubject::new(subject, permanent)?)
     }
 
     /// `DELETE /subjects/{subject}/versions/{version}` (`SubjectVersionsResource#deleteSchemaVersion`,
     /// then `deleteSchemaVersion`).
+    /// `deleteSchemaVersion`, in `mutations::DeleteSubjectVersion`.
     pub fn delete_version(&self, subject: &str, spec: VersionSpec, permanent: bool) -> ApiResult<u32> {
-        let q = QualifiedSubject::parse(subject)?;
-        let _guard = self.write_lock();
-        let r = &self.reader();
-        let any = self.get_exact(r, &q, spec, true)?;
-        if any.is_some() && !permanent && self.get_exact(r, &q, spec, false)?.is_none() {
-            let (v, _) = any.expect("checked");
-            return Err(ApiError::version_soft_deleted(&q.qualified(), v));
-        }
-        let Some((version, vr)) = any else {
-            return Err(if self.has_subjects(r, &q, true)? {
-                ApiError::version_not_found(spec)
-            } else {
-                ApiError::subject_not_found(&q.qualified())
-            });
-        };
-        let allowed = self.check_not_read_only(r, Some(&q))?;
-        self.check_not_referenced(r, &q, version)?;
-        if permanent && !vr.deleted {
-            return Err(ApiError::version_not_soft_deleted(&q.qualified(), version));
-        }
-        let mut tx = self.store.tx()?;
-        if !permanent {
-            tx.put_version(&q.context, &q.subject, version, &VersionRecord { deleted: true, ..vr.clone() }, &allowed)?;
-            if !r.list_versions(&q.context, &q.subject)?.iter().any(|(v, x)| *v != version && !x.deleted) {
-                // That was the last live version: the subject's mode and config go too.
-                let scope = Self::scope_for(&q);
-                tx.delete_mode(&scope, &allowed);
-                tx.delete_config(&scope, &allowed);
-            }
-            tx.append_log(&LogEvent {
-                ctx: q.context.clone(),
-                subject: q.subject.clone(),
-                version,
-                id: vr.id,
-                kind: LogEventKind::SoftDelete,
-            })?;
-        } else {
-            self.hard_delete_rows(r, &mut tx, &q, version, &vr, &HashSet::new(), &allowed)?;
-        }
-        self.commit(tx)?;
-        Ok(version)
+        crate::engine::run(self, crate::mutations::DeleteSubjectVersion::new(subject, spec, permanent)?)
     }
 
     // ---------------- config ----------------
@@ -1895,76 +1782,25 @@ impl Registry {
 
     pub fn get_mode(&self, subject: Option<&str>, default_to_global: bool) -> ApiResult<Mode> {
         let r = &self.reader();
-        let Some(s) = subject else { return Ok(self.mode_of(r, None)?.expect("global mode")) };
+        let Some(s) = subject else { return Ok(self.mode_of_scope(r, None)?.expect("global mode")) };
         let q = QualifiedSubject::parse(s)?;
         if default_to_global {
             return self.mode_in_scope(r, &q);
         }
-        self.mode_of(r, Some(&q))?.ok_or_else(|| ApiError::subject_mode_not_configured(&q.qualified()))
+        self.mode_of_scope(r, Some(&q))?.ok_or_else(|| ApiError::subject_mode_not_configured(&q.qualified()))
     }
 
     /// `setMode`: entering IMPORT without `force` requires that no live
     /// subject is in scope, and hard-deletes the soft-deleted ones.
+    /// `setMode`, in `mutations::SetMode`.
     pub fn set_mode(&self, subject: Option<&str>, mode: Mode, force: bool) -> ApiResult<()> {
-        let q = subject.map(QualifiedSubject::parse).transpose()?;
-        let _guard = self.write_lock();
-        let r = &self.reader();
-        let scope = q.as_ref().map(Self::scope_for).unwrap_or(Scope::Global);
-        let mut tx = self.store.tx()?;
-        let current = match &q {
-            Some(q) => self.mode_in_scope(r, q)?,
-            None => self.global_mode_in(r)?,
-        };
-        if mode == Mode::Import && current != Mode::Import && !force {
-            let has = match &q {
-                Some(q) => self.has_subjects(r, q, false)?,
-                None => self.has_any_subject(r, false)?,
-            };
-            if has {
-                return Err(ApiError::operation_not_permitted("Cannot import since found existing subjects"));
-            }
-            let mut doomed: Vec<(QualifiedSubject, u32, VersionRecord)> = Vec::new();
-            let subjects: Vec<QualifiedSubject> = match &q {
-                None => {
-                    let mut all = Vec::new();
-                    for ctx in r.list_contexts()? {
-                        all.extend(r.list_subject_names(&ctx)?.into_iter().map(|n| QualifiedSubject::new(&ctx, &n)));
-                    }
-                    all
-                }
-                Some(q) if q.is_context_only() => {
-                    r.list_subject_names(&q.context)?.into_iter().map(|n| QualifiedSubject::new(&q.context, &n)).collect()
-                }
-                Some(q) => vec![q.clone()],
-            };
-            for sq in subjects {
-                for (v, vr) in r.list_versions(&sq.context, &sq.subject)? {
-                    self.check_not_referenced(r, &sq, v)?;
-                    doomed.push((sq.clone(), v, vr));
-                }
-            }
-            let keys: HashSet<(String, u32)> = doomed.iter().map(|(q, v, _)| (q.subject.clone(), *v)).collect();
-            // Entering IMPORT with `force` clears what is there, as in
-            // Confluent: that emptying is part of the mode change itself.
-            let allowed = crate::modegate::Allowed::is_a_mode_change();
-            for (sq, v, vr) in &doomed {
-                self.hard_delete_rows(r, &mut tx, sq, *v, vr, &keys, &allowed)?;
-            }
-        }
-        tx.put_mode(&scope, mode, &crate::modegate::Allowed::is_a_mode_change())?;
-        self.commit(tx)
+        crate::engine::run(self, crate::mutations::SetMode::new(subject, mode, force)?)
     }
 
     /// Returns the mode that was set (`getMode`).
+    /// `deleteSubjectMode`, in `mutations::DeleteMode`.
     pub fn delete_mode(&self, subject: &str) -> ApiResult<Mode> {
-        let q = QualifiedSubject::parse(subject)?;
-        let _guard = self.write_lock();
-        let r = &self.reader();
-        let previous = self.mode_of(r, Some(&q))?.ok_or_else(|| ApiError::subject_not_found(&q.qualified()))?;
-        let mut tx = self.store.tx()?;
-        tx.delete_mode(&Self::scope_for(&q), &crate::modegate::Allowed::is_a_mode_change());
-        self.commit(tx)?;
-        Ok(previous)
+        crate::engine::run(self, crate::mutations::DeleteMode::new(subject)?)
     }
 
     /// The `alias` configured for exactly this subject (`AliasFilter`).
@@ -2176,25 +2012,9 @@ impl Registry {
         r.list_contexts()
     }
 
+    /// Deleting an empty context, in `mutations::DeleteContext`.
     pub fn delete_context(&self, ctx: &str) -> ApiResult<()> {
-        let ctx = crate::context::normalize_context(ctx).ok_or_else(|| ApiError::invalid_subject(ctx))?;
-        let _guard = self.write_lock();
-        let r = &self.reader();
-        if ctx == DEFAULT_CONTEXT || ctx == crate::context::WILDCARD_CONTEXT {
-            return Err(ApiError::operation_not_permitted("The default context cannot be deleted"));
-        }
-        if !r.list_subject_names(&ctx)?.is_empty() {
-            return Err(ApiError::context_not_empty(&ctx));
-        }
-        let mut tx = self.store.tx()?;
-        // An empty context and its settings: no schema state, so no mode gate
-        // (Confluent does not gate this either).
-        let allowed = crate::modegate::Allowed::not_schema_state();
-        tx.delete_context(&ctx, &allowed);
-        tx.delete_config(&Scope::Context(ctx.clone()), &allowed);
-        tx.delete_mode(&Scope::Context(ctx.clone()), &allowed);
-        self.commit(tx)?;
-        Ok(())
+        crate::engine::run(self, crate::mutations::DeleteContext::new(ctx)?)
     }
 
     // ---------------- exporters ----------------

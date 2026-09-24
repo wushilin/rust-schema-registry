@@ -11,12 +11,20 @@
 //! reads no clock and asks nothing of the network, so a verb can be tested by
 //! setting up a snapshot and comparing plans - no HTTP, no ports, no waiting.
 
+pub mod delete_context;
+pub mod delete_subject;
 pub mod delete_subject_config;
+pub mod delete_subject_version;
 pub mod register_schema;
+pub mod set_mode;
 pub mod update_compatibility;
 
+pub use delete_context::DeleteContext;
+pub use delete_subject::DeleteSubject;
 pub use delete_subject_config::DeleteSubjectConfig;
+pub use delete_subject_version::DeleteSubjectVersion;
 pub use register_schema::RegisterSchema;
+pub use set_mode::{DeleteMode, SetMode};
 pub use update_compatibility::UpdateCompatibility;
 
 use crate::context::QualifiedSubject;
@@ -61,6 +69,9 @@ pub enum Write {
     SetNextId { ctx: String, next: u32 },
     PutConfig { scope: Scope, rec: ConfigRecord },
     DeleteConfig { scope: Scope },
+    PutMode { scope: Scope, mode: Mode },
+    DeleteMode { scope: Scope },
+    DeleteContext { ctx: String },
 }
 
 /// What a verb decided to do.

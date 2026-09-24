@@ -45,8 +45,15 @@ pub enum Intent {
     /// Register a schema with the id (and version) the caller chose.
     Import,
     /// Change stored state that is not a registration: delete a subject or a
-    /// version, edit config, edit tags, delete a context.
+    /// version, edit config, edit tags.
     Modify,
+    /// Change a mode. Never gated: it is the way out of READONLY and out of
+    /// IMPORT, so gating it on the mode would be a trap with no key. Entering
+    /// IMPORT may empty what is there, and that emptying is part of it.
+    SetMode,
+    /// Registry metadata that is not schema state, and that Confluent does not
+    /// gate on modes either: exporter records, and removing an empty context.
+    NotSchemaState,
 }
 
 /// Proof that the mode in scope allows the write about to happen. Only
@@ -57,15 +64,9 @@ pub enum Intent {
 pub struct Allowed(());
 
 impl Allowed {
-    /// A mode change itself. Never gated: it is the way out of READONLY and
-    /// out of IMPORT, so gating it on the mode would be a trap with no key.
-    pub fn is_a_mode_change() -> Self {
-        Self(())
-    }
-
-    /// Registry metadata that is not schema state and that Confluent does not
-    /// gate on modes either: exporter records, and removing an (already empty)
-    /// context. Grep this constructor to find everything that skips the table.
+    /// Registry metadata that is not schema state: exporter records, whose
+    /// writes have not moved onto the engine yet. Everything else gets its
+    /// token from [`check`], and this constructor goes when they do.
     pub fn not_schema_state() -> Self {
         Self(())
     }
@@ -76,6 +77,8 @@ impl Allowed {
 pub fn check(intent: Intent, mode: Mode, scope: &str) -> ApiResult<Allowed> {
     let refuse = |what: &str| Err(ApiError::operation_not_permitted(format!("Subject {scope} is {what}")));
     match (intent, mode) {
+        (Intent::SetMode, _) | (Intent::NotSchemaState, _) => Ok(Allowed(())),
+
         (_, Mode::Readonly | Mode::ReadonlyOverride) => refuse("in read-only mode"),
 
         (Intent::Write, Mode::Readwrite) => Ok(Allowed(())),
@@ -101,6 +104,9 @@ mod tests {
             for i in [Intent::Write, Intent::Import, Intent::Modify] {
                 assert!(!allowed(i, m), "{i:?} in {m:?}");
             }
+            // ...except the two kinds that are not schema state at all.
+            assert!(allowed(Intent::SetMode, m), "leaving {m:?} must be possible");
+            assert!(allowed(Intent::NotSchemaState, m));
         }
         // ...a normal write needs READWRITE, an import needs IMPORT, exactly...
         assert!(allowed(Intent::Write, Mode::Readwrite));

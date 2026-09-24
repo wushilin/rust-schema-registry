@@ -62,6 +62,9 @@ fn apply<T>(reg: &Registry, plan: Plan<T>, allowed: &modegate::Allowed) -> ApiRe
             Write::SetNextId { ctx, next } => tx.set_next_id(ctx, *next),
             Write::PutConfig { scope, rec } => tx.put_config(scope, rec, allowed)?,
             Write::DeleteConfig { scope } => tx.delete_config(scope, allowed),
+            Write::PutMode { scope, mode } => tx.put_mode(scope, *mode, allowed)?,
+            Write::DeleteMode { scope } => tx.delete_mode(scope, allowed),
+            Write::DeleteContext { ctx } => tx.delete_context(ctx, allowed),
         }
     }
     for e in &plan.events {

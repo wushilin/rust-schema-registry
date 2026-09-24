@@ -66,7 +66,7 @@ deletes, configs and modes out of a Confluent.
 | Schema tags | `POST /subjects/{s}/versions/{v}/tags`: `tagsToAdd`/`tagsToRemove` for Avro, JSON Schema and Protobuf, `newVersion`, `metadata`, `rulesToMerge`/`rulesToRemove` |
 | Exporters | `/exporters` CRUD, `/status`, `/config`, `pause`/`resume`/`reset`; context types AUTO/CUSTOM/NONE/DEFAULT, subject globs, `subjectRenameFormat`; states RUNNING/PAUSED/ERROR/FAILED |
 | Auth | HTTP Basic, roles `admin` / `write` / `readonly` registry-wide or bound to subject patterns (`.eu::orders-*`), bcrypt or plaintext passwords |
-| Host containers | several logically separate registries in one process and one store, keyed by a prefix on every row (contexts, subjects, ids, config, modes, exporters and the change log). One implicit `default` container unless configured |
+| Host containers | several logically separate registries in one process and one store, chosen by the `Host` header and separated by a prefix on every row - contexts, subjects, ids, config, modes, exporters and the change log. One implicit `default` container unless configured ([how](#host-containers-several-registries-one-process)) |
 | Backup / restore | `schema-registry backup --from URL` and `restore --from dump --to URL`, plus `GET /admin/api/backup` and `POST /admin/api/restore`: a newline-delimited JSON dump of subjects, versions, ids, references, metadata, rule sets, config, modes and exporters |
 | Logging | one record per mutation and per request, as text or JSON; records on stdout, warnings and errors on stderr |
 | Admin UI | `/admin`: one page over the same REST API - register schemas and new versions (with a compatibility check), subjects, versions and schemas, compatibility and mode per subject/context/global, contexts, exporters (pause/resume/reset/create/edit), soft and permanent deletes. Admin role only |
@@ -87,6 +87,24 @@ arranged so that skipping one does not compile.
 | who may do what, and see what | `authz.rs`, pure functions over (principal, target, intent) | the target is read off the request; listings are filtered by the same predicate that authorizes, so "shown" and "allowed" cannot drift |
 | one container's rows | `store.rs`, `Store` prefixes every key | nothing above the store builds a key, so one container cannot name another's rows |
 | when a change is legal, locked, logged, published | `engine.rs`, one pipeline | a verb declares; the engine performs. A verb that forgot a step never had the step to forget |
+
+What that buys, stated as promises the code keeps rather than habits it has:
+
+* **A write cannot skip the mode table.** The store will not write registry
+  state without an `Allowed`, and only consulting the table makes one. The two
+  exemptions are named (`Intent::SetMode`, `Intent::NotSchemaState`), so
+  "what is not gated" is a grep, not an audit.
+* **A write cannot skip the lock, the log or the snapshot swap.** `engine::run`
+  is the only place that takes a write lock - one line, one grep - and it
+  applies a verb's rows and its log events in a single batch, so "committed but
+  not logged" and "exported but not committed" are unrepresentable.
+* **A container cannot read another's rows.** Every key is built inside
+  `store.rs` behind a container prefix; nothing above it constructs one.
+* **What a caller is shown and what they may do cannot drift**, because both
+  come from the same predicate in `authz`.
+* **A reader sees one consistent instant** for a whole request, without taking
+  a lock, and the shared caches are safe across snapshots because what they
+  hold cannot change under a key (see *Design decisions*).
 
 **2. A change is a verb, and verbs are data.** Each mutation is its own file in
 `mutations/`: it declares what it touches, what kind of change it is, when the
@@ -345,6 +363,69 @@ a registry-wide namespace and serializers fetch them constantly - so any
 authenticated caller may read a schema by id. And global settings, contexts and
 exporters always need a registry-wide `admin`.
 
+## Host containers: several registries, one process
+
+A container is a whole registry - its own contexts, subjects, ids, global
+config and mode, exporters and change log. The request's `Host` header picks
+one:
+
+```toml
+listen = "0.0.0.0:8081"
+
+[[containers]]
+name  = "prod"
+hosts = ["sr.example.com", "sr.example.com:8081"]
+
+[[containers]]
+name  = "dev"
+hosts = ["*.dev.example.com"]
+```
+
+Patterns are globs, matched without regard to case, and the first match wins.
+A pattern without a port also matches that host *with* one, because a client
+may or may not send it; a pattern that names a port matches only that port. A
+host that matches nothing is answered **421 Misdirected Request**, not served
+by whichever container happens to be first.
+
+**Configure none and there is exactly one**, named `default`, answering on
+every host - which is why the recorded corpus still replays unchanged.
+
+The hierarchy is **container > context > subject**, and the isolation is a
+prefix on every key: schemas, fingerprints, versions, reference edges, config,
+modes, exporters, and the change log, which gets its own sequence, its own
+floor and its own pruning. Nothing above `store.rs` builds a key, so one
+container cannot name another's rows. Container names may not start with `.`
+(that is how contexts start) and the prefix ends in NUL, so `prod` never scans
+`prod-eu`'s rows. Each container also gets its own cluster id, because an
+exporter names its AUTO contexts after it and a shared one would collide at a
+destination.
+
+**`Host` routes; it does not authorize.** It is the client's to choose, so the
+boundary is credentials:
+
+```toml
+[[auth.users]]
+username   = "prod-team"
+password   = "$2b$12$..."
+roles      = ["write"]
+containers = ["prod"]        # empty (the default) is every container
+```
+
+That check runs after the container is resolved, so a forged `Host` gets 403
+rather than another container's data. For a harder boundary, give each
+container its own listener and let the network decide who reaches which port -
+the server binds one address today, so that part is not built yet.
+
+A data directory written before containers existed is migrated in place on
+first open: every row moves into `default`. It is restartable, and it is
+one-way - keep the directory, or a dump, if you may want to go back.
+
+`tests/containers.py` runs two containers on one port and one directory: the
+same subject name in both with independent ids, contexts and settings that do
+not leak, a read-only mode in one while the other writes, the admin view
+scoped to one, a bound user refused in the other whatever `Host` it claims, an
+unknown host 421, and all of it surviving a restart.
+
 ## Backup and restore
 
 The dump is newline-delimited JSON describing the *registry*, never the store,
@@ -470,6 +551,12 @@ keeps the source context, AUTO namespaces under the source cluster id,
 DEFAULT flattens, CUSTOM plus `subjectRenameFormat` - with ids, versions and
 cross-context references preserved, soft and permanent deletes replayed,
 pause/resume/reset, and recovery from a dead destination.
+
+**Host container tests** (`tests/containers.py`): two containers on one port
+and one data directory - independent ids for the same subject name, contexts
+and settings that do not leak, one read-only while the other writes, the admin
+view scoped to one, a user bound to one refused in the other whatever `Host`
+it claims, an unknown host 421, and all of it surviving a restart.
 
 **Role-binding tests** (`tests/rbac.py`): one server whose users mix
 registry-wide roles with bindings; checks what each may do and is refused

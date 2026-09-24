@@ -193,12 +193,12 @@ pub struct RegisterResponse {
 }
 
 impl RegisterResponse {
-    fn id(id: u32) -> Self {
+    pub(crate) fn id(id: u32) -> Self {
         Self { id, version: None, schema_type: None, references: Vec::new(), metadata: None, rule_set: None, schema: None }
     }
 
     /// `new RegisterSchemaResponse(schema)` for a "modified" or replayed schema.
-    fn full(e: &Entity) -> Self {
+    pub(crate) fn full(e: &Entity) -> Self {
         Self {
             id: e.id,
             version: Some(e.version),
@@ -213,17 +213,17 @@ impl RegisterResponse {
 
 /// Confluent's `Schema` entity while a request is processed (`new Schema(subject, request)`).
 #[derive(Debug, Clone)]
-struct Draft {
-    schema: Option<String>,
+pub(crate) struct Draft {
+    pub(crate) schema: Option<String>,
     /// As sent; `None` is AVRO.
-    schema_type: Option<String>,
-    refs: Vec<RefIn>,
-    metadata: Option<Value>,
-    rule_set: Option<Value>,
+    pub(crate) schema_type: Option<String>,
+    pub(crate) refs: Vec<RefIn>,
+    pub(crate) metadata: Option<Value>,
+    pub(crate) rule_set: Option<Value>,
     /// 0 when not given.
-    version: i32,
+    pub(crate) version: i32,
     /// -1 when not given.
-    id: i32,
+    pub(crate) id: i32,
 }
 
 impl From<RegisterSchemaRequest> for Draft {
@@ -317,31 +317,31 @@ fn java_rule_set(r: &Option<Value>) -> String {
 }
 
 /// A request schema after `canonicalizeSchema`.
-struct Canon {
-    schema_type: SchemaType,
+pub(crate) struct Canon {
+    pub(crate) schema_type: SchemaType,
     /// Canonical, or normalized when normalizing.
-    text: String,
-    refs: Vec<SchemaReference>,
-    targets: Vec<(QualifiedSubject, u32)>,
-    metadata: Option<Value>,
-    rule_set: Option<Value>,
-    parsed: Arc<ParsedSchema>,
+    pub(crate) text: String,
+    pub(crate) refs: Vec<SchemaReference>,
+    pub(crate) targets: Vec<(QualifiedSubject, u32)>,
+    pub(crate) metadata: Option<Value>,
+    pub(crate) rule_set: Option<Value>,
+    pub(crate) parsed: Arc<ParsedSchema>,
 }
 
 impl Canon {
     /// Confluent's `MD5.ofSchema` (plus the type: identical text under two
     /// types is two schemas here; Confluent rejects the second with 42205).
-    fn fingerprint(&self) -> String {
+    pub(crate) fn fingerprint(&self) -> String {
         schema::fingerprint(self.schema_type, &self.text, &self.refs, self.metadata.as_ref(), self.rule_set.as_ref())
     }
 }
 
 /// A stored or matched `Schema` entity: what lookups and version reads answer.
 #[derive(Debug, Clone)]
-struct Entity {
+pub(crate) struct Entity {
     subject: String,
     version: u32,
-    id: u32,
+    pub(crate) id: u32,
     schema_type: SchemaType,
     references: Vec<SchemaReference>,
     metadata: Option<Value>,
@@ -363,7 +363,7 @@ impl Entity {
         }
     }
 
-    fn from_canon(q: &QualifiedSubject, version: u32, id: u32, c: &Canon) -> Self {
+    pub(crate) fn from_canon(q: &QualifiedSubject, version: u32, id: u32, c: &Canon) -> Self {
         Self {
             subject: q.qualified(),
             version,
@@ -433,7 +433,7 @@ fn can_lookup_ignoring_version(c: &Canon, p: &Entity) -> bool {
 /// `ParsedSchema#canLookup`: exact content matches are found through the
 /// hash index; this only covers a request without references matching a
 /// stored schema with them, and `confluent:version` bookkeeping.
-fn can_lookup(c: &Canon, p: &Entity) -> bool {
+pub(crate) fn can_lookup(c: &Canon, p: &Entity) -> bool {
     if c.refs.is_empty() && !p.references.is_empty() && can_lookup_ignoring_version(c, p) {
         return true;
     }
@@ -454,7 +454,7 @@ fn with_confluent_version(metadata: Option<Value>, version: u32) -> Option<Value
 }
 
 /// A live version considered for a compatibility check.
-struct OldVersion {
+pub(crate) struct OldVersion {
     version: u32,
     id: u32,
     rec: Arc<SchemaRecord>,
@@ -729,7 +729,7 @@ impl Registry {
 
     /// The effective `normalize` for a request (our server default applies
     /// when no config in scope says otherwise).
-    fn normalize_in_scope(&self, r: &Reader<'_>, q: &QualifiedSubject) -> ApiResult<bool> {
+    pub(crate) fn normalize_in_scope(&self, r: &Reader<'_>, q: &QualifiedSubject) -> ApiResult<bool> {
         Ok(self.config_in_scope(r, q)?.normalize == Some(true))
     }
 
@@ -836,7 +836,7 @@ impl Registry {
         Ok(None)
     }
 
-    fn entity(&self, r: &Reader<'_>, q: &QualifiedSubject, version: u32, vr: &VersionRecord) -> ApiResult<Entity> {
+    pub(crate) fn entity(&self, r: &Reader<'_>, q: &QualifiedSubject, version: u32, vr: &VersionRecord) -> ApiResult<Entity> {
         let rec = r.get_schema(&q.context, vr.id)?.ok_or_else(ApiError::schema_not_found)?;
         Ok(Entity::stored(q, version, vr.id, &rec))
     }
@@ -993,7 +993,7 @@ impl Registry {
 
     /// Check `new` against `olds` (newest first) at `level`, with the server's
     /// trailer (`{validateFields: ..., compatibility: ...}`) on failure.
-    fn check_compatibility(
+    pub(crate) fn check_compatibility(
         &self,
         r: &Reader<'_>,
         ctx: &str,
@@ -1024,7 +1024,7 @@ impl Registry {
     }
 
     /// Live versions of a subject that participate in compatibility checks, newest first.
-    fn compat_candidates(
+    pub(crate) fn compat_candidates(
         &self,
         r: &Reader<'_>,
         q: &QualifiedSubject,
@@ -1051,7 +1051,7 @@ impl Registry {
 
     /// Parse, validate and (optionally) normalize a request schema:
     /// `canonicalizeSchema`. `None` for an empty schema.
-    fn canonicalize(&self, r: &Reader<'_>, q: &QualifiedSubject, d: &Draft, is_new: bool, normalize: bool) -> ApiResult<Option<Canon>> {
+    pub(crate) fn canonicalize(&self, r: &Reader<'_>, q: &QualifiedSubject, d: &Draft, is_new: bool, normalize: bool) -> ApiResult<Option<Canon>> {
         let Some(text) = d.schema.as_deref().filter(|s| !s.trim().is_empty()) else { return Ok(None) };
         let schema_type = SchemaType::parse(d.schema_type.as_deref())?;
         let (refs, resolved, targets) = self
@@ -1070,7 +1070,7 @@ impl Registry {
     /// Confluent's `lookupCache.schemaIdAndSubjects(schema)`: the id holding
     /// this exact content (text, references, metadata, rules) in the context,
     /// if any subject-version still uses it, and this subject's version of it.
-    fn hash_lookup(&self, r: &Reader<'_>, q: &QualifiedSubject, c: &Canon) -> ApiResult<Option<(u32, Option<(u32, VersionRecord)>)>> {
+    pub(crate) fn hash_lookup(&self, r: &Reader<'_>, q: &QualifiedSubject, c: &Canon) -> ApiResult<Option<(u32, Option<(u32, VersionRecord)>)>> {
         let Some(id) = r.id_for_fingerprint(&q.context, &c.fingerprint())? else { return Ok(None) };
         let usages = r.id_usages(&q.context, id)?;
         if usages.is_empty() {
@@ -1148,28 +1148,12 @@ impl Registry {
 
     /// `POST /subjects/{subject}/versions` (`SubjectVersionsResource#register`
     /// then `registerOrForward`).
+    /// `register`, in `mutations::RegisterSchema`.
     pub fn register(&self, subject: &str, req: RegisterSchemaRequest, normalize: bool) -> ApiResult<RegisterResponse> {
-        if !crate::context::is_valid_subject(subject) {
-            return Err(ApiError::invalid_subject(subject));
-        }
-        let q = QualifiedSubject::parse(subject)?;
-        let d = Draft::from(req);
-        {
-            // registerOrForward's check, lock-free on one snapshot: by far the
-            // most common "write" is re-registering an existing schema.
-            let r = &self.reader();
-            let normalize = normalize || self.normalize_in_scope(r, &q)?;
-            if let Some(resp) = self.register_fast_path(r, &q, &d, normalize)? {
-                return Ok(resp);
-            }
-        }
-        let _guard = self.write_lock();
-        let r = &self.reader();
-        let normalize = normalize || self.normalize_in_scope(r, &q)?;
-        self.register_locked(r, &q, d, normalize)
+        crate::engine::run(self, crate::mutations::RegisterSchema::new(subject, req, normalize)?)
     }
 
-    fn register_fast_path(&self, r: &Reader<'_>, q: &QualifiedSubject, d: &Draft, normalize: bool) -> ApiResult<Option<RegisterResponse>> {
+    pub(crate) fn register_fast_path(&self, r: &Reader<'_>, q: &QualifiedSubject, d: &Draft, normalize: bool) -> ApiResult<Option<RegisterResponse>> {
         let cfg = self.config_in_scope(r, q)?;
         if cfg.has_defaults_or_overrides() {
             return Ok(None);
@@ -1199,7 +1183,7 @@ impl Registry {
     /// `maybePopulateFromPrevious`: an empty schema re-uses the latest
     /// version's; metadata and rules are inherited from it and wrapped with the
     /// configured defaults/overrides; `confluent:version` tracks the version.
-    fn populate_from_previous(
+    pub(crate) fn populate_from_previous(
         &self,
         r: &Reader<'_>,
         q: &QualifiedSubject,
@@ -1233,119 +1217,6 @@ impl Registry {
             return Ok(true);
         }
         Ok(populated)
-    }
-
-    /// `KafkaSchemaRegistry#register`, under the write lock.
-    fn register_locked(&self, r: &Reader<'_>, q: &QualifiedSubject, mut d: Draft, normalize: bool) -> ApiResult<RegisterResponse> {
-        // checkRegisterMode: the same table the route-level gate uses, so a
-        // registration cannot slip past it by arriving through another path.
-        let mode = self.mode_in_scope(r, q)?;
-        let intent = if d.id >= 0 { crate::modegate::Intent::Import } else { crate::modegate::Intent::Write };
-        let allowed = &crate::modegate::check(intent, mode, &q.qualified())?;
-        let import = mode == Mode::Import;
-        let versions = r.list_versions(&q.context, &q.subject)?;
-        let new_version = versions.iter().map(|(v, _)| *v).max().map_or(1, |m| m + 1);
-        let undeleted: Vec<(u32, VersionRecord)> = versions.iter().rev().filter(|(_, v)| !v.deleted).cloned().collect();
-        let cfg = self.config_in_scope(r, q)?;
-        let modified = !import && self.populate_from_previous(r, q, &cfg, &mut d, undeleted.first(), new_version)?;
-
-        let mut schema_id = d.id;
-        let canon = self.canonicalize(r, q, &d, schema_id < 0, normalize)?;
-        if let Some(c) = &canon
-            && let Some((id, sv)) = self.hash_lookup(r, q, c)?
-            && (schema_id < 0 || schema_id as u32 == id)
-        {
-            if d.version == 0
-                && let Some((v, vr)) = sv
-                && !vr.deleted
-            {
-                return Ok(if modified { RegisterResponse::full(&Entity::from_canon(q, v, id, c)) } else { RegisterResponse::id(id) });
-            }
-            schema_id = id as i32;
-        }
-        if d.version == 0
-            && let Some(c) = &canon
-        {
-            for (v, vr) in &undeleted {
-                if schema_id >= 0 && schema_id as u32 != vr.id {
-                    continue;
-                }
-                if can_lookup(c, &self.entity(r, q, *v, vr)?) {
-                    return Ok(if modified { RegisterResponse::full(&Entity::from_canon(q, *v, vr.id, c)) } else { RegisterResponse::id(vr.id) });
-                }
-            }
-        }
-        // IMPORT with an empty schema: Confluent would store it unparsed.
-        let c = canon.ok_or_else(|| ApiError::new(42201, "Empty schema"))?;
-        if !import {
-            let level = cfg.compatibility_level.unwrap_or(self.default_compatibility);
-            let olds = self.compat_candidates(r, q, &cfg, &c.metadata)?;
-            let msgs = self.check_compatibility(r, &q.context, &c.parsed, &olds, level, &cfg)?;
-            if !msgs.is_empty() {
-                return Err(ApiError::incompatible(&q.qualified(), &msgs));
-            }
-        }
-        let version = if d.version <= 0 {
-            new_version
-        } else if new_version != d.version as u32 && !import {
-            return Err(ApiError::new(42201, "Version is not one more than previous version"));
-        } else {
-            d.version as u32
-        };
-        let fp = c.fingerprint();
-        let next_id = r.next_id(&q.context)?;
-        let id = if schema_id >= 0 {
-            let id = schema_id as u32;
-            // checkIfSchemaWithIdExist
-            if !r.id_usages(&q.context, id)?.is_empty()
-                && let Some(existing) = r.get_schema(&q.context, id)?
-                && existing.fingerprint != fp
-            {
-                return Err(ApiError::operation_not_permitted(format!("Overwrite new schema with id {id} is not permitted.")));
-            }
-            id
-        } else {
-            next_id
-        };
-
-        let mut tx = self.store.tx()?;
-        // IMPORT may overwrite an existing version (the log is keyed by subject+version).
-        let overwritten = versions.iter().find(|(v, _)| *v == version).map(|(_, vr)| vr.clone());
-        if let Some(old) = &overwritten {
-            self.hard_delete_rows(r, &mut tx, q, version, old, &HashSet::new(), allowed)?;
-        }
-        // Older soft-deleted versions carrying the same id are removed for good.
-        let stale: Vec<(u32, VersionRecord)> =
-            versions.iter().filter(|(v, vr)| vr.deleted && vr.id == id && *v < version).cloned().collect();
-        let stale_keys: HashSet<(String, u32)> = stale.iter().map(|(v, _)| (q.subject.clone(), *v)).collect();
-        for (v, vr) in &stale {
-            self.hard_delete_rows(r, &mut tx, q, *v, vr, &stale_keys, allowed)?;
-        }
-        let rec = match r.get_schema(&q.context, id)? {
-            Some(existing) if existing.fingerprint == fp => SchemaRecord::clone(&existing),
-            _ => SchemaRecord {
-                schema_type: c.schema_type,
-                schema: c.text.clone(),
-                references: c.refs.clone(),
-                metadata: c.metadata.clone(),
-                rule_set: c.rule_set.clone(),
-                fingerprint: fp,
-                schema_fingerprint: schema::fingerprint(c.schema_type, &c.parsed.normalized, &c.refs, None, None),
-                guid: uuid::Uuid::new_v4().to_string(),
-            },
-        };
-        // Like Confluent's hash index, the latest registration of a content wins.
-        tx.put_schema(&q.context, id, &rec, true, allowed)?;
-        if id >= next_id {
-            tx.set_next_id(&q.context, id + 1);
-        }
-        tx.put_version(&q.context, &q.subject, version, &VersionRecord { id, deleted: false, ts: now_millis() }, allowed)?;
-        for (t, v) in &c.targets {
-            tx.put_refby(&t.context, &t.subject, *v, id);
-        }
-        tx.append_log(&LogEvent { ctx: q.context.clone(), subject: q.subject.clone(), version, id, kind: LogEventKind::Register })?;
-        self.commit(tx)?;
-        Ok(if modified { RegisterResponse::full(&Entity::from_canon(q, version, id, &c)) } else { RegisterResponse::id(id) })
     }
 
     /// `POST /subjects/{subject}/versions/{version}/tags`
@@ -1837,8 +1708,52 @@ impl Registry {
         Ok(())
     }
 
-    /// Hard-delete rows for (subject, version); drops the id's outgoing refby
-    /// entries once nothing uses the id any more.
+    /// The rows a hard delete of (subject, version) removes: the version
+    /// itself, and the id's outgoing reference edges once nothing uses that id
+    /// any more. Read-only - it plans, it does not write - so both the
+    /// register verb and the legacy delete paths can share it.
+    pub(crate) fn hard_delete_writes(
+        &self,
+        r: &Reader<'_>,
+        q: &QualifiedSubject,
+        version: u32,
+        vr: &VersionRecord,
+        also_removed: &HashSet<(String, u32)>,
+    ) -> ApiResult<(Vec<crate::mutations::Write>, LogEvent)> {
+        use crate::mutations::Write;
+        let mut writes = vec![Write::DeleteVersion {
+            ctx: q.context.clone(),
+            subject: q.subject.clone(),
+            version,
+            id: vr.id,
+        }];
+        let still_used = r
+            .id_usages(&q.context, vr.id)?
+            .into_iter()
+            .any(|(s, v)| !(s == q.subject && (v == version || also_removed.contains(&(s.clone(), v)))));
+        if !still_used && let Some(rec) = r.get_schema(&q.context, vr.id)? {
+            for reference in &rec.references {
+                let t = Self::ref_target(&q.context, reference)?;
+                writes.push(Write::DeleteRefby {
+                    ctx: t.context.clone(),
+                    subject: t.subject.clone(),
+                    version: reference.version.max(1) as u32,
+                    id: vr.id,
+                });
+            }
+        }
+        let event = LogEvent {
+            ctx: q.context.clone(),
+            subject: q.subject.clone(),
+            version,
+            id: vr.id,
+            kind: LogEventKind::HardDelete,
+        };
+        Ok((writes, event))
+    }
+
+    /// The same delete, applied straight to a transaction. Goes away with the
+    /// last verb that still writes without the engine.
     fn hard_delete_rows(
         &self,
         r: &Reader<'_>,
@@ -1849,24 +1764,16 @@ impl Registry {
         also_removed: &HashSet<(String, u32)>,
         allowed: &crate::modegate::Allowed,
     ) -> ApiResult<()> {
-        tx.delete_version(&q.context, &q.subject, version, vr.id, allowed);
-        let still_used = r
-            .id_usages(&q.context, vr.id)?
-            .into_iter()
-            .any(|(s, v)| !(s == q.subject && (v == version || also_removed.contains(&(s.clone(), v)))));
-        if !still_used && let Some(rec) = r.get_schema(&q.context, vr.id)? {
-            for r in &rec.references {
-                let t = Self::ref_target(&q.context, r)?;
-                tx.delete_refby(&t.context, &t.subject, r.version.max(1) as u32, vr.id);
+        use crate::mutations::Write;
+        let (writes, event) = self.hard_delete_writes(r, q, version, vr, also_removed)?;
+        for w in writes {
+            match w {
+                Write::DeleteVersion { ctx, subject, version, id } => tx.delete_version(&ctx, &subject, version, id, allowed),
+                Write::DeleteRefby { ctx, subject, version, id } => tx.delete_refby(&ctx, &subject, version, id),
+                _ => unreachable!("hard_delete_writes plans only deletes"),
             }
         }
-        tx.append_log(&LogEvent {
-            ctx: q.context.clone(),
-            subject: q.subject.clone(),
-            version,
-            id: vr.id,
-            kind: LogEventKind::HardDelete,
-        })?;
+        tx.append_log(&event)?;
         Ok(())
     }
 

@@ -24,6 +24,12 @@ use crate::mutations::{Gate, Mutation, Plan, ReadView, Write};
 use crate::registry::Registry;
 
 pub fn run<M: Mutation>(reg: &Registry, m: M) -> ApiResult<M::Output> {
+    // Lock-free first: most "writes" turn out to be a schema that is already
+    // registered, and answering those without the lock is what keeps a busy
+    // producer fleet from serialising behind one another.
+    if let Some(out) = m.fast_path(&ReadView::new(reg))? {
+        return Ok(out);
+    }
     let _guard = reg.write_lock();
     let view = ReadView::new(reg);
     let target = m.target();
@@ -48,6 +54,12 @@ fn apply<T>(reg: &Registry, plan: Plan<T>, allowed: &modegate::Allowed) -> ApiRe
     let mut tx = reg.store.tx()?;
     for w in &plan.writes {
         match w {
+            Write::PutSchema { ctx, id, rec, index } => tx.put_schema(ctx, *id, rec, *index, allowed)?,
+            Write::PutVersion { ctx, subject, version, rec } => tx.put_version(ctx, subject, *version, rec, allowed)?,
+            Write::DeleteVersion { ctx, subject, version, id } => tx.delete_version(ctx, subject, *version, *id, allowed),
+            Write::PutRefby { ctx, subject, version, id } => tx.put_refby(ctx, subject, *version, *id),
+            Write::DeleteRefby { ctx, subject, version, id } => tx.delete_refby(ctx, subject, *version, *id),
+            Write::SetNextId { ctx, next } => tx.set_next_id(ctx, *next),
             Write::PutConfig { scope, rec } => tx.put_config(scope, rec, allowed)?,
             Write::DeleteConfig { scope } => tx.delete_config(scope, allowed),
         }

@@ -12,14 +12,16 @@
 //! setting up a snapshot and comparing plans - no HTTP, no ports, no waiting.
 
 pub mod delete_subject_config;
+pub mod register_schema;
 pub mod update_compatibility;
 
 pub use delete_subject_config::DeleteSubjectConfig;
+pub use register_schema::RegisterSchema;
 pub use update_compatibility::UpdateCompatibility;
 
 use crate::context::QualifiedSubject;
 use crate::error::ApiResult;
-use crate::model::{ConfigRecord, LogEvent, Mode};
+use crate::model::{ConfigRecord, LogEvent, Mode, SchemaRecord, VersionRecord};
 use crate::modegate::Intent;
 use crate::registry::{Reader, Registry};
 use crate::store::Scope;
@@ -51,6 +53,12 @@ pub enum Gate {
 /// Variants are added as verbs move onto the engine.
 #[derive(Debug, Clone)]
 pub enum Write {
+    PutSchema { ctx: String, id: u32, rec: SchemaRecord, index: bool },
+    PutVersion { ctx: String, subject: String, version: u32, rec: VersionRecord },
+    DeleteVersion { ctx: String, subject: String, version: u32, id: u32 },
+    PutRefby { ctx: String, subject: String, version: u32, id: u32 },
+    DeleteRefby { ctx: String, subject: String, version: u32, id: u32 },
+    SetNextId { ctx: String, next: u32 },
     PutConfig { scope: Scope, rec: ConfigRecord },
     DeleteConfig { scope: Scope },
 }
@@ -74,15 +82,23 @@ impl<T> Plan<T> {
         self
     }
 
-    #[allow(dead_code)] // used as verbs that log move onto the engine
-    pub fn event(mut self, e: LogEvent) -> Self {
-        self.events.push(e);
+    pub fn writes(mut self, ws: impl IntoIterator<Item = Write>) -> Self {
+        self.writes.extend(ws);
         self
     }
 }
 
 pub trait Mutation {
     type Output;
+
+    /// An answer that needs no lock and changes nothing. Confluent's
+    /// `registerOrForward` looks first, and by far the commonest "write" a
+    /// registry sees is a producer registering a schema that is already there,
+    /// so the engine runs this on a lock-free snapshot before it takes
+    /// anything. Returning `None` means "do it properly".
+    fn fast_path(&self, _view: &ReadView<'_>) -> ApiResult<Option<Self::Output>> {
+        Ok(None)
+    }
 
     /// What this change is about. Never fails: a verb that cannot name its
     /// target refuses to be constructed instead (which also keeps Confluent's
@@ -100,16 +116,45 @@ pub trait Mutation {
     fn plan(&self, view: &ReadView<'_>) -> ApiResult<Plan<Self::Output>>;
 }
 
-/// The registry as a verb sees it: one consistent snapshot, plus the server
-/// defaults that resolution needs. Read-only by construction.
+/// The registry as a verb sees it: one consistent snapshot, plus the two
+/// things a plan cannot make up for itself - the time and a fresh id. Both are
+/// fixed for the whole mutation, so a plan is a function of what it is given
+/// and nothing else.
+///
+/// Read-only by construction: a verb can reach the reader, but writing needs
+/// an `Allowed` token, and only the engine can produce one.
 pub struct ReadView<'a> {
     reg: &'a Registry,
     reader: Reader<'a>,
+    now: i64,
+    /// Made once, on the first verb that stores a new schema - the lock-free
+    /// fast path is the commonest call and needs no id at all.
+    guid: std::cell::OnceCell<String>,
 }
 
 impl<'a> ReadView<'a> {
     pub fn new(reg: &'a Registry) -> Self {
-        Self { reader: reg.reader(), reg }
+        Self { reader: reg.reader(), reg, now: crate::model::now_millis(), guid: std::cell::OnceCell::new() }
+    }
+
+    /// The instant this mutation happened, the same for every row it writes.
+    pub fn now(&self) -> i64 {
+        self.now
+    }
+
+    /// The GUID a newly stored schema gets. Fixed for this mutation, so a plan
+    /// built twice from the same view is the same plan.
+    pub fn new_guid(&self) -> &str {
+        self.guid.get_or_init(|| uuid::Uuid::new_v4().to_string())
+    }
+
+    /// The read side, for verbs that have not had their queries moved yet.
+    pub fn reg(&self) -> &'a Registry {
+        self.reg
+    }
+
+    pub fn reader(&self) -> &Reader<'a> {
+        &self.reader
     }
 
     /// The stored config for exactly this scope, with no fallback.

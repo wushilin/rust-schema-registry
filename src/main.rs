@@ -14,11 +14,13 @@ mod golden_tests;
 #[cfg(test)]
 mod http_conformance_tests;
 mod context;
+mod engine;
 mod error;
 mod exporter;
 mod migrate;
 mod model;
 mod modegate;
+mod mutations;
 mod registry;
 mod schema;
 mod snapshot;
@@ -141,6 +143,8 @@ async fn main() -> anyhow::Result<()> {
 
     std::fs::create_dir_all(&cfg.data_dir)?;
     let store = Store::open(&cfg.data_dir, cfg.sync_writes)?;
+    // Record the container so it survives a restart with nothing in it.
+    store.register()?;
     let cluster_id = match cfg.cluster_id.clone() {
         Some(id) => id,
         None => match store.get_meta_string("cluster_id")? {

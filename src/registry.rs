@@ -628,7 +628,7 @@ impl Registry {
         }
     }
 
-    fn lock(&self) -> std::sync::MutexGuard<'_, ()> {
+    pub(crate) fn write_lock(&self) -> std::sync::MutexGuard<'_, ()> {
         self.write_lock.lock().unwrap_or_else(|e| e.into_inner())
     }
 
@@ -640,7 +640,7 @@ impl Registry {
     /// Durably commit `tx`, then publish the new snapshot with one pointer swap.
     /// Must be called with the write lock held (writers are serialized, so
     /// "load, apply, store" can't lose an update).
-    fn commit(&self, tx: crate::store::Tx<'_>) -> ApiResult<()> {
+    pub(crate) fn commit(&self, tx: crate::store::Tx<'_>) -> ApiResult<()> {
         let ops = tx.commit()?;
         let mut next = Snapshot::clone(&self.snapshot.load());
         for op in &ops {
@@ -704,7 +704,7 @@ impl Registry {
 
     /// `getConfig(subject)`: the record stored for exactly this scope (the
     /// global scope always has one: stored or the default).
-    fn config_of(&self, r: &Reader<'_>, q: Option<&QualifiedSubject>) -> ApiResult<Option<ConfigRecord>> {
+    pub(crate) fn config_of(&self, r: &Reader<'_>, q: Option<&QualifiedSubject>) -> ApiResult<Option<ConfigRecord>> {
         Ok(match q {
             None => Some(self.filled(r.get_config(&Scope::Global)?.unwrap_or_default())),
             Some(q) => r.get_config(&Self::scope_for(q))?.map(|c| self.filled(c)),
@@ -732,13 +732,13 @@ impl Registry {
         Ok(self.config_in_scope(r, q)?.normalize == Some(true))
     }
 
-    fn global_mode(&self, r: &Reader<'_>) -> ApiResult<Mode> {
+    pub(crate) fn global_mode_in(&self, r: &Reader<'_>) -> ApiResult<Mode> {
         Ok(r.get_mode(&Scope::Global)?.unwrap_or(Mode::Readwrite))
     }
 
     /// `getMode(subject)`: a global READONLY_OVERRIDE wins, else exactly this scope's mode.
     fn mode_of(&self, r: &Reader<'_>, q: Option<&QualifiedSubject>) -> ApiResult<Option<Mode>> {
-        let global = self.global_mode(r)?;
+        let global = self.global_mode_in(r)?;
         if global == Mode::ReadonlyOverride {
             return Ok(Some(global));
         }
@@ -752,7 +752,7 @@ impl Registry {
     /// subject's mode, else its context's (non-default contexts) or the global
     /// one (default context), else READWRITE.
     pub fn mode_in_scope(&self, r: &Reader<'_>, q: &QualifiedSubject) -> ApiResult<Mode> {
-        let global = self.global_mode(r)?;
+        let global = self.global_mode_in(r)?;
         if global == Mode::ReadonlyOverride {
             return Ok(global);
         }
@@ -767,7 +767,7 @@ impl Registry {
     fn check_not_read_only(&self, r: &Reader<'_>, q: Option<&QualifiedSubject>) -> ApiResult<crate::modegate::Allowed> {
         let mode = match q {
             Some(q) => self.mode_in_scope(r, q)?,
-            None => self.global_mode(r)?,
+            None => self.global_mode_in(r)?,
         };
         let name = q.map(|q| q.qualified()).unwrap_or_else(|| "null".into());
         crate::modegate::check(crate::modegate::Intent::Modify, mode, &name)
@@ -1126,7 +1126,7 @@ impl Registry {
                 return Ok(resp);
             }
         }
-        let _guard = self.lock();
+        let _guard = self.write_lock();
         let r = &self.reader();
         let normalize = normalize || self.normalize_in_scope(r, &q)?;
         self.register_locked(r, &q, d, normalize)
@@ -1836,7 +1836,7 @@ impl Registry {
     /// `DELETE /subjects/{subject}` (`SubjectsResource#deleteSubject`, then `deleteSubject`).
     pub fn delete_subject(&self, subject: &str, permanent: bool) -> ApiResult<Vec<u32>> {
         let q = QualifiedSubject::parse(subject)?;
-        let _guard = self.lock();
+        let _guard = self.write_lock();
         let r = &self.reader();
         if !self.has_subjects(r, &q, true)? {
             return Err(ApiError::subject_not_found(&q.qualified()));
@@ -1882,7 +1882,7 @@ impl Registry {
     /// then `deleteSchemaVersion`).
     pub fn delete_version(&self, subject: &str, spec: VersionSpec, permanent: bool) -> ApiResult<u32> {
         let q = QualifiedSubject::parse(subject)?;
-        let _guard = self.lock();
+        let _guard = self.write_lock();
         let r = &self.reader();
         let any = self.get_exact(r, &q, spec, true)?;
         if any.is_some() && !permanent && self.get_exact(r, &q, spec, false)?.is_none() {
@@ -1936,33 +1936,15 @@ impl Registry {
         self.config_of(r, Some(&q))?.ok_or_else(|| ApiError::subject_compat_not_configured(&q.qualified()))
     }
 
-    /// `updateConfig`: fields present in the update replace the stored ones.
+    /// `updateConfig`. The work is in `mutations::UpdateCompatibility`; this
+    /// is the name the rest of the code still calls it by.
     pub fn set_config(&self, subject: Option<&str>, update: ConfigRecord) -> ApiResult<()> {
-        let q = subject.map(QualifiedSubject::parse).transpose()?;
-        let _guard = self.lock();
-        let r = &self.reader();
-        let allowed = self.check_not_read_only(r, q.as_ref())?;
-        let scope = q.as_ref().map(Self::scope_for).unwrap_or(Scope::Global);
-        let merged = r.get_config(&scope)?.unwrap_or_default().merged_with(&update);
-        let mut tx = self.store.tx()?;
-        tx.put_config(&scope, &merged, &allowed)?;
-        self.commit(tx)
+        crate::engine::run(self, crate::mutations::UpdateCompatibility::new(subject, update)?)
     }
 
-    /// Returns the configuration that was in effect (`getConfig`) before deletion.
+    /// `deleteConfig`, in `mutations::DeleteSubjectConfig`.
     pub fn delete_config(&self, subject: Option<&str>) -> ApiResult<ConfigRecord> {
-        let q = subject.map(QualifiedSubject::parse).transpose()?;
-        let _guard = self.lock();
-        let r = &self.reader();
-        let previous = match &q {
-            None => self.config_of(r, None)?.expect("global config"),
-            Some(q) => self.config_of(r, Some(q))?.ok_or_else(|| ApiError::subject_not_found(&q.qualified()))?,
-        };
-        let allowed = self.check_not_read_only(r, q.as_ref())?;
-        let mut tx = self.store.tx()?;
-        tx.delete_config(&q.as_ref().map(Self::scope_for).unwrap_or(Scope::Global), &allowed);
-        self.commit(tx)?;
-        Ok(previous)
+        crate::engine::run(self, crate::mutations::DeleteSubjectConfig::new(subject)?)
     }
 
     // ---------------- mode ----------------
@@ -1981,13 +1963,13 @@ impl Registry {
     /// subject is in scope, and hard-deletes the soft-deleted ones.
     pub fn set_mode(&self, subject: Option<&str>, mode: Mode, force: bool) -> ApiResult<()> {
         let q = subject.map(QualifiedSubject::parse).transpose()?;
-        let _guard = self.lock();
+        let _guard = self.write_lock();
         let r = &self.reader();
         let scope = q.as_ref().map(Self::scope_for).unwrap_or(Scope::Global);
         let mut tx = self.store.tx()?;
         let current = match &q {
             Some(q) => self.mode_in_scope(r, q)?,
-            None => self.global_mode(r)?,
+            None => self.global_mode_in(r)?,
         };
         if mode == Mode::Import && current != Mode::Import && !force {
             let has = match &q {
@@ -2032,7 +2014,7 @@ impl Registry {
     /// Returns the mode that was set (`getMode`).
     pub fn delete_mode(&self, subject: &str) -> ApiResult<Mode> {
         let q = QualifiedSubject::parse(subject)?;
-        let _guard = self.lock();
+        let _guard = self.write_lock();
         let r = &self.reader();
         let previous = self.mode_of(r, Some(&q))?.ok_or_else(|| ApiError::subject_not_found(&q.qualified()))?;
         let mut tx = self.store.tx()?;
@@ -2150,7 +2132,7 @@ impl Registry {
             "global": {
                 "compatibility": self.config_of(r, None)?.and_then(|c| c.compatibility_level).unwrap_or(self.default_compatibility).as_str(),
                 "normalize": self.normalize_default,
-                "mode": self.global_mode(r)?.as_str(),
+                "mode": self.global_mode_in(r)?.as_str(),
             },
             "counts": { "subjects": total, "versions": total_versions, "shown": rows.len() },
             "exporters": exporters,
@@ -2160,7 +2142,7 @@ impl Registry {
 
     /// One row per context: how much it holds and what is configured on it.
     fn admin_contexts(&self, r: &Reader<'_>, visible: &dyn Fn(&str, &str) -> bool) -> ApiResult<Vec<Value>> {
-        let global_mode = self.global_mode(r)?;
+        let global_mode = self.global_mode_in(r)?;
         let mut out = Vec::new();
         for ctx in r.list_contexts()? {
             let (mut subjects, mut deleted_subjects, mut versions) = (0usize, 0usize, 0usize);
@@ -2252,7 +2234,7 @@ impl Registry {
 
     pub fn delete_context(&self, ctx: &str) -> ApiResult<()> {
         let ctx = crate::context::normalize_context(ctx).ok_or_else(|| ApiError::invalid_subject(ctx))?;
-        let _guard = self.lock();
+        let _guard = self.write_lock();
         let r = &self.reader();
         if ctx == DEFAULT_CONTEXT || ctx == crate::context::WILDCARD_CONTEXT {
             return Err(ApiError::operation_not_permitted("The default context cannot be deleted"));

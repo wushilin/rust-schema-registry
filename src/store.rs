@@ -199,6 +199,7 @@ impl PhysicalStore {
     }
 
     /// Every container this store holds, in name order.
+    #[allow(dead_code)] // the host-routing slice lists them; tests cover it now
     pub fn containers(&self) -> ApiResult<Vec<TenantId>> {
         let mut out = Vec::new();
         for item in self
@@ -282,6 +283,7 @@ impl Store {
         Ok(PhysicalStore::open(path, sync_writes)?.container(TenantId::default_tenant()))
     }
 
+    #[allow(dead_code)] // same
     pub fn tenant(&self) -> &TenantId {
         &self.tenant
     }

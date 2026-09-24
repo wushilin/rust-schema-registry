@@ -967,3 +967,63 @@ fn a_parsed_schema_is_cached_against_what_its_references_resolved_to() {
     let after = r.parse_for_test(".", holder_id).unwrap();
     assert!(!Arc::ptr_eq(&first, &after), "a parse built against the old dep was reused");
 }
+
+#[test]
+fn an_id_stops_resolving_once_nothing_holds_it_any_more() {
+    use crate::registry::VersionSpec;
+    // Confluent's tombstone drops the id from its index when no
+    // subject-version refers to it (`InMemoryCache#schemaTombstoned`:
+    // `guids.remove(id)` once the map empties), so a hard delete has to take
+    // the content with it. Reading the id back is the observable part;
+    // reclaiming the space is the other half.
+    let (r, _d) = registry();
+    let id = register(&r, "gone-value", "G");
+    assert!(r.get_schema_by_id(id.into(), None, false, None).is_ok());
+
+    r.delete_version("gone-value", VersionSpec::Exact(1), false).unwrap();
+    // Soft-deleted: still there, by id.
+    assert!(r.get_schema_by_id(id.into(), None, false, None).is_ok(), "a soft delete keeps the schema");
+
+    r.delete_version("gone-value", VersionSpec::Exact(1), true).unwrap();
+    let e = r.get_schema_by_id(id.into(), None, false, None).unwrap_err();
+    assert_eq!(e.code, 40403, "{}", e.message);
+    assert!(r.store.get_schema(".", id as u32).unwrap().is_none(), "the content was not reclaimed");
+}
+
+#[test]
+fn an_id_two_subjects_share_survives_one_of_them_going() {
+    let (r, _d) = registry();
+    let shared = rec("Shared");
+    let id = r.register("a-value", req(shared.clone()), false).unwrap().id;
+    assert_eq!(r.register("b-value", req(shared), false).unwrap().id, id, "same content, same id");
+
+    r.delete_subject("a-value", false).unwrap();
+    r.delete_subject("a-value", true).unwrap();
+    assert!(r.store.get_schema(".", id as u32).unwrap().is_some(), "b-value still holds this id");
+    assert!(r.get_schema_by_id(id.into(), None, false, None).is_ok());
+
+    // ...and goes when the last holder does.
+    r.delete_subject("b-value", false).unwrap();
+    r.delete_subject("b-value", true).unwrap();
+    assert!(r.store.get_schema(".", id as u32).unwrap().is_none());
+    assert_eq!(r.get_schema_by_id(id.into(), None, false, None).unwrap_err().code, 40403);
+}
+
+#[test]
+fn the_same_content_gets_a_new_id_once_the_old_one_was_reclaimed() {
+    use crate::registry::VersionSpec;
+    // The fingerprint still points at the old id, but nothing holds it, and
+    // Confluent answers the same way: `InMemoryCache#schemaIdAndSubjects`
+    // returns null when the id's subject-version map is empty, so the
+    // registration allocates a fresh id rather than resurrecting one.
+    let (r, _d) = registry();
+    let id = register(&r, "again-value", "A");
+    r.delete_version("again-value", VersionSpec::Exact(1), false).unwrap();
+    r.delete_version("again-value", VersionSpec::Exact(1), true).unwrap();
+    assert!(r.store.get_schema(".", id as u32).unwrap().is_none(), "the content was reclaimed");
+
+    let back = register(&r, "again-value", "A");
+    assert_ne!(back, id, "an id nothing holds is not handed back");
+    assert!(r.get_schema_by_id(back.into(), None, false, None).is_ok());
+    assert_eq!(r.get_schema_by_id(id.into(), None, false, None).unwrap_err().code, 40403, "the old id stays gone");
+}

@@ -532,6 +532,15 @@ impl Tx<'_> {
         Ok(())
     }
 
+    /// Remove a schema's content. Its fingerprint stays indexed, as Confluent's
+    /// hash index does: registering that content again gets the same id back,
+    /// and this row with it.
+    pub fn delete_schema(&mut self, ctx: &str, id: u32, _: &crate::modegate::Allowed) {
+        let key = self.store.key(&schema_key(ctx, id));
+        self.batch.delete_cf(self.store.db.cf(CF_SCHEMAS), key);
+        self.ops.push(Op::DeleteSchema { ctx: ctx.into(), id });
+    }
+
     pub fn put_version(
         &mut self,
         ctx: &str,

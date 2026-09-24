@@ -617,6 +617,23 @@ Reads were about 20% faster before the REST behavior was ported endpoint by
 endpoint against a live Confluent; matching it exactly costs a little work per
 request, which seemed the right trade.
 
+## What a hard delete frees
+
+A soft delete hides a version and keeps everything. A **permanent** delete
+removes the version row, and - once no version in that context still holds its
+id - the schema's content as well, which is the only thing that ever frees the
+space a deleted schema took.
+
+That also matches Confluent, where a tombstone drops the id from the index when
+its subject-version map empties (`InMemoryCache#schemaTombstoned`), so
+`GET /schemas/ids/{id}` answers 40403 afterwards. The fingerprint index keeps
+pointing at the old id in both, but `schemaIdAndSubjects` returns nothing while
+no version holds it, so registering that content again allocates a **new** id
+rather than resurrecting the old one.
+
+This was settled from the decompiled 7.9 sources rather than a recording: the
+corpus exercises hard deletes but never reads an id back afterwards.
+
 ## Not implemented
 
 Rule *execution* (rules are stored, returned and validated, but running them

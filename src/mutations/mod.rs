@@ -69,6 +69,7 @@ pub enum Write {
     PutSchema { ctx: String, id: u32, rec: SchemaRecord, index: bool },
     PutVersion { ctx: String, subject: String, version: u32, rec: VersionRecord },
     DeleteVersion { ctx: String, subject: String, version: u32, id: u32 },
+    DeleteSchema { ctx: String, id: u32 },
     PutRefby { ctx: String, subject: String, version: u32, id: u32 },
     DeleteRefby { ctx: String, subject: String, version: u32, id: u32 },
     SetNextId { ctx: String, next: u32 },

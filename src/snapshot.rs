@@ -61,6 +61,9 @@ fn set_remove<T: Ord + Clone>(v: &mut Small<T>, x: &T) {
 #[derive(Debug, Clone)]
 pub enum Op {
     PutSchema { ctx: String, id: u32, rec: Arc<SchemaRecord>, index: bool },
+    /// The last version holding this id is gone, so its content goes too.
+    /// Nothing in the snapshot holds a body; this is here for the caches.
+    DeleteSchema { ctx: String, id: u32 },
     PutVersion { ctx: String, subject: String, version: u32, rec: VersionRecord },
     DeleteVersion { ctx: String, subject: String, version: u32, id: u32 },
     PutRefby { ctx: String, subject: String, version: u32, id: u32 },
@@ -108,6 +111,7 @@ impl Snapshot {
 
     pub fn apply(&mut self, op: &Op) {
         match op {
+            Op::DeleteSchema { .. } => {}
             Op::PutSchema { ctx, id, rec, index } => {
                 if *index {
                     self.ctx_mut(ctx).fingerprints.insert(rec.fingerprint.clone(), *id);

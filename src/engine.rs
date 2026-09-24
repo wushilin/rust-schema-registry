@@ -90,6 +90,7 @@ fn apply<T>(reg: &Registry, plan: Plan<T>, allowed: &modegate::Allowed) -> ApiRe
             Write::PutSchema { ctx, id, rec, index } => tx.put_schema(ctx, *id, rec, *index, allowed)?,
             Write::PutVersion { ctx, subject, version, rec } => tx.put_version(ctx, subject, *version, rec, allowed)?,
             Write::DeleteVersion { ctx, subject, version, id } => tx.delete_version(ctx, subject, *version, *id, allowed),
+            Write::DeleteSchema { ctx, id } => tx.delete_schema(ctx, *id, allowed),
             Write::PutRefby { ctx, subject, version, id } => tx.put_refby(ctx, subject, *version, *id),
             Write::DeleteRefby { ctx, subject, version, id } => tx.delete_refby(ctx, subject, *version, *id),
             Write::SetNextId { ctx, next } => tx.set_next_id(ctx, *next),

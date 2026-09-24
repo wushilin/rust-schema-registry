@@ -513,6 +513,12 @@ impl Registry {
                     id: vr.id,
                 });
             }
+            // Nothing holds this id any more, so its content goes with it - as
+            // in Confluent, where a tombstone drops the id from the index once
+            // no subject-version refers to it (`InMemoryCache#schemaTombstoned`
+            // removes the guid when its subject-version map empties). It is
+            // also the only thing that ever frees what a deleted schema took.
+            writes.push(Write::DeleteSchema { ctx: q.context.clone(), id: vr.id });
         }
         let event = LogEvent {
             ctx: q.context.clone(),

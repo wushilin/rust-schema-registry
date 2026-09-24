@@ -94,8 +94,8 @@ mode should be checked, and turns a snapshot into a plan (writes + log events +
 answer). `plan()` takes no lock, writes nothing and reads no clock, so a verb is
 tested by comparing plans - no server, no port, no waiting. The engine is the
 only code that sequences a write, so ordering exists once rather than per
-handler. (Verbs are being moved onto it a slice at a time; `registry.rs` still
-holds the ones that have not moved.)
+handler. Every write in the server goes through it - `engine::run` is the only
+place that takes a write lock, and the grep is one line.
 
 **3. Confluent's answers are the specification, including their order.**
 Compatibility is checked by replaying 1,553 recorded request/response pairs
@@ -112,15 +112,29 @@ regression, however tidy it looks.
 **Where things live.**
 
 ```
-src/http (api/)   transport: axum, media types, Jersey/Jackson quirks, URI rewrite
+src/api/          transport: axum, media types, Jersey/Jackson quirks, URI rewrite,
+                  host-container routing, the admin console
 src/auth.rs       authentication: Basic, bcrypt cache
 src/authz.rs      authorization: roles, bindings, targets, visibility
-src/store.rs      PhysicalStore (RocksDB) + Store (one host container's view)
-src/snapshot.rs   the read model: immutable metadata, swapped per commit
+src/containers.rs which host container a request belongs to
+src/tenant.rs     a container's name, and the key prefix it becomes
+src/store.rs      PhysicalStore (RocksDB) + Store (one container's view of it)
+src/snapshot.rs   immutable metadata, swapped after each commit
+src/registry/     the read model, by concern:
+                    mod.rs        the type, the reader, the verb entry points
+                    resolution.rs which config and mode apply
+                    lookup.rs     finding a schema, and compatibility
+                    schemas.rs    canonical forms, references, the parse cache
+                    listings.rs   subjects, schemas, versions, ids
+                    views.rs      request and response shapes
+                    locks.rs      what a mutation excludes
+                    admin.rs      projections for the console
 src/mutations/    one file per verb: what it touches, and its plan
 src/engine.rs     the one path a change takes
 src/modegate.rs   the mode table, and the token the store demands
 src/exporter.rs   a change-log subscriber that ships schemas elsewhere
+src/backup.rs     the logical dump, both directions
+src/migrate.rs    copying a whole registry over the wire
 src/schema/       Avro, JSON Schema, Protobuf: parsing, normalization, compatibility
 ```
 

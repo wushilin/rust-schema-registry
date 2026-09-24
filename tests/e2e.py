@@ -18,7 +18,25 @@ import time
 
 import requests
 
-BIN = sys.argv[1] if len(sys.argv) > 1 else os.path.join(os.path.dirname(__file__), "..", "target", "debug", "schema-registry")
+def resolve_binary(argv=None):
+    """The server under test: `argv[1]` when it is a path, else the debug build.
+
+    Printed, and checked to exist, because the worst failure this harness can
+    have is quietly testing a binary nobody just built - a suite that consumed
+    argv[1] for its own flags once made fixed bugs look unfixed for an hour.
+    """
+    argv = sys.argv if argv is None else argv
+    default = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "target", "debug", "schema-registry")
+    chosen = argv[1] if len(argv) > 1 and not argv[1].startswith("-") else default
+    path = os.path.abspath(chosen)
+    if not os.path.exists(path):
+        sys.exit(f"no server binary at {path} - build it first (cargo build), or pass one as the first argument")
+    age = time.time() - os.path.getmtime(path)
+    print(f"using {path} (built {age / 60:.0f} min ago)")
+    return path
+
+
+BIN = resolve_binary()
 CT = {"Content-Type": "application/vnd.schemaregistry.v1+json"}
 FAILURES = []
 

@@ -178,9 +178,11 @@ unless `log_reads` is on - they are the traffic, and an INFO line per read at
   any width, and a blanket reformat buries a real change in thousands of lines.
   Match the surrounding formatting by hand; ~140 columns, one statement a line.
 * Tests read as documentation: the name says the behaviour, the body shows it.
-* A python test under `tests/` takes the binary as `argv[1]`; `e2e.py` reads
-  it from there. A suite that strips argv gets the stale debug build and will
-  quietly test yesterday's code.
+* A python suite under `tests/` gets its server from `e2e.resolve_binary()`:
+  `argv[1]` when it is a path, else the debug build. It prints what it chose
+  and how old it is, and exits if the file is missing - a suite that quietly
+  tested yesterday's binary once made fixed bugs look unfixed. A suite with
+  its own flags must keep `argv[1]` for the binary.
 
 ## 10. Operational facts
 

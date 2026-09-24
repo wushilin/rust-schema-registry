@@ -19,9 +19,11 @@ import subprocess
 import sys
 import tempfile
 
-# Our own flags must not reach e2e.py, which reads argv[1] as the binary path.
-ARGS = sys.argv[1:]
-sys.argv = sys.argv[:1]
+# Our own flags must not reach e2e.py, which reads argv[1] as the binary path -
+# but the binary, when one is given, must.
+_binary = len(sys.argv) > 1 and not sys.argv[1].startswith("-")
+ARGS = sys.argv[2:] if _binary else sys.argv[1:]
+sys.argv = sys.argv[:2] if _binary else sys.argv[:1]
 
 from e2e import BIN, FAILURES, Client, check, start  # noqa: E402
 

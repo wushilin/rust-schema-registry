@@ -20,7 +20,9 @@ import time
 
 import requests
 
-BIN = sys.argv[1] if len(sys.argv) > 1 else "./target/release/schema-registry"
+from e2e import resolve_binary  # noqa: E402
+
+BIN = resolve_binary()
 CT = {"Content-Type": "application/vnd.schemaregistry.v1+json"}
 AVRO = json.dumps({"type": "record", "name": "R", "fields": [{"name": "a", "type": "int"}]})
 AVRO2 = json.dumps({"type": "record", "name": "R", "fields": [{"name": "b", "type": "string"}]})

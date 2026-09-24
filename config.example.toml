@@ -23,6 +23,24 @@ cache_max_entries = 20000
 max_body_bytes = 16777216
 exporter_poll_seconds = 10
 
+# Host containers: several logically separate registries in one process and one
+# store, told apart by the request's Host header. Without any, there is exactly
+# one, named `default`, answering on every host - and nothing about the API
+# changes. Each container has its own contexts, subjects, ids, config, modes,
+# exporters and change log, and its own cluster id.
+#
+# The Host header is the client's to choose, so this routes; it does not
+# authorize. Bind users to containers (see `containers` on a user below) for
+# that, and give each container its own listener if the boundary has to be hard.
+#
+# [[containers]]
+# name = "prod"
+# hosts = ["sr.example.com", "sr.example.com:8081"]
+#
+# [[containers]]
+# name = "dev"
+# hosts = ["*.dev.example.com"]
+
 [auth]
 enabled = false
 realm = "SchemaRegistry"
@@ -76,3 +94,13 @@ realm = "SchemaRegistry"
 # [[auth.users.bindings]]
 # role = "admin"
 # subjects = [".eu::*"]
+#
+# A user can also be confined to host containers. Empty (the default) is every
+# container; naming them is what stops a chosen Host header from reaching
+# another container's data.
+#
+# [[auth.users]]
+# username = "prod-team"
+# password = "$2b$12$..."
+# roles = ["write"]
+# containers = ["prod"]

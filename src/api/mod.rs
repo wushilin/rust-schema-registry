@@ -26,10 +26,49 @@ use crate::registry::Registry;
 
 pub const SR_CONTENT_TYPE: &str = "application/vnd.schemaregistry.v1+json";
 
+/// What the router is built with: every host container, and how to
+/// authenticate. One per process.
+#[derive(Clone)]
+pub struct Shared {
+    pub containers: Arc<crate::containers::Containers>,
+    pub auth: Arc<Auth>,
+}
+
+/// What a handler works with: the one container this request reached, and how
+/// to authenticate. Resolved from the `Host` header by [`route_container`]
+/// before anything else runs, so a handler cannot forget to ask which
+/// registry it is talking to - it is handed one.
 #[derive(Clone)]
 pub struct AppState {
     pub registry: Arc<Registry>,
     pub auth: Arc<Auth>,
+}
+
+impl axum::extract::FromRequestParts<Shared> for AppState {
+    type Rejection = ApiError;
+
+    async fn from_request_parts(parts: &mut axum::http::request::Parts, shared: &Shared) -> Result<Self, Self::Rejection> {
+        let registry = parts
+            .extensions
+            .get::<Arc<Registry>>()
+            .cloned()
+            .ok_or_else(|| ApiError::internal("request reached a handler without a host container"))?;
+        Ok(AppState { registry, auth: shared.auth.clone() })
+    }
+}
+
+/// Resolve the `Host` header to a container, once, in front of everything.
+pub async fn route_container(
+    axum::extract::State(shared): axum::extract::State<Shared>,
+    mut req: Request,
+    next: axum::middleware::Next,
+) -> Response {
+    let host = req.headers().get(axum::http::header::HOST).and_then(|v| v.to_str().ok()).map(String::from);
+    let Some((_, registry)) = shared.containers.route(host.as_deref()) else {
+        return crate::containers::Containers::no_such_host(host.as_deref()).into_response();
+    };
+    req.extensions_mut().insert(registry.clone());
+    next.run(req).await
 }
 
 /// Render a JSON body with the schema registry media type.
@@ -264,17 +303,24 @@ where
 /// The complete HTTP service: Confluent's pre-matching URI filters in front of the router.
 pub type Service = Router;
 
-pub fn service(state: AppState, max_body_bytes: usize) -> Service {
-    let inner = router(state.clone(), max_body_bytes);
-    Router::new().fallback_service(inner).layer(axum::middleware::map_request_with_state(state, prematch))
+pub fn service(shared: Shared, max_body_bytes: usize) -> Service {
+    let inner = router(shared.clone(), max_body_bytes);
+    Router::new()
+        .fallback_service(inner)
+        // Innermost first: the container is resolved before the URI filters,
+        // because rewriting an alias needs that container's snapshot.
+        .layer(axum::middleware::map_request(prematch))
+        .layer(axum::middleware::from_fn_with_state(shared, route_container))
 }
 
 /// `ContextFilter` + `AliasFilter` (see `rewrite`), before routing.
-async fn prematch(axum::extract::State(st): axum::extract::State<AppState>, mut req: Request) -> Result<Request, ApiError> {
+async fn prematch(mut req: Request) -> Result<Request, ApiError> {
     let is_delete_context = req.method() == axum::http::Method::DELETE
         && req.uri().path().trim_matches('/').split('/').count() == 2
         && req.uri().path().trim_start_matches('/').starts_with("contexts/");
-    let registry = st.registry.clone();
+    let Some(registry) = req.extensions().get::<Arc<Registry>>().cloned() else {
+        return Ok(req); // no container: the router answers with 421 below
+    };
     let alias_of = move |subject: &str| registry.alias_of(subject);
     let new = rewrite::prematch(req.uri().path(), req.uri().query(), is_delete_context, &alias_of)
         .map_err(|e| ApiError::new(400, e))?;
@@ -284,7 +330,7 @@ async fn prematch(axum::extract::State(st): axum::extract::State<AppState>, mut 
     Ok(req)
 }
 
-pub fn router(state: AppState, max_body_bytes: usize) -> Router {
+pub fn router(shared: Shared, max_body_bytes: usize) -> Router {
     use handlers::*;
     let api = Router::new()
         .route("/", get(root).post(root_post))
@@ -338,14 +384,14 @@ pub fn router(state: AppState, max_body_bytes: usize) -> Router {
         .fallback(not_found)
         .method_not_allowed_fallback(method_not_allowed);
 
-    api.layer(axum::middleware::from_fn_with_state(state.clone(), crate::auth::middleware))
+    api.layer(axum::middleware::from_fn_with_state(shared.clone(), crate::auth::middleware))
         .layer(DefaultBodyLimit::max(max_body_bytes))
         .layer(tower_http::trace::TraceLayer::new_for_http())
         // A panic anywhere in a request (a schema parser meeting input it
         // cannot handle, say) becomes a 500 for that request; the server and
         // every other connection carry on.
         .layer(tower_http::catch_panic::CatchPanicLayer::custom(on_panic))
-        .with_state(state)
+        .with_state(shared)
 }
 
 /// Turn a panic into Confluent's error shape, and log it with the payload.

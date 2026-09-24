@@ -718,6 +718,11 @@ impl Registry {
         self.locks.acquire(target)
     }
 
+    /// Which host container this registry is.
+    pub fn container(&self) -> &crate::tenant::TenantId {
+        self.store.tenant()
+    }
+
     /// Pin the current snapshot for one request.
     pub fn reader(&self) -> Reader<'_> {
         Reader { snap: self.snapshot.load_full(), reg: self }
@@ -1995,6 +2000,7 @@ impl Registry {
             })
             .collect();
         Ok(json!({
+            "container": self.container().as_str(),
             "clusterId": self.cluster_id,
             "version": env!("CARGO_PKG_VERSION"),
             "contexts": self.admin_contexts(r, visible)?,

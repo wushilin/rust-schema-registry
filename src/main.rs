@@ -5,6 +5,7 @@ mod api;
 mod auth;
 mod authz;
 mod config;
+mod containers;
 #[cfg(test)]
 mod compat_level_tests;
 #[cfg(test)]
@@ -33,12 +34,10 @@ use std::time::Duration;
 
 use clap::{Parser, Subcommand};
 
-use crate::api::AppState;
 use crate::auth::Auth;
 use crate::config::ServerConfig;
 use crate::model::CompatibilityLevel;
 use crate::registry::Registry;
-use crate::store::Store;
 
 #[derive(Parser)]
 #[command(name = "schema-registry", version, about = "Confluent-compatible schema registry backed by RocksDB")]
@@ -142,44 +141,64 @@ async fn main() -> anyhow::Result<()> {
     cfg.validate()?;
 
     std::fs::create_dir_all(&cfg.data_dir)?;
-    let store = Store::open(&cfg.data_dir, cfg.sync_writes)?;
-    // Record the container so it survives a restart with nothing in it.
-    store.register()?;
-    let cluster_id = match cfg.cluster_id.clone() {
-        Some(id) => id,
-        None => match store.get_meta_string("cluster_id")? {
-            Some(id) => id,
-            None => {
-                let id = format!("sr-{}", &uuid::Uuid::new_v4().simple().to_string()[..12]);
-                store.put_meta_string("cluster_id", &id)?;
-                id
-            }
-        },
-    };
+    let db = store::PhysicalStore::open(&cfg.data_dir, cfg.sync_writes)?;
     let default_compat = CompatibilityLevel::parse(&cfg.default_compatibility).map_err(|e| anyhow::anyhow!(e.message))?;
-    let started = std::time::Instant::now();
-    let snapshot = store.load_snapshot()?;
-    tracing::info!(elapsed_ms = started.elapsed().as_millis() as u64, "loaded metadata snapshot");
-    let mut registry = Registry::new(store, snapshot, default_compat, cluster_id.clone(), cfg.cache_max_entries, cfg.normalize);
-    registry.limits = registry::SearchLimits {
+    let limits = registry::SearchLimits {
         schema_default: cfg.schema_search_default_limit,
         schema_max: cfg.schema_search_max_limit,
         subject_default: cfg.subject_search_default_limit,
         subject_max: cfg.subject_search_max_limit,
     };
-    let registry = Arc::new(registry);
+
+    // One registry per host container. Unconfigured means exactly one, named
+    // `default`, answering on every host - the way it has always behaved.
+    let wanted: Vec<tenant::TenantId> = if cfg.containers.is_empty() {
+        vec![tenant::TenantId::default_tenant()]
+    } else {
+        cfg.containers.iter().map(|c| tenant::TenantId::parse(&c.name)).collect::<Result<_, _>>().map_err(|e| anyhow::anyhow!(e.message))?
+    };
+    let started = std::time::Instant::now();
+    let mut registries = std::collections::HashMap::new();
+    for name in &wanted {
+        let store = db.container(name.clone());
+        store.register()?;
+        // Each container has its own cluster id: exporters name their AUTO
+        // contexts after it, so a shared one would collide at a destination.
+        let cluster_id = match (cfg.cluster_id.clone(), store.get_meta_string("cluster_id")?) {
+            (Some(id), _) if wanted.len() == 1 => id,
+            (_, Some(id)) => id,
+            (configured, None) => {
+                let id = match configured {
+                    Some(base) => format!("{base}-{name}"),
+                    None => format!("sr-{}", &uuid::Uuid::new_v4().simple().to_string()[..12]),
+                };
+                store.put_meta_string("cluster_id", &id)?;
+                id
+            }
+        };
+        let snapshot = store.load_snapshot()?;
+        let mut registry = Registry::new(store, snapshot, default_compat, cluster_id, cfg.cache_max_entries, cfg.normalize);
+        registry.limits = limits;
+        let registry = Arc::new(registry);
+        tokio::spawn(exporter::run(registry.clone(), Duration::from_secs(cfg.exporter_poll_seconds.max(1))));
+        registries.insert(name.clone(), registry);
+    }
+    tracing::info!(
+        elapsed_ms = started.elapsed().as_millis() as u64,
+        containers = registries.len(),
+        "loaded metadata snapshots"
+    );
+
     let auth = Arc::new(if cfg.auth.enabled { Auth::new(&cfg.auth) } else { Auth::disabled() });
-
-    tokio::spawn(exporter::run(registry.clone(), Duration::from_secs(cfg.exporter_poll_seconds.max(1))));
-
-    let state = AppState { registry, auth };
-    let app = api::service(state, cfg.max_body_bytes);
+    let container_names = registries.keys().map(|n| n.to_string()).collect::<Vec<_>>().join(", ");
+    let containers = Arc::new(containers::Containers::new(&cfg.containers, registries));
+    let app = api::service(api::Shared { containers, auth }, cfg.max_body_bytes);
 
     let listener = tokio::net::TcpListener::bind(cfg.listen).await?;
     tracing::info!(
         listen = %cfg.listen,
         data_dir = %cfg.data_dir.display(),
-        cluster_id,
+        containers = %container_names,
         auth = cfg.auth.enabled,
         "schema registry started"
     );

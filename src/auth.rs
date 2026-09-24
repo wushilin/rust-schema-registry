@@ -24,7 +24,7 @@ use base64::Engine;
 use sha2::{Digest, Sha256};
 use subtle::ConstantTimeEq;
 
-use crate::api::AppState;
+
 use crate::authz::Principal;
 use crate::config::AuthConfig;
 use crate::error::ApiError;
@@ -94,8 +94,8 @@ fn cache_key(user: &str, password: &str, stored: &str) -> [u8; 32] {
     Sha256::digest(format!("{user}\0{password}\0{stored}").as_bytes()).into()
 }
 
-pub async fn middleware(State(st): State<AppState>, mut req: Request, next: Next) -> Response {
-    let auth = &st.auth;
+pub async fn middleware(State(shared): State<crate::api::Shared>, mut req: Request, next: Next) -> Response {
+    let auth = &shared.auth;
     if !auth.enabled {
         return next.run(req).await;
     }
@@ -105,11 +105,18 @@ pub async fn middleware(State(st): State<AppState>, mut req: Request, next: Next
         Some(p) => Some(p),
         None => {
             // First sight of these credentials: bcrypt is CPU-heavy, keep it off the async workers.
-            let auth2 = st.auth.clone();
+            let auth2 = shared.auth.clone();
             tokio::task::spawn_blocking(move || auth2.authenticate(&creds)).await.ok().flatten()
         }
     };
     let Some(principal) = principal else { return challenge(auth) };
+    // Which container this request reached was decided before authentication;
+    // a user who is not bound to it gets nothing, whatever the Host said.
+    if let Some(reg) = req.extensions().get::<std::sync::Arc<crate::registry::Registry>>()
+        && !principal.may_use(reg.container())
+    {
+        return ApiError::forbidden("User is denied operation on this resource").into_response();
+    }
     if !crate::authz::authorized(&principal, req.method(), req.uri().path()) {
         return ApiError::forbidden("User is denied operation on this resource").into_response();
     }
@@ -141,12 +148,14 @@ mod tests {
                     password: "pw".into(),
                     roles: vec![crate::config::Role::Admin],
                     bindings: vec![],
+                    containers: vec![],
                 },
                 crate::config::UserConfig {
                     username: "b".into(),
                     password: bcrypt::hash("secret", 4).unwrap(),
                     roles: vec![crate::config::Role::Readonly],
                     bindings: vec![],
+                    containers: vec![],
                 },
             ],
         };

@@ -20,7 +20,7 @@ use regex::Regex;
 use serde_json::{Value, json};
 use tower::ServiceExt;
 
-use crate::api::{self, AppState};
+use crate::api;
 use crate::auth::Auth;
 use crate::model::CompatibilityLevel;
 use crate::registry::Registry;
@@ -233,8 +233,14 @@ fn fresh_app() -> (api::Service, tempfile::TempDir) {
     let store = Store::open(dir.path(), false).unwrap();
     let snap = store.load_snapshot().unwrap();
     let registry = Registry::new(store, snap, CompatibilityLevel::Backward, "test".into(), 1000, false);
-    let state = AppState { registry: Arc::new(registry), auth: Arc::new(Auth::disabled()) };
-    (api::service(state, 16 << 20), dir)
+    // One container, reached on any host - what a deployment that configures
+    // none gets, and what the recorded corpus was taken against.
+    let containers = crate::containers::Containers::new(
+        &[],
+        std::collections::HashMap::from([(crate::tenant::TenantId::default_tenant(), Arc::new(registry))]),
+    );
+    let shared = api::Shared { containers: Arc::new(containers), auth: Arc::new(Auth::disabled()) };
+    (api::service(shared, 16 << 20), dir)
 }
 
 fn error_code(v: &Value) -> Option<i64> {

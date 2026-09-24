@@ -584,6 +584,7 @@ function renderCluster() {
   const g = data.global;
   $("cluster").innerHTML = `
     <div class="grid" style="max-width:620px">
+      <span>host container</span><div><code>${esc(data.container)}</code></div>
       <span>cluster id</span><div><code>${esc(data.clusterId)}</code></div>
       <span>version</span><div>${esc(data.version)}</div>
       <span>subjects</span><div>${data.counts.subjects} in ${data.contexts.length} context(s)</div>

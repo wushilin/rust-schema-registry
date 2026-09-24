@@ -6,7 +6,7 @@
 //! `contexts/...` and the segment after `subjects`, so they leave it alone.
 //! The UI first shipped under `/_admin`, which now redirects here.
 
-use axum::extract::{Path, State};
+use axum::extract::Path;
 use axum::http::{HeaderValue, StatusCode, header};
 use axum::response::{IntoResponse, Response};
 use serde_json::Value;
@@ -23,7 +23,7 @@ pub async fn page() -> Response {
     resp
 }
 
-pub async fn overview(State(st): State<AppState>, caller: Caller, p: Params) -> ApiResult<Sr<Value>> {
+pub async fn overview(st: AppState, caller: Caller, p: Params) -> ApiResult<Sr<Value>> {
     let prefix = p.get("subjectPrefix").map(String::from);
     let deleted = p.flag("deleted");
     let limit = p.int("limit", DEFAULT_LIMIT as i64)?.max(0) as usize;
@@ -33,7 +33,7 @@ pub async fn overview(State(st): State<AppState>, caller: Caller, p: Params) -> 
     Ok(Sr(inline(&st, |r| r.admin_overview(prefix.as_deref(), deleted, limit, &visible))?))
 }
 
-pub async fn subject_detail(State(st): State<AppState>, Path(subject): Path<String>) -> ApiResult<Sr<Value>> {
+pub async fn subject_detail(st: AppState, Path(subject): Path<String>) -> ApiResult<Sr<Value>> {
     Ok(Sr(inline(&st, |r| r.admin_subject(&subject))?))
 }
 

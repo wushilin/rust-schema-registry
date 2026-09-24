@@ -150,12 +150,14 @@ pub enum Target {
 pub struct Principal {
     pub roles: Vec<Role>,
     bindings: Vec<(Role, Vec<Pattern>)>,
+    /// Host containers this caller may use at all; empty means every one.
+    containers: Vec<String>,
 }
 
 impl Principal {
     /// Authentication is off: everything is allowed and nothing is filtered.
     pub fn unrestricted() -> Self {
-        Self { roles: vec![Role::Admin], bindings: Vec::new() }
+        Self { roles: vec![Role::Admin], bindings: Vec::new(), containers: Vec::new() }
     }
 
     pub fn from_user(u: &UserConfig) -> Self {
@@ -164,7 +166,13 @@ impl Principal {
             .iter()
             .map(|b| (b.role, b.subjects.iter().filter_map(|p| Pattern::parse(p).ok()).collect()))
             .collect();
-        Self { roles: u.roles.clone(), bindings }
+        Self { roles: u.roles.clone(), bindings, containers: u.containers.clone() }
+    }
+
+    /// May this caller use this host container at all? The `Host` header is
+    /// the client's to choose, so this - not the host - is the boundary.
+    pub fn may_use(&self, container: &crate::tenant::TenantId) -> bool {
+        self.containers.is_empty() || self.containers.iter().any(|c| c == container.as_str())
     }
 
     /// Roles that apply to one subject: the global ones plus every binding
@@ -306,6 +314,7 @@ mod tests {
 
     fn user(roles: &[Role], bindings: &[(Role, &[&str])]) -> Principal {
         Principal {
+            containers: Vec::new(),
             roles: roles.to_vec(),
             bindings: bindings
                 .iter()

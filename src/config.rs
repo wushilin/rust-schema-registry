@@ -41,6 +41,27 @@ pub struct ServerConfig {
     /// How often exporters poll when idle (they are also woken on every change).
     pub exporter_poll_seconds: u64,
     pub auth: AuthConfig,
+    /// Host containers: several logically separate registries in one process
+    /// and one store. Without any, there is one named `default` that answers
+    /// on every host, and nothing about the API changes.
+    pub containers: Vec<ContainerConfig>,
+}
+
+/// `[[containers]]`: a container and the hosts that reach it.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct ContainerConfig {
+    pub name: String,
+    /// `Host` header patterns, `*` allowed (`sr.example.com`, `*.dev.example.com`,
+    /// `sr.example.com:8081`). Matching ignores case; a pattern without a port
+    /// also matches the host with any port.
+    pub hosts: Vec<String>,
+}
+
+impl Default for ContainerConfig {
+    fn default() -> Self {
+        Self { name: crate::tenant::DEFAULT_TENANT.to_string(), hosts: vec!["*".to_string()] }
+    }
 }
 
 impl Default for ServerConfig {
@@ -60,6 +81,7 @@ impl Default for ServerConfig {
             subject_search_default_limit: 20_000,
             subject_search_max_limit: 20_000,
             auth: AuthConfig::default(),
+            containers: Vec::new(),
         }
     }
 }
@@ -91,6 +113,11 @@ pub struct UserConfig {
     /// several, one per role, and they add to `roles` rather than limiting it.
     #[serde(default)]
     pub bindings: Vec<RoleBinding>,
+    /// Host containers this user may use at all. Empty means every one of
+    /// them. Since the `Host` header is the client's to choose, this - not the
+    /// host - is what keeps one container's data away from another's users.
+    #[serde(default)]
+    pub containers: Vec<String>,
 }
 
 /// `[[auth.users.bindings]]`: one role, scoped to a set of subject patterns.
@@ -136,6 +163,26 @@ impl ServerConfig {
             .map_err(|e| anyhow::anyhow!("default_compatibility: {}", e.message))?;
         if self.auth.enabled && self.auth.users.is_empty() {
             anyhow::bail!("auth.enabled = true but no [[auth.users]] are configured");
+        }
+        let mut names = std::collections::HashSet::new();
+        for c in &self.containers {
+            crate::tenant::TenantId::parse(&c.name).map_err(|e| anyhow::anyhow!("{}", e.message))?;
+            if !names.insert(&c.name) {
+                anyhow::bail!("duplicate host container '{}'", c.name);
+            }
+            if c.hosts.is_empty() {
+                anyhow::bail!("host container '{}' has no hosts", c.name);
+            }
+            for h in &c.hosts {
+                glob::Pattern::new(h).map_err(|e| anyhow::anyhow!("container '{}': host pattern '{h}': {e}", c.name))?;
+            }
+        }
+        for u in &self.auth.users {
+            for c in &u.containers {
+                if !self.containers.is_empty() && !names.contains(c) {
+                    anyhow::bail!("user '{}' is bound to unknown host container '{c}'", u.username);
+                }
+            }
         }
         let mut seen = std::collections::HashSet::new();
         for u in &self.auth.users {

@@ -2,7 +2,7 @@
 //! Confluent's resources (bean validation of the body first, then path/query
 //! parameters, then the registry), so the first error reported matches.
 
-use axum::extract::{Path, State};
+use axum::extract::Path;
 use axum::http::{HeaderValue, StatusCode, header};
 use axum::response::{IntoResponse, Response};
 use serde_json::{Value, json};
@@ -40,7 +40,7 @@ pub async fn root_post(body: JsonBody) -> ApiResult<Sr<Value>> {
     Ok(Sr(json!({})))
 }
 
-pub async fn metadata_id(State(st): State<AppState>) -> Sr<Value> {
+pub async fn metadata_id(st: AppState) -> Sr<Value> {
     Sr(json!({
         "scope": {
             "path": [],
@@ -62,7 +62,7 @@ pub async fn schema_types() -> Sr<Value> {
 
 // ---------------- schemas ----------------
 
-pub async fn list_schemas(State(st): State<AppState>, caller: Caller, p: Params) -> ApiResult<Response> {
+pub async fn list_schemas(st: AppState, caller: Caller, p: Params) -> ApiResult<Response> {
     let prefix = p.get("subjectPrefix").map(String::from);
     let (deleted, latest, aliases) = (p.flag("deleted"), p.flag("latestOnly"), p.flag("aliases"));
     let rule_type = p.get("ruleType").map(String::from);
@@ -74,7 +74,7 @@ pub async fn list_schemas(State(st): State<AppState>, caller: Caller, p: Params)
     Ok(Sr(p.page_capped(list, l.schema_default, l.schema_max)?).into_response())
 }
 
-pub async fn schema_by_id(State(st): State<AppState>, Path(id): Path<String>, p: Params) -> ApiResult<Response> {
+pub async fn schema_by_id(st: AppState, Path(id): Path<String>, p: Params) -> ApiResult<Response> {
     let id = parse_id(&id)?;
     let subject = p.get("subject").map(String::from);
     let fetch_max = p.flag("fetchMaxId");
@@ -83,7 +83,7 @@ pub async fn schema_by_id(State(st): State<AppState>, Path(id): Path<String>, p:
     Ok(Sr(view).into_response())
 }
 
-pub async fn schema_by_id_raw(State(st): State<AppState>, Path(id): Path<String>, p: Params) -> ApiResult<Response> {
+pub async fn schema_by_id_raw(st: AppState, Path(id): Path<String>, p: Params) -> ApiResult<Response> {
     let id = parse_id(&id)?;
     let subject = p.get("subject").map(String::from);
     let format = p.get("format").map(String::from);
@@ -92,7 +92,7 @@ pub async fn schema_by_id_raw(State(st): State<AppState>, Path(id): Path<String>
 }
 
 pub async fn schema_id_subjects(
-    State(st): State<AppState>,
+    st: AppState,
     Path(id): Path<String>,
     caller: Caller,
     p: Params,
@@ -105,7 +105,7 @@ pub async fn schema_id_subjects(
 }
 
 pub async fn schema_id_versions(
-    State(st): State<AppState>,
+    st: AppState,
     Path(id): Path<String>,
     caller: Caller,
     p: Params,
@@ -119,7 +119,7 @@ pub async fn schema_id_versions(
 
 // ---------------- subjects ----------------
 
-pub async fn list_subjects(State(st): State<AppState>, caller: Caller, p: Params) -> ApiResult<Response> {
+pub async fn list_subjects(st: AppState, caller: Caller, p: Params) -> ApiResult<Response> {
     let prefix = p.get("subjectPrefix").map(String::from);
     let (deleted, deleted_only) = (p.flag("deleted"), p.flag("deletedOnly"));
     let l = st.registry.limits;
@@ -131,14 +131,14 @@ pub async fn list_subjects(State(st): State<AppState>, caller: Caller, p: Params
     Ok(Sr(p.page_capped(list, l.subject_default, l.subject_max)?).into_response())
 }
 
-pub async fn list_versions(State(st): State<AppState>, Path(subject): Path<String>, p: Params) -> ApiResult<Response> {
+pub async fn list_versions(st: AppState, Path(subject): Path<String>, p: Params) -> ApiResult<Response> {
     let (deleted, deleted_only) = (p.flag("deleted"), p.flag("deletedOnly"));
     let list = inline(&st, |r| r.list_versions(&subject, deleted, deleted_only))?;
     Ok(Sr(list).into_response())
 }
 
 pub async fn register_schema(
-    State(st): State<AppState>,
+    st: AppState,
     Path(subject): Path<String>,
     p: Params,
     body: JsonBody,
@@ -153,7 +153,7 @@ pub async fn register_schema(
 }
 
 pub async fn lookup_schema(
-    State(st): State<AppState>,
+    st: AppState,
     Path(subject): Path<String>,
     p: Params,
     body: JsonBody,
@@ -165,13 +165,13 @@ pub async fn lookup_schema(
     Ok(Sr(view).into_response())
 }
 
-pub async fn delete_subject(State(st): State<AppState>, Path(subject): Path<String>, p: Params) -> ApiResult<Response> {
+pub async fn delete_subject(st: AppState, Path(subject): Path<String>, p: Params) -> ApiResult<Response> {
     let permanent = p.flag("permanent");
     let versions = blocking(&st, move |r| r.delete_subject(&subject, permanent)).await?;
     Ok(Sr(versions).into_response())
 }
 
-pub async fn get_version(State(st): State<AppState>, Path((subject, version)): Path<(String, String)>, p: Params) -> ApiResult<Response> {
+pub async fn get_version(st: AppState, Path((subject, version)): Path<(String, String)>, p: Params) -> ApiResult<Response> {
     let spec = VersionSpec::parse(&version)?;
     let deleted = p.flag("deleted");
     let format = p.get("format").map(String::from);
@@ -179,7 +179,7 @@ pub async fn get_version(State(st): State<AppState>, Path((subject, version)): P
     Ok(Sr(view).into_response())
 }
 
-pub async fn latest_with_metadata(State(st): State<AppState>, Path(subject): Path<String>, p: Params) -> ApiResult<Response> {
+pub async fn latest_with_metadata(st: AppState, Path(subject): Path<String>, p: Params) -> ApiResult<Response> {
     let pairs: Vec<(String, String)> = p.all("key").into_iter().zip(p.all("value")).collect();
     let deleted = p.flag("deleted");
     let format = p.get("format").map(String::from);
@@ -187,7 +187,7 @@ pub async fn latest_with_metadata(State(st): State<AppState>, Path(subject): Pat
     Ok(Sr(view).into_response())
 }
 
-pub async fn get_version_raw(State(st): State<AppState>, Path((subject, version)): Path<(String, String)>, p: Params) -> ApiResult<Response> {
+pub async fn get_version_raw(st: AppState, Path((subject, version)): Path<(String, String)>, p: Params) -> ApiResult<Response> {
     let spec = VersionSpec::parse(&version)?;
     let deleted = p.flag("deleted");
     let format = p.get("format").map(String::from);
@@ -195,13 +195,13 @@ pub async fn get_version_raw(State(st): State<AppState>, Path((subject, version)
     Ok(raw_schema(view.schema))
 }
 
-pub async fn referenced_by(State(st): State<AppState>, Path((subject, version)): Path<(String, String)>) -> ApiResult<Response> {
+pub async fn referenced_by(st: AppState, Path((subject, version)): Path<(String, String)>) -> ApiResult<Response> {
     let spec = VersionSpec::parse(&version)?;
     let ids = inline(&st, |r| r.referenced_by(&subject, spec))?;
     Ok(Sr(ids).into_response())
 }
 
-pub async fn delete_version(State(st): State<AppState>, Path((subject, version)): Path<(String, String)>, p: Params) -> ApiResult<Response> {
+pub async fn delete_version(st: AppState, Path((subject, version)): Path<(String, String)>, p: Params) -> ApiResult<Response> {
     let spec = VersionSpec::parse(&version)?;
     let permanent = p.flag("permanent");
     let v = blocking(&st, move |r| r.delete_version(&subject, spec, permanent)).await?;
@@ -210,7 +210,7 @@ pub async fn delete_version(State(st): State<AppState>, Path((subject, version))
 
 /// `POST /subjects/{subject}/versions/{version}/tags`
 pub async fn modify_tags(
-    State(st): State<AppState>,
+    st: AppState,
     Path((subject, version)): Path<(String, String)>,
     body: JsonBody,
 ) -> ApiResult<Response> {
@@ -240,7 +240,7 @@ fn compat_response(messages: Vec<String>, verbose: bool) -> Response {
     Sr(body).into_response()
 }
 
-pub async fn compat_all(State(st): State<AppState>, Path(subject): Path<String>, p: Params, body: JsonBody) -> ApiResult<Response> {
+pub async fn compat_all(st: AppState, Path(subject): Path<String>, p: Params, body: JsonBody) -> ApiResult<Response> {
     let req = RegisterSchemaRequest::from_json(&body.require("testCompatibilityForSubject.arg3")?)?;
     let (normalize, verbose) = (p.flag("normalize"), p.flag("verbose"));
     let msgs = blocking(&st, move |r| r.test_compatibility(&subject, None, req, normalize, verbose)).await?;
@@ -248,7 +248,7 @@ pub async fn compat_all(State(st): State<AppState>, Path(subject): Path<String>,
 }
 
 pub async fn compat_version(
-    State(st): State<AppState>,
+    st: AppState,
     Path((subject, version)): Path<(String, String)>,
     p: Params,
     body: JsonBody,
@@ -294,24 +294,24 @@ async fn config_delete(st: AppState, subject: Option<String>) -> ApiResult<Respo
     Ok(Sr(prev).into_response())
 }
 
-pub async fn get_global_config(State(st): State<AppState>, p: Params) -> ApiResult<Response> {
+pub async fn get_global_config(st: AppState, p: Params) -> ApiResult<Response> {
     config_get(st, None, p).await
 }
-pub async fn put_global_config(State(st): State<AppState>, body: JsonBody) -> ApiResult<Response> {
+pub async fn put_global_config(st: AppState, body: JsonBody) -> ApiResult<Response> {
     let body = body.require("updateTopLevelConfig.arg1")?;
     config_put(st, None, body).await
 }
-pub async fn delete_global_config(State(st): State<AppState>) -> ApiResult<Response> {
+pub async fn delete_global_config(st: AppState) -> ApiResult<Response> {
     config_delete(st, None).await
 }
-pub async fn get_subject_config(State(st): State<AppState>, Path(s): Path<String>, p: Params) -> ApiResult<Response> {
+pub async fn get_subject_config(st: AppState, Path(s): Path<String>, p: Params) -> ApiResult<Response> {
     config_get(st, Some(s), p).await
 }
-pub async fn put_subject_config(State(st): State<AppState>, Path(s): Path<String>, body: JsonBody) -> ApiResult<Response> {
+pub async fn put_subject_config(st: AppState, Path(s): Path<String>, body: JsonBody) -> ApiResult<Response> {
     let body = body.require("updateSubjectLevelConfig.arg2")?;
     config_put(st, Some(s), body).await
 }
-pub async fn delete_subject_config(State(st): State<AppState>, Path(s): Path<String>) -> ApiResult<Response> {
+pub async fn delete_subject_config(st: AppState, Path(s): Path<String>) -> ApiResult<Response> {
     config_delete(st, Some(s)).await
 }
 
@@ -346,33 +346,33 @@ async fn mode_delete(st: AppState, subject: String) -> ApiResult<Response> {
     Ok(mode_json(blocking(&st, move |r| r.delete_mode(&subject)).await?))
 }
 
-pub async fn get_global_mode(State(st): State<AppState>, p: Params) -> ApiResult<Response> {
+pub async fn get_global_mode(st: AppState, p: Params) -> ApiResult<Response> {
     mode_get(st, None, p).await
 }
-pub async fn put_global_mode(State(st): State<AppState>, p: Params, body: JsonBody) -> ApiResult<Response> {
+pub async fn put_global_mode(st: AppState, p: Params, body: JsonBody) -> ApiResult<Response> {
     let body = body.require("updateTopLevelMode.arg1")?;
     mode_put(st, None, p, body).await
 }
-pub async fn get_subject_mode(State(st): State<AppState>, Path(s): Path<String>, p: Params) -> ApiResult<Response> {
+pub async fn get_subject_mode(st: AppState, Path(s): Path<String>, p: Params) -> ApiResult<Response> {
     mode_get(st, Some(s), p).await
 }
-pub async fn put_subject_mode(State(st): State<AppState>, Path(s): Path<String>, p: Params, body: JsonBody) -> ApiResult<Response> {
+pub async fn put_subject_mode(st: AppState, Path(s): Path<String>, p: Params, body: JsonBody) -> ApiResult<Response> {
     let body = body.require("updateMode.arg2")?;
     mode_put(st, Some(s), p, body).await
 }
-pub async fn delete_subject_mode(State(st): State<AppState>, Path(s): Path<String>) -> ApiResult<Response> {
+pub async fn delete_subject_mode(st: AppState, Path(s): Path<String>) -> ApiResult<Response> {
     mode_delete(st, s).await
 }
 
 // ---------------- contexts ----------------
 
-pub async fn list_contexts(State(st): State<AppState>, caller: Caller) -> ApiResult<Response> {
+pub async fn list_contexts(st: AppState, caller: Caller) -> ApiResult<Response> {
     let list = inline(&st, |r| r.list_contexts())?;
     let list: Vec<String> = list.into_iter().filter(|c| caller.0.can_see_context(c)).collect();
     Ok(Sr(list).into_response())
 }
 
-pub async fn delete_context(State(st): State<AppState>, Path(ctx): Path<String>) -> ApiResult<Response> {
+pub async fn delete_context(st: AppState, Path(ctx): Path<String>) -> ApiResult<Response> {
     blocking(&st, move |r| r.delete_context(&ctx)).await?;
     Ok(StatusCode::NO_CONTENT.into_response())
 }

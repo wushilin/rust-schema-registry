@@ -283,7 +283,6 @@ impl Store {
         Ok(PhysicalStore::open(path, sync_writes)?.container(TenantId::default_tenant()))
     }
 
-    #[allow(dead_code)] // same
     pub fn tenant(&self) -> &TenantId {
         &self.tenant
     }

@@ -1,6 +1,6 @@
 //! Schema exporter (schema linking) endpoints.
 
-use axum::extract::{Path, State};
+use axum::extract::Path;
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use serde_json::{Map, Value, json};
@@ -10,22 +10,22 @@ use crate::error::ApiResult;
 use crate::model::ExporterUpdateRequest;
 use crate::registry::exporter_status_json;
 
-pub async fn list(State(st): State<AppState>) -> ApiResult<Response> {
+pub async fn list(st: AppState) -> ApiResult<Response> {
     Ok(Sr(blocking(&st, |r| r.list_exporters()).await?).into_response())
 }
 
-pub async fn create(State(st): State<AppState>, Body(req): Body<ExporterUpdateRequest>) -> ApiResult<Response> {
+pub async fn create(st: AppState, Body(req): Body<ExporterUpdateRequest>) -> ApiResult<Response> {
     let name = blocking(&st, move |r| r.create_exporter(req)).await?;
     Ok(Sr(json!({ "name": name })).into_response())
 }
 
-pub async fn get_info(State(st): State<AppState>, Path(name): Path<String>) -> ApiResult<Response> {
+pub async fn get_info(st: AppState, Path(name): Path<String>) -> ApiResult<Response> {
     let rec = blocking(&st, move |r| r.get_exporter(&name)).await?;
     Ok(Sr(rec.info).into_response())
 }
 
 pub async fn update(
-    State(st): State<AppState>,
+    st: AppState,
     Path(name): Path<String>,
     Body(req): Body<ExporterUpdateRequest>,
 ) -> ApiResult<Response> {
@@ -33,23 +33,23 @@ pub async fn update(
     Ok(Sr(json!({ "name": name })).into_response())
 }
 
-pub async fn delete(State(st): State<AppState>, Path(name): Path<String>) -> ApiResult<Response> {
+pub async fn delete(st: AppState, Path(name): Path<String>) -> ApiResult<Response> {
     blocking(&st, move |r| r.delete_exporter(&name)).await?;
     Ok(StatusCode::NO_CONTENT.into_response())
 }
 
-pub async fn status(State(st): State<AppState>, Path(name): Path<String>) -> ApiResult<Response> {
+pub async fn status(st: AppState, Path(name): Path<String>) -> ApiResult<Response> {
     let rec = blocking(&st, move |r| r.get_exporter(&name)).await?;
     Ok(Sr(exporter_status_json(&rec)).into_response())
 }
 
-pub async fn get_config(State(st): State<AppState>, Path(name): Path<String>) -> ApiResult<Response> {
+pub async fn get_config(st: AppState, Path(name): Path<String>) -> ApiResult<Response> {
     let rec = blocking(&st, move |r| r.get_exporter(&name)).await?;
     Ok(Sr(rec.info.config).into_response())
 }
 
 pub async fn put_config(
-    State(st): State<AppState>,
+    st: AppState,
     Path(name): Path<String>,
     Body(cfg): Body<Map<String, Value>>,
 ) -> ApiResult<Response> {
@@ -62,12 +62,12 @@ async fn transition(st: AppState, name: String, action: &'static str) -> ApiResu
     Ok(Sr(json!({ "name": name })).into_response())
 }
 
-pub async fn pause(State(st): State<AppState>, Path(name): Path<String>) -> ApiResult<Response> {
+pub async fn pause(st: AppState, Path(name): Path<String>) -> ApiResult<Response> {
     transition(st, name, "pause").await
 }
-pub async fn resume(State(st): State<AppState>, Path(name): Path<String>) -> ApiResult<Response> {
+pub async fn resume(st: AppState, Path(name): Path<String>) -> ApiResult<Response> {
     transition(st, name, "resume").await
 }
-pub async fn reset(State(st): State<AppState>, Path(name): Path<String>) -> ApiResult<Response> {
+pub async fn reset(st: AppState, Path(name): Path<String>) -> ApiResult<Response> {
     transition(st, name, "reset").await
 }

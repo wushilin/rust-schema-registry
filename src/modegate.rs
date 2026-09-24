@@ -50,10 +50,26 @@ pub enum Intent {
 }
 
 /// Proof that the mode in scope allows the write about to happen. Only
-/// [`check`] produces one, and `Store`'s writes demand one, so the table
-/// cannot be bypassed by forgetting to call it.
+/// [`check`] and the two named exemptions below produce one, and every write
+/// in `Store` that defines registry state demands one, so the table cannot be
+/// bypassed by forgetting to call it.
 #[derive(Debug)]
 pub struct Allowed(());
+
+impl Allowed {
+    /// A mode change itself. Never gated: it is the way out of READONLY and
+    /// out of IMPORT, so gating it on the mode would be a trap with no key.
+    pub fn is_a_mode_change() -> Self {
+        Self(())
+    }
+
+    /// Registry metadata that is not schema state and that Confluent does not
+    /// gate on modes either: exporter records, and removing an (already empty)
+    /// context. Grep this constructor to find everything that skips the table.
+    pub fn not_schema_state() -> Self {
+        Self(())
+    }
+}
 
 /// The rule. `scope` names what the mode belongs to, for the error message
 /// ("null" is what Confluent prints for the global scope).

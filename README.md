@@ -365,9 +365,14 @@ admin UI all filtered to that caller - plus that an unparseable pattern stops
 the server from starting.
 
 **Mode rules** (`src/modegate.rs`): which operations a mode allows lives in
-one table, and the only way to get the token the store demands before writing
-a schema or a version is to consult it - a write path cannot forget the check,
-it has nothing to pass. (A gate in front of the routes would be wrong: what
+one table, and every write in the store that defines registry state - schemas,
+versions, hard deletes, config - demands the token that only consulting that
+table produces. A write path cannot forget the check; it has nothing to pass.
+Two exemptions exist and are named rather than implied: `is_a_mode_change()`
+(a mode change is the way out of READONLY and IMPORT, including the `force`
+emptying when entering IMPORT) and `not_schema_state()` (exporter records, and
+deleting an already-empty context). `grep` for either to see every write that
+skips the table. (A gate in front of the routes would be wrong: what
 Confluent answers depends on registry state, e.g. a re-registration of a schema
 that already has that id answers 200 in READWRITE mode, and `DELETE /config/x`
 on a missing subject answers 404 before any mode is considered.)

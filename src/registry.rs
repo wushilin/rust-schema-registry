@@ -1275,14 +1275,14 @@ impl Registry {
         // IMPORT may overwrite an existing version (the log is keyed by subject+version).
         let overwritten = versions.iter().find(|(v, _)| *v == version).map(|(_, vr)| vr.clone());
         if let Some(old) = &overwritten {
-            self.hard_delete_rows(r, &mut tx, q, version, old, &HashSet::new())?;
+            self.hard_delete_rows(r, &mut tx, q, version, old, &HashSet::new(), allowed)?;
         }
         // Older soft-deleted versions carrying the same id are removed for good.
         let stale: Vec<(u32, VersionRecord)> =
             versions.iter().filter(|(v, vr)| vr.deleted && vr.id == id && *v < version).cloned().collect();
         let stale_keys: HashSet<(String, u32)> = stale.iter().map(|(v, _)| (q.subject.clone(), *v)).collect();
         for (v, vr) in &stale {
-            self.hard_delete_rows(r, &mut tx, q, *v, vr, &stale_keys)?;
+            self.hard_delete_rows(r, &mut tx, q, *v, vr, &stale_keys, allowed)?;
         }
         let rec = match r.get_schema(&q.context, id)? {
             Some(existing) if existing.fingerprint == fp => SchemaRecord::clone(&existing),
@@ -1810,8 +1810,9 @@ impl Registry {
         version: u32,
         vr: &VersionRecord,
         also_removed: &HashSet<(String, u32)>,
+        allowed: &crate::modegate::Allowed,
     ) -> ApiResult<()> {
-        tx.delete_version(&q.context, &q.subject, version, vr.id);
+        tx.delete_version(&q.context, &q.subject, version, vr.id, allowed);
         let still_used = r
             .id_usages(&q.context, vr.id)?
             .into_iter()
@@ -1865,12 +1866,12 @@ impl Registry {
                     kind: LogEventKind::SoftDelete,
                 })?;
             }
-            tx.delete_mode(&scope);
-            tx.delete_config(&scope);
+            tx.delete_mode(&scope, &allowed);
+            tx.delete_config(&scope, &allowed);
         } else {
             let all: HashSet<(String, u32)> = versions.iter().map(|(v, _)| (q.subject.clone(), *v)).collect();
             for (v, vr) in &versions {
-                self.hard_delete_rows(r, &mut tx, &q, *v, vr, &all)?;
+                self.hard_delete_rows(r, &mut tx, &q, *v, vr, &all, &allowed)?;
             }
         }
         self.commit(tx)?;
@@ -1906,8 +1907,8 @@ impl Registry {
             if !r.list_versions(&q.context, &q.subject)?.iter().any(|(v, x)| *v != version && !x.deleted) {
                 // That was the last live version: the subject's mode and config go too.
                 let scope = Self::scope_for(&q);
-                tx.delete_mode(&scope);
-                tx.delete_config(&scope);
+                tx.delete_mode(&scope, &allowed);
+                tx.delete_config(&scope, &allowed);
             }
             tx.append_log(&LogEvent {
                 ctx: q.context.clone(),
@@ -1917,7 +1918,7 @@ impl Registry {
                 kind: LogEventKind::SoftDelete,
             })?;
         } else {
-            self.hard_delete_rows(r, &mut tx, &q, version, &vr, &HashSet::new())?;
+            self.hard_delete_rows(r, &mut tx, &q, version, &vr, &HashSet::new(), &allowed)?;
         }
         self.commit(tx)?;
         Ok(version)
@@ -1940,11 +1941,11 @@ impl Registry {
         let q = subject.map(QualifiedSubject::parse).transpose()?;
         let _guard = self.lock();
         let r = &self.reader();
-        self.check_not_read_only(r, q.as_ref())?;
+        let allowed = self.check_not_read_only(r, q.as_ref())?;
         let scope = q.as_ref().map(Self::scope_for).unwrap_or(Scope::Global);
         let merged = r.get_config(&scope)?.unwrap_or_default().merged_with(&update);
         let mut tx = self.store.tx()?;
-        tx.put_config(&scope, &merged)?;
+        tx.put_config(&scope, &merged, &allowed)?;
         self.commit(tx)
     }
 
@@ -1957,9 +1958,9 @@ impl Registry {
             None => self.config_of(r, None)?.expect("global config"),
             Some(q) => self.config_of(r, Some(q))?.ok_or_else(|| ApiError::subject_not_found(&q.qualified()))?,
         };
-        self.check_not_read_only(r, q.as_ref())?;
+        let allowed = self.check_not_read_only(r, q.as_ref())?;
         let mut tx = self.store.tx()?;
-        tx.delete_config(&q.as_ref().map(Self::scope_for).unwrap_or(Scope::Global));
+        tx.delete_config(&q.as_ref().map(Self::scope_for).unwrap_or(Scope::Global), &allowed);
         self.commit(tx)?;
         Ok(previous)
     }
@@ -2017,11 +2018,14 @@ impl Registry {
                 }
             }
             let keys: HashSet<(String, u32)> = doomed.iter().map(|(q, v, _)| (q.subject.clone(), *v)).collect();
+            // Entering IMPORT with `force` clears what is there, as in
+            // Confluent: that emptying is part of the mode change itself.
+            let allowed = crate::modegate::Allowed::is_a_mode_change();
             for (sq, v, vr) in &doomed {
-                self.hard_delete_rows(r, &mut tx, sq, *v, vr, &keys)?;
+                self.hard_delete_rows(r, &mut tx, sq, *v, vr, &keys, &allowed)?;
             }
         }
-        tx.put_mode(&scope, mode)?;
+        tx.put_mode(&scope, mode, &crate::modegate::Allowed::is_a_mode_change())?;
         self.commit(tx)
     }
 
@@ -2032,7 +2036,7 @@ impl Registry {
         let r = &self.reader();
         let previous = self.mode_of(r, Some(&q))?.ok_or_else(|| ApiError::subject_not_found(&q.qualified()))?;
         let mut tx = self.store.tx()?;
-        tx.delete_mode(&Self::scope_for(&q));
+        tx.delete_mode(&Self::scope_for(&q), &crate::modegate::Allowed::is_a_mode_change());
         self.commit(tx)?;
         Ok(previous)
     }
@@ -2257,9 +2261,12 @@ impl Registry {
             return Err(ApiError::context_not_empty(&ctx));
         }
         let mut tx = self.store.tx()?;
-        tx.delete_context(&ctx);
-        tx.delete_config(&Scope::Context(ctx.clone()));
-        tx.delete_mode(&Scope::Context(ctx.clone()));
+        // An empty context and its settings: no schema state, so no mode gate
+        // (Confluent does not gate this either).
+        let allowed = crate::modegate::Allowed::not_schema_state();
+        tx.delete_context(&ctx, &allowed);
+        tx.delete_config(&Scope::Context(ctx.clone()), &allowed);
+        tx.delete_mode(&Scope::Context(ctx.clone()), &allowed);
         self.commit(tx)?;
         Ok(())
     }
@@ -2338,7 +2345,10 @@ impl Registry {
             config: req.config.unwrap_or_default(),
         };
         Self::validate_exporter(&info)?;
-        self.store.put_exporter(&ExporterRecord { info, state: ExporterState::Running, offset: 0, ts: now_millis(), trace: String::new() })?;
+        self.store.put_exporter(
+            &ExporterRecord { info, state: ExporterState::Running, offset: 0, ts: now_millis(), trace: String::new() },
+            &crate::modegate::Allowed::not_schema_state(),
+        )?;
         self.changes.notify_waiters();
         Ok(name)
     }
@@ -2363,7 +2373,7 @@ impl Registry {
         }
         Self::validate_exporter(&rec.info)?;
         rec.ts = now_millis();
-        self.store.put_exporter(&rec)?;
+        self.store.put_exporter(&rec, &crate::modegate::Allowed::not_schema_state())?;
         self.changes.notify_waiters();
         Ok(name.to_string())
     }
@@ -2383,7 +2393,7 @@ impl Registry {
     pub fn delete_exporter(&self, name: &str) -> ApiResult<()> {
         let _g = self.exporter_lock();
         self.get_exporter(name)?;
-        self.store.delete_exporter(name)
+        self.store.delete_exporter(name, &crate::modegate::Allowed::not_schema_state())
     }
 
     /// Pause / resume / reset.
@@ -2416,7 +2426,7 @@ impl Registry {
             _ => return Err(ApiError::unprocessable(format!("unknown action {action}"))),
         }
         rec.ts = now_millis();
-        self.store.put_exporter(&rec)?;
+        self.store.put_exporter(&rec, &crate::modegate::Allowed::not_schema_state())?;
         self.changes.notify_waiters();
         Ok(name.to_string())
     }
@@ -2450,7 +2460,7 @@ impl Registry {
         rec.ts = now_millis();
         rec.state = state;
         rec.trace = trace.unwrap_or_default();
-        self.store.put_exporter(&rec)
+        self.store.put_exporter(&rec, &crate::modegate::Allowed::not_schema_state())
     }
 
     /// Every (context, subject, version) currently stored, oldest version

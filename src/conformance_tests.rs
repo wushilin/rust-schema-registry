@@ -851,3 +851,64 @@ fn admin_subject_shows_every_version_and_404s_for_unknown_subjects() {
 
     assert_eq!(r.admin_subject("nope").unwrap_err().code, 40401);
 }
+
+// ---------------- the mode table, from the outside ----------------
+
+#[test]
+fn every_write_entry_point_consults_the_mode_table() {
+    let (r, _d) = registry();
+    register(&r, "ro-value", "R");
+    // Configured while it is still writable: `delete_config` checks that the
+    // config exists before it checks the mode, as Confluent does.
+    r.set_config(Some("ro-value"), crate::model::ConfigRecord {
+        compatibility_level: Some(CompatibilityLevel::None),
+        ..Default::default()
+    })
+    .unwrap();
+    r.set_mode(Some("ro-value"), Mode::Readonly, false).unwrap();
+    let refused = |e: crate::error::ApiError| {
+        assert_eq!(e.code, 42205, "{}", e.message);
+        assert!(e.message.contains("read-only"), "{}", e.message);
+    };
+    // Every way of changing this subject's state is refused...
+    refused(r.register("ro-value", req(rec("R2")), false).unwrap_err());
+    refused(r.delete_subject("ro-value", false).unwrap_err());
+    refused(r.delete_version("ro-value", crate::registry::VersionSpec::Exact(1), false).unwrap_err());
+    refused(
+        r.set_config(Some("ro-value"), crate::model::ConfigRecord {
+            compatibility_level: Some(CompatibilityLevel::None),
+            ..Default::default()
+        })
+        .unwrap_err(),
+    );
+    refused(r.delete_config(Some("ro-value")).unwrap_err());
+    refused(
+        r.modify_tags("ro-value", crate::registry::VersionSpec::Latest, crate::model::TagSchemaRequest::default())
+            .unwrap_err(),
+    );
+
+    // ...an import is refused for its own reason, not silently allowed...
+    r.set_mode(Some("imp-value"), Mode::Readwrite, false).unwrap();
+    register(&r, "imp-value", "I");
+    let e = r.register("imp-value", import_req(rec("I2"), 77, Some(2)), false).unwrap_err();
+    assert_eq!(e.code, 42205);
+    assert!(e.message.contains("not in import mode"), "{}", e.message);
+
+    // ...and the two deliberate exemptions still work: a mode change (the way
+    // out of read-only) and registry metadata that is not schema state.
+    r.set_mode(Some("ro-value"), Mode::Readwrite, false).unwrap();
+    r.register("ro-value", req(rec("R2")), false).unwrap();
+    r.set_mode(None, Mode::Readonly, false).unwrap();
+    r.create_exporter(crate::model::ExporterUpdateRequest {
+        name: Some("x".into()),
+        config: Some(serde_json::from_value(json!({"schema.registry.url": "http://127.0.0.1:1"})).unwrap()),
+        ..Default::default()
+    })
+    .expect("exporters are not schema state");
+    // A global READONLY does not reach into another context (only the
+    // override does), so this is allowed - and refused once it is an override.
+    r.set_config(Some(":.empty:"), crate::model::ConfigRecord::default()).unwrap();
+    r.set_mode(None, Mode::ReadonlyOverride, false).unwrap();
+    refused(r.set_config(Some(":.empty:"), crate::model::ConfigRecord::default()).unwrap_err());
+    r.delete_context(".empty").expect("an empty context is not schema state");
+}

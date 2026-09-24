@@ -129,6 +129,17 @@ atomic `WriteBatch`) replaces Kafka as the durable store. One column family per
 table, with big-endian integer keys so prefix scans come back sorted
 (`src/store.rs` has the key layout).
 
+**Reads are wait-free; the caches are safe because their values cannot
+change.** A read takes one `Arc<Snapshot>` (an atomic load) and walks immutable
+persistent maps, so it never blocks, is never blocked, and sees one consistent
+point in time for the whole request. The schema-body and parsed-schema caches
+sit *outside* the snapshot, shared by all readers, which is only sound because
+their keys map to values that cannot change: content under an id is fixed
+(registering over an id is refused, and a hard delete removes versions, not
+bodies), and the parsed cache is additionally keyed by a fingerprint of what
+the schema's references resolved to - so a parse built against a schema that
+has since been replaced cannot be looked up.
+
 **Every write is one atomic transaction, and readers see snapshots.**
 All registry *metadata* (every id, subject, version, fingerprint, reference
 edge, config, mode and counter) lives in an immutable `Snapshot`

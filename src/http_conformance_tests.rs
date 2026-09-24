@@ -239,7 +239,7 @@ fn fresh_app() -> (api::Service, tempfile::TempDir) {
         &[],
         std::collections::HashMap::from([(crate::tenant::TenantId::default_tenant(), Arc::new(registry))]),
     );
-    let shared = api::Shared { containers: Arc::new(containers), auth: Arc::new(Auth::disabled()) };
+    let shared = api::Shared { containers: Arc::new(containers), auth: Arc::new(Auth::disabled()), log_reads: false };
     (api::service(shared, 16 << 20), dir)
 }
 

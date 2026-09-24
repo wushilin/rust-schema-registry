@@ -23,6 +23,13 @@ cache_max_entries = 20000
 max_body_bytes = 16777216
 exporter_poll_seconds = 10
 
+# Records go to stdout, warnings and errors to stderr. `json` writes one JSON
+# object per line with the same fields as the readable layout.
+log_format = "text"
+# Reads are the bulk of the traffic, so they are only recorded when asked for.
+# Writes and failures are always recorded.
+log_reads = false
+
 # Host containers: several logically separate registries in one process and one
 # store, told apart by the request's Host header. Without any, there is exactly
 # one, named `default`, answering on every host - and nothing about the API

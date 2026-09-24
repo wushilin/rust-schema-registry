@@ -67,6 +67,8 @@ deletes, configs and modes out of a Confluent.
 | Exporters | `/exporters` CRUD, `/status`, `/config`, `pause`/`resume`/`reset`; context types AUTO/CUSTOM/NONE/DEFAULT, subject globs, `subjectRenameFormat`; states RUNNING/PAUSED/ERROR/FAILED |
 | Auth | HTTP Basic, roles `admin` / `write` / `readonly` registry-wide or bound to subject patterns (`.eu::orders-*`), bcrypt or plaintext passwords |
 | Host containers | several logically separate registries in one process and one store, keyed by a prefix on every row (contexts, subjects, ids, config, modes, exporters and the change log). One implicit `default` container unless configured |
+| Backup / restore | `schema-registry backup --from URL` and `restore --from dump --to URL`, plus `GET /admin/api/backup` and `POST /admin/api/restore`: a newline-delimited JSON dump of subjects, versions, ids, references, metadata, rule sets, config, modes and exporters |
+| Logging | one record per mutation and per request, as text or JSON; records on stdout, warnings and errors on stderr |
 | Admin UI | `/admin`: one page over the same REST API - register schemas and new versions (with a compatibility check), subjects, versions and schemas, compatibility and mode per subject/context/global, contexts, exporters (pause/resume/reset/create/edit), soft and permanent deletes. Admin role only |
 | Migration | `schema-registry migrate --from URL --to URL`: copies every subject, version, id, reference, soft delete, config and mode from another registry |
 
@@ -329,10 +331,44 @@ a registry-wide namespace and serializers fetch them constantly - so any
 authenticated caller may read a schema by id. And global settings, contexts and
 exporters always need a registry-wide `admin`.
 
+## Backup and restore
+
+The dump is newline-delimited JSON describing the *registry*, never the store,
+so it restores into a different build - and, since it is written with the
+public API's shapes, into Confluent:
+
+```
+schema-registry backup  --from http://localhost:8081 --out dump.ndjson
+schema-registry restore --from dump.ndjson --to http://localhost:8081 [--dry-run]
+```
+
+The same thing over HTTP, for the container the request reaches:
+`GET /admin/api/backup` streams it, `POST /admin/api/restore` replays it
+(`?dryRun=true` reports what it would do). Both need registry-wide admin.
+
+Restoring replays through IMPORT mode: ids and version numbers come back as
+they were, referenced schemas are written first, and soft deletes are
+re-applied after everything else, because deleting the last live version of a
+subject drops that subject's settings. Re-running is safe - registering the
+same id and version again is a no-op - and unknown record types are skipped,
+so a newer build's dump still restores what an older one understands.
+
+## Logging
+
+One record per mutation (`verb`, `container`, `elapsed_us`, and on refusal
+`error_code` and the message) and one per request (`method`, `path`, `status`,
+`container`, `elapsed_us`). **Records go to stdout; warnings and errors go to
+stderr**, so a shell can separate them without parsing. `log_format = "json"`
+writes one JSON object per line with the same fields.
+
+Reads are the bulk of the traffic, so they are recorded at `debug` unless
+`log_reads = true`; writes and failures are always recorded. `RUST_LOG` still
+works for anything finer.
+
 ## Admin UI
 
 `/admin` serves a single self-contained page - no build step, no assets, no
-outside requests - for looking at and operating the registry:
+outside requests - laid out as a console with a left rail:
 
 * **Subjects**: every subject with its version count, latest version and id,
   schema type, effective compatibility and mode (and where each is inherited
@@ -346,7 +382,9 @@ outside requests - for looking at and operating the registry:
   deleting an empty one.
 * **Exporters**: state, offset, destination and the last error; pause, resume,
   reset, edit the config, create and delete.
-* **Cluster**: cluster id, counts, global compatibility and mode.
+* **Backup & Restore**: download a dump, or restore one (with a dry run
+  first).
+* **Settings**: container, cluster id, counts, global compatibility and mode.
 
 Changes go through the public REST API, so the UI can do nothing an admin
 could not do with `curl`, and every refusal is the registry's own error. It is

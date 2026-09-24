@@ -40,6 +40,12 @@ pub struct ServerConfig {
     pub cache_max_entries: u64,
     /// How often exporters poll when idle (they are also woken on every change).
     pub exporter_poll_seconds: u64,
+    /// `text` (the default) or `json`. Both carry the same fields; `json` is
+    /// the one a log collector can read without guessing.
+    pub log_format: String,
+    /// Log every request, not only writes and failures. Reads are the bulk of
+    /// the traffic, so this is off unless someone is looking for something.
+    pub log_reads: bool,
     pub auth: AuthConfig,
     /// Host containers: several logically separate registries in one process
     /// and one store. Without any, there is one named `default` that answers
@@ -80,6 +86,8 @@ impl Default for ServerConfig {
             schema_search_max_limit: 1000,
             subject_search_default_limit: 20_000,
             subject_search_max_limit: 20_000,
+            log_format: "text".into(),
+            log_reads: false,
             auth: AuthConfig::default(),
             containers: Vec::new(),
         }
@@ -159,6 +167,9 @@ impl ServerConfig {
     }
 
     pub fn validate(&self) -> anyhow::Result<()> {
+        if !matches!(self.log_format.as_str(), "text" | "json") {
+            anyhow::bail!("log_format must be 'text' or 'json', not '{}'", self.log_format);
+        }
         crate::model::CompatibilityLevel::parse(&self.default_compatibility)
             .map_err(|e| anyhow::anyhow!("default_compatibility: {}", e.message))?;
         if self.auth.enabled && self.auth.users.is_empty() {

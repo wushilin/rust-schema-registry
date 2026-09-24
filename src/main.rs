@@ -3,6 +3,7 @@
 
 mod api;
 mod auth;
+mod backup;
 mod authz;
 mod config;
 mod containers;
@@ -90,6 +91,58 @@ enum Command {
         #[arg(long)]
         dry_run: bool,
     },
+    /// Write a whole registry to a newline-delimited JSON dump: subjects,
+    /// versions, ids, references, metadata, rule sets, config, modes and
+    /// exporters. Works against any Confluent-compatible registry.
+    Backup {
+        /// Registry to read, e.g. http://localhost:8081.
+        #[arg(long)]
+        from: String,
+        /// Basic auth for it, as `user:password`.
+        #[arg(long)]
+        from_auth: Option<String>,
+        /// Where to write the dump; `-` (the default) is standard output.
+        #[arg(long, default_value = "-")]
+        out: String,
+        /// Only subjects with this prefix (`:*:` - every context - by default).
+        #[arg(long)]
+        subject_prefix: Option<String>,
+    },
+    /// Replay a dump into a registry, keeping ids and version numbers. The
+    /// destination must allow IMPORT mode; re-running is safe.
+    Restore {
+        /// The dump to read; `-` is standard input.
+        #[arg(long)]
+        from: String,
+        /// Registry to write into.
+        #[arg(long)]
+        to: String,
+        /// Basic auth for the destination, as `user:password`.
+        #[arg(long)]
+        to_auth: Option<String>,
+        /// Report what would be written without writing anything.
+        #[arg(long)]
+        dry_run: bool,
+    },
+}
+
+/// Records go to stdout; warnings and errors go to stderr, so a shell can
+/// separate "what happened" from "what went wrong" without parsing anything.
+/// `log_format = "json"` swaps the human-readable layout for one line of JSON
+/// per event, with the same fields either way.
+fn init_logging(cfg: &ServerConfig) {
+    use tracing_subscriber::fmt::writer::MakeWriterExt;
+    let filter = tracing_subscriber::EnvFilter::try_from_default_env()
+        .unwrap_or_else(|_| "info,tower_http=warn".into());
+    let writer = std::io::stderr
+        .with_max_level(tracing::Level::WARN)
+        .or_else(std::io::stdout.with_max_level(tracing::Level::TRACE));
+    let builder = tracing_subscriber::fmt().with_env_filter(filter).with_writer(writer);
+    if cfg.log_format == "json" {
+        builder.json().flatten_event(true).init();
+    } else {
+        builder.init();
+    }
 }
 
 #[tokio::main]
@@ -97,6 +150,31 @@ async fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
     if let Some(Command::HashPassword { password, cost }) = &cli.command {
         println!("{}", bcrypt::hash(password, *cost)?);
+        return Ok(());
+    }
+    if let Some(Command::Backup { from, from_auth, out, subject_prefix }) = &cli.command {
+        let src = migrate::Endpoint::new(from, from_auth.as_deref())?;
+        let dump = backup::read(&src, subject_prefix.as_deref()).await?;
+        let text = dump.to_ndjson();
+        let (subjects, versions) = (dump.subject_order.len(), dump.version_count());
+        if out == "-" {
+            print!("{text}");
+        } else {
+            std::fs::write(out, &text)?;
+            eprintln!("{subjects} subjects, {versions} versions, {} bytes -> {out}", text.len());
+        }
+        return Ok(());
+    }
+    if let Some(Command::Restore { from, to, to_auth, dry_run }) = &cli.command {
+        let text = if from == "-" { std::io::read_to_string(std::io::stdin())? } else { std::fs::read_to_string(from)? };
+        let dump = backup::Dump::parse(&text)?;
+        let dst = migrate::Endpoint::new(to, to_auth.as_deref())?;
+        let r = backup::restore(&dump, &dst, *dry_run).await?;
+        let verb = if *dry_run { "would restore" } else { "restored" };
+        println!(
+            "{verb} {} subjects, {} versions ({} soft-deleted), {} configs, {} modes, {} exporters",
+            r.subjects, r.versions, r.soft_deleted, r.configs, r.modes, r.exporters
+        );
         return Ok(());
     }
     if let Some(Command::Migrate { from, to, from_auth, to_auth, subject_prefix, skip_deleted, dry_run }) = &cli.command {
@@ -125,13 +203,9 @@ async fn main() -> anyhow::Result<()> {
         return Ok(if s.skipped.is_empty() { () } else { std::process::exit(1) });
     }
 
-    tracing_subscriber::fmt()
-        .with_env_filter(
-            tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| "info,tower_http=info".into()),
-        )
-        .init();
-
     let mut cfg = ServerConfig::load(cli.config.as_deref())?;
+    init_logging(&cfg);
+
     if let Some(l) = cli.listen {
         cfg.listen = l;
     }
@@ -192,7 +266,7 @@ async fn main() -> anyhow::Result<()> {
     let auth = Arc::new(if cfg.auth.enabled { Auth::new(&cfg.auth) } else { Auth::disabled() });
     let container_names = registries.keys().map(|n| n.to_string()).collect::<Vec<_>>().join(", ");
     let containers = Arc::new(containers::Containers::new(&cfg.containers, registries));
-    let app = api::service(api::Shared { containers, auth }, cfg.max_body_bytes);
+    let app = api::service(api::Shared { containers, auth, log_reads: cfg.log_reads }, cfg.max_body_bytes);
 
     let listener = tokio::net::TcpListener::bind(cfg.listen).await?;
     tracing::info!(

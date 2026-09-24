@@ -129,6 +129,18 @@ pub struct SchemaReference {
     pub version: i32,
 }
 
+impl RefIn {
+    /// A reference read back from a stored schema or a dump.
+    pub fn from_value(v: &serde_json::Value) -> Self {
+        Self {
+            null: v.is_null(),
+            name: v.get("name").and_then(serde_json::Value::as_str).map(String::from),
+            subject: v.get("subject").and_then(serde_json::Value::as_str).map(String::from),
+            version: v.get("version").and_then(serde_json::Value::as_i64).map(|x| x as i32),
+        }
+    }
+}
+
 /// A reference as sent by a client: any member may be missing, the element may be `null`.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct RefIn {

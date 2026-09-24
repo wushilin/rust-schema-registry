@@ -24,10 +24,33 @@ use crate::mutations::{Gate, Mutation, Plan, ReadView, Write};
 use crate::registry::Registry;
 
 pub fn run<M: Mutation>(reg: &Registry, m: M) -> ApiResult<M::Output> {
+    // One record per attempted change, with the same fields whatever the verb:
+    // what it was, where, what it wrote, how long it took, and - when it was
+    // refused - which rule refused it.
+    let started = std::time::Instant::now();
+    let verb = std::any::type_name::<M>().rsplit("::").next().unwrap_or("mutation");
+    let result = run_inner(reg, m);
+    let elapsed_us = started.elapsed().as_micros() as u64;
+    match &result {
+        Ok(_) => tracing::info!(verb, container = %reg.container(), elapsed_us, "mutation"),
+        Err(e) => tracing::warn!(
+            verb,
+            container = %reg.container(),
+            elapsed_us,
+            error_code = e.code,
+            error = %e.message,
+            "mutation refused"
+        ),
+    }
+    result
+}
+
+fn run_inner<M: Mutation>(reg: &Registry, m: M) -> ApiResult<M::Output> {
     // Lock-free first: most "writes" turn out to be a schema that is already
     // registered, and answering those without the lock is what keeps a busy
     // producer fleet from serialising behind one another.
     if let Some(out) = m.fast_path(&ReadView::new(reg))? {
+        tracing::debug!(container = %reg.container(), "answered without the lock");
         return Ok(out);
     }
     let target = m.target();
@@ -49,6 +72,14 @@ pub fn run<M: Mutation>(reg: &Registry, m: M) -> ApiResult<M::Output> {
         Some(a) => a,
         None => gate(())?,
     };
+    tracing::debug!(
+        target_scope = %target.scope_name(),
+        intent = ?m.intent(),
+        mode = ?mode,
+        writes = plan.writes.len(),
+        events = plan.events.len(),
+        "applying"
+    );
     apply(reg, plan, &allowed)
 }
 

@@ -32,6 +32,8 @@ pub const SR_CONTENT_TYPE: &str = "application/vnd.schemaregistry.v1+json";
 pub struct Shared {
     pub containers: Arc<crate::containers::Containers>,
     pub auth: Arc<Auth>,
+    /// See `ServerConfig::log_reads`.
+    pub log_reads: bool,
 }
 
 /// What a handler works with: the one container this request reached, and how
@@ -57,6 +59,37 @@ impl axum::extract::FromRequestParts<Shared> for AppState {
     }
 }
 
+/// One record per request: what was asked, of which container, what came back
+/// and how long it took. Reads are the bulk of the traffic, so they are
+/// `debug` unless `log_reads` is on; anything that changed something, and
+/// anything that failed, is always recorded.
+pub async fn access_log(req: Request, next: axum::middleware::Next) -> Response {
+    let started = std::time::Instant::now();
+    let method = req.method().clone();
+    let path = req.uri().path().to_string();
+    let container = req.extensions().get::<Arc<Registry>>().map(|r| r.container().to_string()).unwrap_or_default();
+    let verbose = req.extensions().get::<LogReads>().is_some_and(|l| l.0);
+    let resp = next.run(req).await;
+    let status = resp.status().as_u16();
+    let elapsed_us = started.elapsed().as_micros() as u64;
+    let read = matches!(method, axum::http::Method::GET | axum::http::Method::HEAD | axum::http::Method::OPTIONS);
+    if status >= 500 {
+        tracing::error!(%method, path, status, container, elapsed_us, "request failed");
+    } else if status >= 400 {
+        tracing::warn!(%method, path, status, container, elapsed_us, "request refused");
+    } else if read && !verbose {
+        tracing::debug!(%method, path, status, container, elapsed_us, "request");
+    } else {
+        tracing::info!(%method, path, status, container, elapsed_us, "request");
+    }
+    resp
+}
+
+/// Whether reads are worth a record; carried per request so the middleware
+/// does not need the whole configuration.
+#[derive(Clone, Copy)]
+pub struct LogReads(pub bool);
+
 /// Resolve the `Host` header to a container, once, in front of everything.
 pub async fn route_container(
     axum::extract::State(shared): axum::extract::State<Shared>,
@@ -68,6 +101,7 @@ pub async fn route_container(
         return crate::containers::Containers::no_such_host(host.as_deref()).into_response();
     };
     req.extensions_mut().insert(registry.clone());
+    req.extensions_mut().insert(LogReads(shared.log_reads));
     next.run(req).await
 }
 
@@ -310,6 +344,9 @@ pub fn service(shared: Shared, max_body_bytes: usize) -> Service {
         // Innermost first: the container is resolved before the URI filters,
         // because rewriting an alias needs that container's snapshot.
         .layer(axum::middleware::map_request(prematch))
+        // Outermost after routing, so a record exists even for a request that
+        // never reaches a handler.
+        .layer(axum::middleware::from_fn(access_log))
         .layer(axum::middleware::from_fn_with_state(shared, route_container))
 }
 
@@ -377,6 +414,8 @@ pub fn router(shared: Shared, max_body_bytes: usize) -> Router {
         .route("/admin/", get(admin::page))
         .route("/admin/api/overview", get(admin::overview))
         .route("/admin/api/subjects/{subject}", get(admin::subject_detail))
+        .route("/admin/api/backup", get(admin::backup))
+        .route("/admin/api/restore", post(admin::restore))
         // The UI used to live under /_admin; keep those links working.
         .route("/_admin", get(admin::moved))
         .route("/_admin/", get(admin::moved))
@@ -386,7 +425,6 @@ pub fn router(shared: Shared, max_body_bytes: usize) -> Router {
 
     api.layer(axum::middleware::from_fn_with_state(shared.clone(), crate::auth::middleware))
         .layer(DefaultBodyLimit::max(max_body_bytes))
-        .layer(tower_http::trace::TraceLayer::new_for_http())
         // A panic anywhere in a request (a schema parser meeting input it
         // cannot handle, say) becomes a 500 for that request; the server and
         // every other connection carry on.

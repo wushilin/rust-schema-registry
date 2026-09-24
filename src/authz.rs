@@ -251,7 +251,9 @@ pub fn target_of(path: &str) -> Target {
     match segs.as_slice() {
         ["subjects"] | ["schemas"] | ["contexts"] => Target::Listing,
         ["schemas", "ids", _, "subjects" | "versions"] => Target::Listing,
-        ["admin"] | ["admin", ""] | ["admin", "api", "overview"] => Target::Listing,
+        // The whole-container endpoints are listings: the response is what
+        // decides what the caller may see (backup refuses a scoped admin).
+        ["admin"] | ["admin", ""] | ["admin", "api", "overview" | "backup" | "restore"] => Target::Listing,
         ["_admin", ..] => Target::Listing,
         ["subjects", s, ..] => subject(s),
         ["compatibility", "subjects", s, ..] => subject(s),

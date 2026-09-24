@@ -66,21 +66,49 @@ impl Endpoint {
         anyhow::bail!("{status}: {body}")
     }
 
-    async fn get(&self, path: &str, ok_codes: &[u64]) -> anyhow::Result<Value> {
+    pub(crate) async fn get(&self, path: &str, ok_codes: &[u64]) -> anyhow::Result<Value> {
         self.send(self.request(reqwest::Method::GET, path), ok_codes).await
     }
 
-    async fn post(&self, path: &str, body: &Value, ok_codes: &[u64]) -> anyhow::Result<Value> {
+    pub(crate) async fn post(&self, path: &str, body: &Value, ok_codes: &[u64]) -> anyhow::Result<Value> {
         self.send(self.request(reqwest::Method::POST, path).json(body), ok_codes).await
     }
 
-    async fn put(&self, path: &str, body: &Value, ok_codes: &[u64]) -> anyhow::Result<Value> {
+    pub(crate) async fn put(&self, path: &str, body: &Value, ok_codes: &[u64]) -> anyhow::Result<Value> {
         self.send(self.request(reqwest::Method::PUT, path).json(body), ok_codes).await
     }
 
-    async fn delete(&self, path: &str, ok_codes: &[u64]) -> anyhow::Result<Value> {
+    pub(crate) async fn delete(&self, path: &str, ok_codes: &[u64]) -> anyhow::Result<Value> {
         self.send(self.request(reqwest::Method::DELETE, path), ok_codes).await
     }
+}
+
+/// Put a scope's configuration, replacing rather than merging.
+pub(crate) async fn put_config(dst: &Endpoint, subject: Option<&str>, config: &Value) -> anyhow::Result<()> {
+    let path = match subject {
+        Some(s) => format!("/config/{}", percent_encode_segment(s)),
+        None => "/config".to_string(),
+    };
+    let mut body = serde_json::Map::new();
+    for (k, v) in config.as_object().into_iter().flatten() {
+        // `compatibilityLevel` on the way out is `compatibility` on the way in.
+        body.insert(if k == "compatibilityLevel" { "compatibility".into() } else { k.clone() }, v.clone());
+    }
+    if subject.is_some() {
+        dst.delete(&path, &[40401, 40408]).await?;
+    }
+    dst.put(&path, &Value::Object(body), &[]).await?;
+    Ok(())
+}
+
+/// Put a scope's mode, forcing it: the point is to get where the source was.
+pub(crate) async fn put_mode(dst: &Endpoint, subject: Option<&str>, mode: &str) -> anyhow::Result<()> {
+    let path = match subject {
+        Some(s) => format!("/mode/{}?force=true", percent_encode_segment(s)),
+        None => "/mode?force=true".to_string(),
+    };
+    dst.put(&path, &json!({"mode": mode}), &[]).await?;
+    Ok(())
 }
 
 #[derive(Default)]
@@ -234,8 +262,9 @@ async fn copy_config(
         None => "/config".to_string(),
     };
     // 40401/40408: nothing configured at this level.
+    // A tolerated 404/40408 comes back as the error body: not a configuration.
     let cfg = src.get(&path, &[40401, 40408]).await?;
-    let Some(o) = cfg.as_object().filter(|o| !o.is_empty()) else {
+    let Some(o) = cfg.as_object().filter(|o| !o.is_empty() && !o.contains_key("error_code")) else {
         // Nothing configured at the source: clear what we may have set here.
         if !opts.dry_run && subject.is_some() {
             dst.delete(&path, &[40401, 40408]).await?;

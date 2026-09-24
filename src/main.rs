@@ -23,6 +23,7 @@ mod registry;
 mod schema;
 mod snapshot;
 mod store;
+mod tenant;
 
 use std::path::PathBuf;
 use std::sync::Arc;

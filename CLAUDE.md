@@ -137,7 +137,16 @@ first component of every key - including the change log, which gets
   versioned on-disk migration, tested against a copy of a real data directory
   (192.168.44.99 has one), not only against a fresh one.
 
-## 6. Exporters
+## 6. Backup and restore
+
+The backup format is a **logical JSON dump** (newline-delimited), not a
+RocksDB checkpoint: subjects, versions, ids, references, metadata, rule sets,
+config, modes and exporters, per container. It has to be restorable into a
+different build - and into Confluent - so it never encodes anything about the
+on-disk layout. Restore replays it through IMPORT mode, which is what
+`migrate.rs` already does; a dump is just another source for that path.
+
+## 7. Exporters
 
 * An export carries the source's ids, which is only legal where the
   destination is in IMPORT mode. **Check that mode; never force it.** Setting
@@ -149,7 +158,7 @@ first component of every key - including the change log, which gets
 * Both refusals arrive as `42205`. Classify by re-reading the destination's
   effective mode (`?defaultToGlobal=true`), never by parsing message text.
 
-## 7. Style
+## 8. Style
 
 * Comments explain **why**, not what. No comment that restates the code.
 * Doc comments on modules and non-obvious functions; name the Confluent method
@@ -157,10 +166,12 @@ first component of every key - including the change log, which gets
 * Match the surrounding code: terse names, no emoji, no decorative banners
   beyond the `// ---------------- section ----------------` already in use.
 * Hyphens in prose comments, not em dashes; ASCII in source.
-* `cargo fmt` before committing. Keep functions small enough to read whole.
+* **Do not run `cargo fmt` across the repository.** It is not rustfmt-clean at
+  any width, and a blanket reformat buries a real change in thousands of lines.
+  Match the surrounding formatting by hand; ~140 columns, one statement a line.
 * Tests read as documentation: the name says the behaviour, the body shows it.
 
-## 8. Operational facts
+## 9. Operational facts
 
 * Deployed at `wushilin@192.168.44.99`, under processmaster:
   `/opt/services/systemd/processmaster/auto_services/schema-registry/`
@@ -175,7 +186,7 @@ first component of every key - including the change log, which gets
   instance. `.new` must stay in IMPORT mode for it to run.
 * Ask before touching data on that host. It holds subjects that are not ours.
 
-## 9. Working agreements
+## 10. Working agreements
 
 * Share a design before implementing anything structural; implement after
   agreement, not before.

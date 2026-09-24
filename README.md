@@ -466,9 +466,18 @@ proxy_trust    = "192.168.44.0/24;127.0.0.1/32"       # or a list
 
 **A header is only believed from a trusted network.** Anyone can write those
 bytes, so believing them from the open internet would let a client choose what
-appears in the log. From an untrusted peer nothing is read: the bytes stay in
-the stream and are parsed as the HTTP they claimed not to be, which fails. The
-default trust set is loopback and the private ranges.
+appears in the log. From an untrusted peer the header is looked at and not
+touched: the bytes stay in the stream, are parsed as the HTTP they claimed not
+to be, and the request fails - and the server says why, naming the peer and
+the setting:
+
+```
+WARN proxy_protocol: PROXY header from an address that is not in proxy_trust:
+     ignoring it, and the request will not parse   peer=203.0.113.9:51544
+```
+
+That line is the difference between a puzzling 400 and a `proxy_trust` an
+operator can fix. The default trust set is loopback and the private ranges.
 
 `required` refuses a connection without a header, for a port only the proxy
 should reach. If TLS is ever terminated here rather than in front, it wraps the

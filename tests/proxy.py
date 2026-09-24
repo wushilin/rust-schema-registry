@@ -72,6 +72,18 @@ def v2(src=(203, 0, 113, 9), sport=4711, command=0x21, family=0x11):
     return V2_SIG + bytes([command, family]) + len(body).to_bytes(2, "big") + body
 
 
+def records(log_path):
+    """Every JSON log record the server wrote."""
+    out = []
+    with open(log_path) as f:
+        for line in f:
+            try:
+                out.append(json.loads(line))
+            except ValueError:
+                pass
+    return out
+
+
 def clients(log_path):
     """Every client address the server logged, in order."""
     out = []
@@ -147,6 +159,12 @@ def main():
         seen2 = clients(log2)
         check("and nothing was logged under the claimed address",
               all(c != "198.51.100.7:56324" for c in seen2), seen2)
+        # A refused claim must say so: a bare 400 leaves an operator with a
+        # misconfigured proxy_trust and no idea why nothing works.
+        warned = [r for r in records(log2) if "proxy_trust" in str(r.get("message", ""))]
+        check("the server says the peer is not trusted", warned, "no warning naming proxy_trust")
+        check("and names who it was",
+              any("127.0.0.1" in str(r.get("peer", "")) for r in warned), warned[:1])
     finally:
         for p in procs:
             p.terminate()

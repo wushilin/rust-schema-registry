@@ -160,12 +160,12 @@ pub async fn accept<S: AsyncRead + AsyncWrite + Unpin>(
     mode: Mode,
     trusted: &Trusted,
 ) -> io::Result<(Prefixed<S>, SocketAddr)> {
-    if mode == Mode::Off || !trusted.contains(peer.ip()) {
-        // Not a peer whose word we take: whatever it sent is the payload.
-        if mode == Mode::Required {
-            return Err(io::Error::new(io::ErrorKind::PermissionDenied, format!("{peer} is not a trusted proxy")));
-        }
+    if mode == Mode::Off {
         return Ok((Prefixed::new(stream, Vec::new()), peer));
+    }
+    let untrusted = !trusted.contains(peer.ip());
+    if untrusted && mode == Mode::Required {
+        return Err(io::Error::new(io::ErrorKind::PermissionDenied, format!("{peer} is not a trusted proxy")));
     }
 
     let mut stream = stream;
@@ -180,11 +180,27 @@ pub async fn accept<S: AsyncRead + AsyncWrite + Unpin>(
         have += n;
     }
     buf.extend_from_slice(&probe[..have]);
+    let looks_like_header = (have >= V2_SIGNATURE.len() && buf[..12] == *V2_SIGNATURE)
+        || (have >= V1_PREFIX.len() && buf[..6] == *V1_PREFIX);
 
-    if have >= V2_SIGNATURE.len() && &buf[..12] == V2_SIGNATURE {
+    if untrusted {
+        // Looked, did not touch. The bytes go back into the stream and will be
+        // read as the HTTP they claimed not to be - which fails, as it should.
+        // Saying so here is the difference between a puzzling 400 and a
+        // misconfigured `proxy_trust` an operator can fix.
+        if looks_like_header {
+            tracing::warn!(
+                %peer,
+                "PROXY header from an address that is not in proxy_trust: ignoring it, and the request will not parse"
+            );
+        }
+        return Ok((Prefixed::new(stream, buf), peer));
+    }
+
+    if have >= V2_SIGNATURE.len() && buf[..12] == *V2_SIGNATURE {
         return read_v2(stream, buf, peer).await;
     }
-    if have >= V1_PREFIX.len() && &buf[..6] == V1_PREFIX {
+    if have >= V1_PREFIX.len() && buf[..6] == *V1_PREFIX {
         return read_v1(stream, buf, peer).await;
     }
     if mode == Mode::Required {

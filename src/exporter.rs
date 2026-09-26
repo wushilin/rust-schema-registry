@@ -197,15 +197,21 @@ async fn export_batch(
         let dest = Destination::new(client, &rec.info, &reg.cluster_id)?;
         let now = reg.store.log_seq()?;
         let mut exported = HashSet::new();
-        for (ctx, subject, version) in reg.all_subject_versions()? {
-            if !subject_matches(&rec.info.subjects, &ctx, &subject) {
+        let current = reg.all_subject_versions()?;
+        for (ctx, subject, version) in &current {
+            if !subject_matches(&rec.info.subjects, ctx, subject) {
                 continue;
             }
-            if let Err(e) = dest.export_version(reg, &ctx, &subject, version, ready, &mut exported, 0).await {
-                let halt = e.at(&format!("bootstrap ({}:{version})", qualify(&ctx, &subject)));
+            if let Err(e) = dest.export_version(reg, ctx, subject, *version, ready, &mut exported, 0).await {
+                let halt = e.at(&format!("bootstrap ({}:{version})", qualify(ctx, subject)));
                 reg.exporter_state(&rec.info.name, rec.offset, rec.offset, halt.state, Some(halt.trace.clone()))?;
                 return Err(halt);
             }
+        }
+        if let Err(e) = reconcile_bootstrap(&reg, &dest, &rec.info, &current, ready).await {
+            let halt = e.at("bootstrap reconciliation");
+            reg.exporter_state(&rec.info.name, rec.offset, rec.offset, halt.state, Some(halt.trace.clone()))?;
+            return Err(halt);
         }
         reg.exporter_progress(&rec.info.name, rec.offset, now, None)?;
         return Ok(true);
@@ -247,6 +253,62 @@ async fn export_batch(
         offset = next;
     }
     Ok(events.len() == BATCH)
+}
+
+async fn reconcile_bootstrap(
+    reg: &Registry,
+    dest: &Destination<'_>,
+    info: &ExporterInfo,
+    current: &[(String, String, u32)],
+    ready: &mut HashSet<(String, String)>,
+) -> Result<(), Halt> {
+    let contexts = reg.list_contexts()?;
+    let source_contexts: HashSet<String> = contexts
+        .iter()
+        .filter(|ctx| info.subjects.iter().any(|p| {
+            QualifiedSubject::parse(p).is_ok_and(|q| q.is_wildcard() || q.context == **ctx)
+        }))
+        .cloned()
+        .collect();
+    let destinations: HashSet<String> = source_contexts.iter().map(|ctx| dest.dest_context(ctx)).collect();
+    let expected: HashSet<String> = current
+        .iter()
+        .filter(|(ctx, subject, _)| subject_matches(&info.subjects, ctx, subject))
+        .map(|(ctx, subject, _)| dest.dest_subject(ctx, subject))
+        .collect();
+
+    for dest_ctx in destinations {
+        let prefix = qualify(&dest_ctx, "");
+        let subjects = dest.subjects(&prefix).await?;
+        for subject in subjects {
+            let Ok(q) = QualifiedSubject::parse(&subject) else { continue };
+            if q.context != dest_ctx || expected.contains(&subject) {
+                continue;
+            }
+            let managed = source_contexts.iter().any(|src_ctx| {
+                dest.dest_context(src_ctx) == dest_ctx && subject_matches_renamed(&info.subjects, src_ctx, &info.subject_rename_format, &q.subject)
+            });
+            if !managed {
+                continue;
+            }
+            dest.ensure_import_mode(&dest_ctx, ready).await?;
+            dest.delete_subject(&subject).await?;
+        }
+    }
+    Ok(())
+}
+
+fn subject_matches_renamed(patterns: &[String], ctx: &str, rename: &Option<String>, subject: &str) -> bool {
+    patterns.iter().any(|raw| {
+        let Ok(q) = QualifiedSubject::parse(raw) else { return false };
+        if !q.is_wildcard() && q.context != ctx { return false; }
+        let source_pattern = if q.subject.is_empty() { "*" } else { q.subject.as_str() };
+        let pattern = match rename.as_deref().filter(|f| !f.is_empty()) {
+            Some(format) => format.split("${subject}").map(glob::Pattern::escape).collect::<Vec<_>>().join(source_pattern),
+            None => source_pattern.to_string(),
+        };
+        glob::Pattern::new(&pattern).is_ok_and(|p| p.matches(subject))
+    })
 }
 
 /// Exporter `subjects` patterns: `*`/globs match the default context;
@@ -318,6 +380,20 @@ impl<'a> Destination<'a> {
             _ => subject.to_string(),
         };
         qualify(&self.dest_context(ctx), &renamed)
+    }
+
+    async fn subjects(&self, prefix: &str) -> Result<Vec<String>, Halt> {
+        let path = format!("/subjects?subjectPrefix={}&deleted=true", percent_encode_segment(prefix));
+        let body = self.send(self.req(reqwest::Method::GET, &path), &[]).await?;
+        Ok(serde_json::from_value(body).map_err(anyhow::Error::from)?)
+    }
+
+    async fn delete_subject(&self, subject: &str) -> Result<(), Halt> {
+        let path = format!("/subjects/{}?permanent=true", percent_encode_segment(subject));
+        if let Err(e) = self.send(self.req(reqwest::Method::DELETE, &path), &[40401]).await {
+            return Err(self.classify(e, subject).await);
+        }
+        Ok(())
     }
 
     fn req(&self, method: reqwest::Method, path: &str) -> reqwest::RequestBuilder {
@@ -540,5 +616,14 @@ mod tests {
         assert!(subject_matches(&p(&[":*:*"]), ".dev", "orders-value"));
         assert!(subject_matches(&p(&[":.dev:orders-*"]), ".dev", "orders-value"));
         assert!(!subject_matches(&p(&["orders-*"]), ".", "payments-value"));
+    }
+
+    #[test]
+    fn bootstrap_rename_matching_tracks_only_subjects_owned_by_the_exporter() {
+        let patterns = vec![":.dev:orders-*".to_string()];
+        let rename = Some("copy-${subject}-snapshot".to_string());
+        assert!(subject_matches_renamed(&patterns, ".dev", &rename, "copy-orders-value-snapshot"));
+        assert!(!subject_matches_renamed(&patterns, ".dev", &rename, "copy-payments-value-snapshot"));
+        assert!(!subject_matches_renamed(&patterns, ".", &rename, "copy-orders-value-snapshot"));
     }
 }

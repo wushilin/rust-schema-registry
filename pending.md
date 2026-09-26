@@ -6,14 +6,6 @@ items are recorded in the CHANGELOG under "Unreleased".
 
 Ordered by what it costs if left alone.
 
-## 1. The exporter's bootstrap path never deletes
-
-`src/exporter.rs:180`. An exporter whose next event has been pruned exports
-current state and jumps to the log end - but it only *adds*. A subject the
-destination still holds and the source no longer does stays there for ever.
-This is the path every new exporter takes on any registry older than
-`PRUNE_EVERY` (30 s), so it is the normal path, not the rare one.
-
 # Tests that are missing
 
 None of these are known failures. They are guarantees the brief makes, or
@@ -44,8 +36,8 @@ Not covered:
 * `PUT /exporters/{name}` and `GET /exporters/{name}/config` are called by no
   test at all.
 * `DELETE` of an actively RUNNING exporter mid-replay.
-* The bootstrap-after-pruning path (pending issue 1 above). Making `PRUNE_EVERY`
-  configurable is the cheaper change and unlocks an end-to-end assertion.
+* The bootstrap-after-pruning path. Making `PRUNE_EVERY` configurable is the
+  cheaper change and unlocks an end-to-end assertion.
 
 ## Store and restore
 

@@ -11,7 +11,9 @@ proxy reads preserve the pending prefix, alias lookup errors propagate, and
 `backup --out` writes mode-0600 files. The backup section documents that dumps
 contain destination credentials. Exporters now commit their log offset after
 each successful event, and dumps preserve exporter state and offset. Restoring
-an existing exporter leaves its current cursor alone.
+an existing exporter leaves its current cursor alone. Bootstrap after log
+pruning now removes stale destination subjects that match the exporter's
+context and rename patterns.
 
 ### Fixed after a review of the whole implementation
 

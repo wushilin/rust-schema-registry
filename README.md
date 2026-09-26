@@ -228,13 +228,16 @@ stored verbatim, because extension values can't be re-rendered.
 the HTTP stack catches panics and turns them into a 500 for that request; the
 server and other connections are unaffected.
 
-**Exporters tail a change log.** Every mutation appends to a `log` column
-family, and each exporter keeps an offset into it, the same model as
-Confluent's exporter tailing `_schemas`. The worker replays events against the
-destination through the normal REST API in IMPORT mode, so ids and versions
-are preserved and referenced subjects go first. Replays are idempotent
-(at-least-once is fine). Failures park the exporter in ERROR with a trace,
-and it is retried automatically. The log is trimmed to what the exporters
+**Exporters tail a change log.** Each schema mutation writes its `log` column
+row in the same RocksDB batch as the schema change, and each exporter keeps an
+offset into it, the same model as Confluent's exporter tailing `_schemas`. Once
+that batch is durable, a bounded `named_queue` broadcast wakes the exporter.
+The queue is only a wakeup; on startup, after lag, or after a missed notice the
+worker recovers from the durable changelog and its stored offset. It replays
+events against the destination through the normal REST API in IMPORT mode, so
+ids and versions are preserved and referenced subjects go first. Replays are
+idempotent (at-least-once is fine). Failures park the exporter in ERROR with a
+trace, and it is retried automatically. The log is trimmed to what the exporters
 still need (everything, when there are none), so it does not grow with the
 lifetime of the server; an exporter whose next event has already been trimmed
 - a new one, or one that fell far behind - copies the current state instead

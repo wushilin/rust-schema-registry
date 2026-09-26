@@ -31,6 +31,26 @@ fn req(schema: String) -> RegisterSchemaRequest {
     RegisterSchemaRequest { schema: Some(schema), ..Default::default() }
 }
 
+#[tokio::test]
+async fn committed_mutations_broadcast_only_after_the_durable_log_write() {
+    let (r, dir) = registry();
+    let first = r.subscribe_committed_mutations().unwrap();
+    let second = r.subscribe_committed_mutations().unwrap();
+    r.register("queued", req(rec("Queued")), false).unwrap();
+
+    for receiver in [&first, &second] {
+        let message = receiver.recv_async().await.unwrap();
+        assert_eq!(message.logged_events, 1);
+    }
+    let log = r.store.read_log(0, 10).unwrap();
+    assert_eq!(log.len(), 1, "the broadcast is sent only after the event is in the changelog");
+    assert_eq!(log[0].1.subject, "queued");
+
+    drop(r);
+    let store = Store::open(dir.path(), false).unwrap();
+    assert_eq!(store.read_log(0, 10).unwrap().len(), 1, "the queue is only a wakeup; the event survives restart on disk");
+}
+
 fn import_req(schema: String, id: i32, version: Option<i32>) -> RegisterSchemaRequest {
     RegisterSchemaRequest { schema: Some(schema), id: Some(id), version, ..Default::default() }
 }

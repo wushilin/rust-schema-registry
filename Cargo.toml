@@ -26,6 +26,7 @@ hyper = { version = "1", features = ["server", "http1", "http2"] }
 hyper-util = { version = "0.1", features = ["server-auto", "tokio", "service"] }
 imbl = "6"
 moka = { version = "0.12", features = ["sync"] }
+named_queue = "0.2"
 prost = "0.14"
 prost-reflect = "0.16"
 prost-types = "0.14"

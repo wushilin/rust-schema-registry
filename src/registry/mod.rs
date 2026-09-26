@@ -21,8 +21,6 @@ use std::sync::Mutex;
 
 use serde::Serialize;
 use serde_json::{Value, json};
-use tokio::sync::Notify;
-
 use crate::context::{DEFAULT_CONTEXT, QualifiedSubject, qualify};
 use crate::error::{ApiError, ApiResult};
 use crate::model::*;
@@ -126,9 +124,19 @@ pub struct Registry {
     normalize_default: bool,
     pub cluster_id: String,
     pub limits: SearchLimits,
-    /// Woken after every committed change so exporters don't have to poll.
-    pub changes: Notify,
+    /// Durable commits are broadcast only after their RocksDB batch succeeds.
+    change_queue: named_queue::QueueRegistry,
+    change_sender: named_queue::Sender<CommitNotice>,
 }
+
+/// A commit notification. The durable log, not this bounded message, carries event data.
+#[derive(Debug, Clone)]
+pub struct CommitNotice {
+    pub logged_events: usize,
+}
+
+const CHANGE_TOPIC: &str = "schema-registry.committed-mutations";
+const CHANGE_QUEUE_CAPACITY: usize = 4096;
 
 // ---------------------------------------------------------------------------
 // Response views
@@ -287,6 +295,11 @@ impl Registry {
         cache_max_entries: u64,
         normalize_default: bool,
     ) -> Self {
+        let change_queue = named_queue::QueueRegistry::new();
+        change_queue
+            .create_broadcasting::<CommitNotice>(CHANGE_TOPIC, CHANGE_QUEUE_CAPACITY)
+            .expect("fresh mutation queue");
+        let change_sender = change_queue.acquire_sender::<CommitNotice>(CHANGE_TOPIC).expect("queue exists");
         Self {
             store,
             snapshot: ArcSwap::from_pointee(snapshot),
@@ -298,8 +311,15 @@ impl Registry {
             normalize_default,
             cluster_id,
             limits: SearchLimits::default(),
-            changes: Notify::new(),
+            change_queue,
+            change_sender,
         }
+    }
+
+    /// Each receiver gets an independent copy of every committed mutation.
+    /// Subscribers must recover from the durable changelog after startup or lag.
+    pub fn subscribe_committed_mutations(&self) -> Result<named_queue::Receiver<CommitNotice>, named_queue::QueueError> {
+        self.change_queue.acquire_receiver::<CommitNotice>(CHANGE_TOPIC)
     }
 
     /// Exclude other writers from what this mutation touches. See [`Locks`].
@@ -320,7 +340,7 @@ impl Registry {
     /// Durably commit `tx`, then publish the new snapshot with one pointer swap.
     /// Must be called with the write lock held (writers are serialized, so
     /// "load, apply, store" can't lose an update).
-    pub(crate) fn commit(&self, tx: crate::store::Tx<'_>) -> ApiResult<()> {
+    pub(crate) fn commit(&self, tx: crate::store::Tx<'_>, logged_events: usize) -> ApiResult<()> {
         let ops = tx.commit()?;
         // Writers to different contexts run in parallel, but the snapshot is
         // one object: "load, apply, store" has to be serialised or one of them
@@ -346,7 +366,9 @@ impl Registry {
             next.apply(op);
         }
         self.snapshot.store(Arc::new(next));
-        self.changes.notify_waiters();
+        // Queue delivery is an optimization after durable commit. If a
+        // subscriber lags, it reads the missed events from the changelog.
+        let _ = self.change_sender.send(CommitNotice { logged_events });
         Ok(())
     }
 

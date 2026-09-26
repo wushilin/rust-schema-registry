@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+Schema mutations now wake exporters through a bounded `named_queue` broadcast
+after the RocksDB batch and changelog row are durable. The exporter still
+recovers work from its stored changelog offset, so restart or queue lag cannot
+lose an event.
+
 **Additional review fixes.** Basic auth now bounds concurrent bcrypt work to
 four requests and verifies unknown usernames against a dummy bcrypt digest;
 at capacity it returns the same 401 challenge. The auth cache key encodes

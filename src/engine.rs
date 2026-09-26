@@ -112,6 +112,6 @@ fn apply<T>(reg: &Registry, plan: Plan<T>, allowed: &modegate::Allowed) -> ApiRe
     for e in &plan.events {
         tx.append_log(e)?;
     }
-    reg.commit(tx)?;
+    reg.commit(tx, plan.events.len())?;
     Ok(plan.output)
 }

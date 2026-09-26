@@ -58,14 +58,21 @@ pub async fn run(reg: Arc<Registry>, poll: Duration) {
             return;
         }
     };
+    let commits = match reg.subscribe_committed_mutations() {
+        Ok(r) => r,
+        Err(e) => {
+            tracing::error!("exporter disabled: cannot subscribe to committed mutations: {e}");
+            return;
+        }
+    };
     // Destination contexts already checked to be in IMPORT mode.
     let mut ready: HashSet<(String, String)> = HashSet::new();
     let mut last_prune = std::time::Instant::now();
     loop {
-        // Register interest before scanning so a change during the scan isn't missed.
-        let notified = reg.changes.notified();
+        // Subscribe before scanning. A concurrent commit is either visible in
+        // the durable log scan or buffered here as a wakeup for the next pass.
+        let notified = commits.recv_async();
         tokio::pin!(notified);
-        notified.as_mut().enable();
 
         let mut more = false;
         let exporters = match reg.store.list_exporters() {
@@ -105,7 +112,10 @@ pub async fn run(reg: Arc<Registry>, poll: Duration) {
             continue;
         }
         tokio::select! {
-            _ = &mut notified => {}
+            result = &mut notified => match result {
+                Ok(notice) => tracing::trace!(events = notice.logged_events, "exporter received committed mutation notification"),
+                Err(_) => return,
+            },
             _ = tokio::time::sleep(poll) => {}
         }
     }

@@ -328,8 +328,20 @@ impl Registry {
         let _publish = self.locks.publish.lock().unwrap_or_else(|e| e.into_inner());
         let mut next = Snapshot::clone(&self.snapshot.load());
         for op in &ops {
-            if let crate::snapshot::Op::PutSchema { ctx, id, rec, .. } = op {
-                self.bodies.insert((ctx.clone(), *id), rec.clone());
+            match op {
+                crate::snapshot::Op::PutSchema { ctx, id, rec, .. } => {
+                    self.bodies.insert((ctx.clone(), *id), rec.clone());
+                }
+                // A permanent delete frees the content precisely to get the
+                // memory back, so the cached copy has to go with it. Reads
+                // are already correct without this - the snapshot decides
+                // whether an id exists before any body is fetched - but
+                // leaving it cached means the reclamation frees nothing until
+                // moka happens to evict.
+                crate::snapshot::Op::DeleteSchema { ctx, id } => {
+                    self.bodies.invalidate(&(ctx.clone(), *id));
+                }
+                _ => {}
             }
             next.apply(op);
         }

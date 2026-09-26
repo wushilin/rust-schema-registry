@@ -924,7 +924,7 @@ fn a_parsed_schema_is_cached_against_what_its_references_resolved_to() {
         json!({"type": "record", "name": "Dep", "namespace": "com.x", "fields": [{"name": field, "type": "int"}]})
             .to_string()
     };
-    let holder = json!({
+    let holder_text = json!({
         "type": "record", "name": "Holder", "namespace": "com.x",
         "fields": [{"name": "d", "type": "com.x.Dep"}]
     })
@@ -935,7 +935,7 @@ fn a_parsed_schema_is_cached_against_what_its_references_resolved_to() {
         .register(
             "holder",
             RegisterSchemaRequest {
-                schema: Some(holder),
+                schema: Some(holder_text.clone()),
                 references: Some(vec![
                     SchemaReference { name: "com.x.Dep".into(), subject: "dep".into(), version: 1 }.into(),
                 ]),
@@ -962,8 +962,25 @@ fn a_parsed_schema_is_cached_against_what_its_references_resolved_to() {
     r.register("dep", import_req(dep("b"), 50, Some(1)), false).unwrap();
     r.set_mode(Some("dep"), Mode::Readwrite, true).unwrap();
 
-    // The holder's body is still there (bodies are never deleted), and parsing
-    // it now resolves the *current* dep, so the cached parse must not be used.
+    // Put the holder back at the id it had. Parsing it now resolves the
+    // *current* dep, so the cached parse must not be used.
+    r.set_mode(Some("holder"), Mode::Import, true).unwrap();
+    r.register(
+        "holder",
+        RegisterSchemaRequest {
+            schema: Some(holder_text.clone()),
+            references: Some(vec![
+                SchemaReference { name: "com.x.Dep".into(), subject: "dep".into(), version: 1 }.into(),
+            ]),
+            id: Some(holder_id as i32),
+            version: Some(1),
+            ..Default::default()
+        },
+        false,
+    )
+    .unwrap();
+    r.set_mode(Some("holder"), Mode::Readwrite, true).unwrap();
+
     let after = r.parse_for_test(".", holder_id).unwrap();
     assert!(!Arc::ptr_eq(&first, &after), "a parse built against the old dep was reused");
 }
@@ -1026,4 +1043,98 @@ fn the_same_content_gets_a_new_id_once_the_old_one_was_reclaimed() {
     assert_ne!(back, id, "an id nothing holds is not handed back");
     assert!(r.get_schema_by_id(back.into(), None, false, None).is_ok());
     assert_eq!(r.get_schema_by_id(id.into(), None, false, None).unwrap_err().code, 40403, "the old id stays gone");
+}
+
+// ---------------- concurrency ----------------
+//
+// The locking design earns its keep only if writers to different contexts
+// really do run at the same time, and only if what they share - the id
+// counters and the change log sequence - survives that. Both of these failed
+// before the store's counter lock existed.
+
+#[test]
+fn concurrent_registrations_in_one_context_never_share_or_skip_an_id() {
+    let (r, _d) = registry();
+    let r = std::sync::Arc::new(r);
+    let ids: Vec<u32> = std::thread::scope(|s| {
+        let handles: Vec<_> = (0..8)
+            .map(|i| {
+                let r = r.clone();
+                s.spawn(move || register(&r, &format!("sub-{i}"), &format!("R{i}")))
+            })
+            .collect();
+        handles.into_iter().map(|h| h.join().expect("thread")).collect()
+    });
+    let mut sorted = ids.clone();
+    sorted.sort_unstable();
+    assert_eq!(sorted, (1..=8).collect::<Vec<u32>>(), "ids were shared or skipped: {ids:?}");
+}
+
+#[test]
+fn concurrent_registrations_in_different_contexts_all_reach_the_change_log() {
+    // Different contexts take different write locks on purpose, so nothing
+    // stops them meeting at `commit`. The log sequence is one counter for the
+    // whole container: when it was read outside that lock, two registrations
+    // wrote the same sequence and one of them vanished from the log - which an
+    // exporter tails, so it would never be exported.
+    let (r, _d) = registry();
+    let r = std::sync::Arc::new(r);
+    const N: u32 = 16;
+    std::thread::scope(|s| {
+        for i in 0..N {
+            let r = r.clone();
+            s.spawn(move || register(&r, &format!(":.ctx{i}:sub"), &format!("R{i}")));
+        }
+    });
+    let log = r.store.read_log(0, 1000).expect("read log");
+    assert_eq!(log.len() as u32, N, "a registration was committed but not logged");
+    let mut seqs: Vec<u64> = log.iter().map(|(seq, _)| *seq).collect();
+    seqs.dedup();
+    assert_eq!(seqs.len() as u32, N, "two events share a sequence number");
+}
+
+#[test]
+fn a_reader_never_sees_a_subject_whose_version_is_not_there_yet() {
+    // The snapshot is published as one ArcSwap store, so a reader holds a
+    // whole consistent state or the previous one - never half of a write.
+    let (r, _d) = registry();
+    let r = std::sync::Arc::new(r);
+    let done = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    std::thread::scope(|s| {
+        let w = r.clone();
+        let flag = done.clone();
+        s.spawn(move || {
+            for i in 0..50 {
+                register(&w, &format!("sub-{i}"), &format!("R{i}"));
+            }
+            flag.store(true, std::sync::atomic::Ordering::SeqCst);
+        });
+        while !done.load(std::sync::atomic::Ordering::SeqCst) {
+            for name in r.list_subjects(None, false, false).expect("list") {
+                assert!(
+                    r.get_version(&name, crate::registry::VersionSpec::Latest, false).is_ok(),
+                    "{name} was listed before its version was readable"
+                );
+            }
+        }
+    });
+}
+
+#[test]
+fn an_id_reused_under_import_serves_its_new_content_not_the_cached_one() {
+    use crate::registry::VersionSpec;
+    // Reclaiming an id and handing it to different content is the one way the
+    // (context, id) caches can be asked about an id whose body has changed
+    // underneath them. Read the id first, so every cache is warm, and then
+    // check that what comes back afterwards is the new schema.
+    let (r, _d) = registry();
+    let old = register(&r, "reuse-value", "Old");
+    assert_eq!(resolve(&r, old, None).unwrap(), "Old", "warm the caches");
+    r.delete_version("reuse-value", VersionSpec::Exact(1), false).unwrap();
+    r.delete_version("reuse-value", VersionSpec::Exact(1), true).unwrap();
+
+    import_mode(&r, "reuse-value");
+    let req = RegisterSchemaRequest { schema: Some(rec("New")), id: Some(old as i32), version: Some(1), ..Default::default() };
+    assert_eq!(r.register("reuse-value", req, false).unwrap().id, old, "the import chose the old id");
+    assert_eq!(resolve(&r, old, None).unwrap(), "New", "a stale cached body was served for a reused id");
 }

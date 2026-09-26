@@ -187,6 +187,7 @@ impl PhysicalStore {
             prefix: tenant.key_prefix(),
             tenant,
             db: self.clone(),
+            counters: std::sync::Mutex::new(()),
         }
     }
 
@@ -234,10 +235,13 @@ impl PhysicalStore {
             let mut in_batch = 0usize;
             for item in self.db.iterator_cf(self.cf(cf), IteratorMode::Start) {
                 let (k, v) = item?;
-                // Reserved rows are the store's own and stay where they are;
-                // a key already in a container is left alone (an interrupted
-                // migration can simply be run again).
-                if k.first() == Some(&RESERVED) || k.starts_with(&prefix) {
+                // The store's own rows stay where they are; a key already in a
+                // container is left alone (an interrupted migration can simply
+                // be run again). Reserved rows only ever live in `meta`, and
+                // the test has to say so: a change log key is a big-endian
+                // u64, so every sequence below 2^56 also starts with 0x00 -
+                // asking this of every column family orphaned the whole log.
+                if (*cf == CF_META && k.first() == Some(&RESERVED)) || k.starts_with(&prefix) {
                     continue;
                 }
                 batch.put_cf(self.cf(cf), [prefix.as_slice(), &k].concat(), &v);
@@ -274,6 +278,13 @@ pub struct Store {
     db: Arc<PhysicalStore>,
     tenant: TenantId,
     prefix: Vec<u8>,
+    /// Serialises this container's counters. The change log sequence is a
+    /// read-modify-write that spans a whole `Tx` - read when it opens, written
+    /// when it commits - and the registry's write locks are per context, so
+    /// two contexts could otherwise reach `commit` holding the same sequence
+    /// and one log row would silently overwrite the other. A `Tx` holds this
+    /// for its lifetime, which is why one cannot be built without it.
+    counters: std::sync::Mutex<()>,
 }
 
 impl Store {
@@ -481,19 +492,24 @@ impl Store {
     // ---------------- transactions ----------------
 
     pub fn tx(&self) -> ApiResult<Tx<'_>> {
+        let counters = self.counters.lock().unwrap_or_else(|e| e.into_inner());
         Ok(Tx {
             log_seq: self.log_seq()?,
             log_dirty: false,
             store: self,
             batch: WriteBatch::default(),
             ops: Vec::new(),
+            _counters: counters,
         })
     }
 }
 
-/// An atomic batch of writes, within one container. Callers must hold the
-/// registry write lock while building and committing a `Tx` (counters are
-/// read-modify-write).
+/// An atomic batch of writes, within one container.
+///
+/// Holding one *is* holding the container's counter lock (see `Store::counters`),
+/// so the read-modify-write of the change log sequence cannot interleave with
+/// another writer's. The registry's own write lock, which a caller also holds,
+/// is about the context being written; this one is about the counters.
 pub struct Tx<'a> {
     store: &'a Store,
     batch: WriteBatch,
@@ -501,6 +517,7 @@ pub struct Tx<'a> {
     log_dirty: bool,
     /// The same mutations, for the in-memory snapshot.
     ops: Vec<Op>,
+    _counters: std::sync::MutexGuard<'a, ()>,
 }
 
 impl Tx<'_> {
@@ -811,5 +828,95 @@ mod tests {
         let store = Store::open(dir.path(), false).unwrap();
         assert_eq!(store.load_snapshot().unwrap().ctxs.get(".").unwrap().subjects.len(), 1);
         assert_eq!(store.log_seq().unwrap(), 5);
+    }
+
+    #[test]
+    fn migrating_leaves_no_row_behind_in_any_column_family() {
+        // The change log was the one that got left: its keys are big-endian
+        // u64s, so every sequence below 2^56 begins with the byte that marks
+        // the store's own rows, and the whole log stayed outside the container
+        // - committed, and invisible to the exporter that had not read it yet.
+        //
+        // So this asserts the invariant rather than a list of column families:
+        // after an upgrade, every row in every one of them is inside a
+        // container, save the store's own rows in `meta`.
+        let dir = tempfile::tempdir().unwrap();
+        let ev = LogEvent {
+            ctx: ".".into(),
+            subject: "old-value".into(),
+            version: 1,
+            id: 3,
+            kind: LogEventKind::Register,
+        };
+        let exp = ExporterRecord {
+            info: ExporterInfo {
+                name: "to-dr".into(),
+                subjects: vec!["*".into()],
+                context_type: "AUTO".into(),
+                context: None,
+                subject_rename_format: None,
+                config: Default::default(),
+            },
+            state: ExporterState::Running,
+            offset: 2,
+            ts: 0,
+            trace: String::new(),
+        };
+        {
+            let mut opts = Options::default();
+            opts.create_if_missing(true);
+            opts.create_missing_column_families(true);
+            let cfs = ALL_CFS.iter().map(|n| ColumnFamilyDescriptor::new(*n, Options::default()));
+            let db = DB::open_cf_descriptors(&opts, dir.path(), cfs).unwrap();
+            let cf = |n: &str| db.cf_handle(n).unwrap();
+            // One row per column family, keyed the way the old format did it.
+            let rec = SchemaRecord {
+                schema_type: SchemaType::Avro,
+                schema: "\"string\"".into(),
+                references: Vec::new(),
+                metadata: None,
+                rule_set: None,
+                fingerprint: "abc".into(),
+                schema_fingerprint: "abc".into(),
+                guid: String::new(),
+            };
+            db.put_cf(cf(CF_SCHEMAS), schema_key(".", 3), serde_json::to_vec(&rec).unwrap()).unwrap();
+            db.put_cf(cf(CF_FINGERPRINTS), fp_key(".", "abc"), 3u32.to_be_bytes()).unwrap();
+            db.put_cf(cf(CF_VERSIONS), version_key(".", "old-value", 1), serde_json::to_vec(&version(3)).unwrap())
+                .unwrap();
+            db.put_cf(cf(CF_REFBY), refby_key(".", "old-value", 1, 3), b"").unwrap();
+            db.put_cf(cf(CF_CONFIG), Scope::Global.key(), serde_json::to_vec(&ConfigRecord::default()).unwrap())
+                .unwrap();
+            db.put_cf(cf(CF_MODE), Scope::Global.key(), serde_json::to_vec(&Mode::Readwrite).unwrap()).unwrap();
+            db.put_cf(cf(CF_EXPORTERS), b"to-dr", serde_json::to_vec(&exp).unwrap()).unwrap();
+            db.put_cf(cf(CF_LOG), 4u64.to_be_bytes(), serde_json::to_vec(&ev).unwrap()).unwrap();
+            db.put_cf(cf(CF_META), b"ctx/.", b"").unwrap();
+            db.put_cf(cf(CF_META), b"log_seq", 5u64.to_be_bytes()).unwrap();
+        }
+
+        let store = Store::open(dir.path(), false).unwrap();
+        let prefix = TenantId::default_tenant().key_prefix();
+        for cf in ALL_CFS {
+            for item in store.db.db.iterator_cf(store.db.cf(cf), IteratorMode::Start) {
+                let (k, _) = item.unwrap();
+                let reserved = *cf == CF_META && k.first() == Some(&RESERVED);
+                assert!(
+                    reserved || k.starts_with(&prefix),
+                    "{cf}: {k:?} was left outside every container by the migration"
+                );
+            }
+        }
+
+        // And the rows that are read through the log and the exporter, which
+        // is what the exporter needs to carry on from where it stopped.
+        let log = store.read_log(0, 10).unwrap();
+        assert_eq!(log.len(), 1, "an upgraded store must keep its change log");
+        assert_eq!(log[0].0, 4);
+        assert_eq!(log[0].1.subject, "old-value");
+        let exporters = store.list_exporters().unwrap();
+        assert_eq!(exporters.len(), 1);
+        assert_eq!(exporters[0].offset, 2, "and where each exporter had got to");
+        assert_eq!(store.load_snapshot().unwrap().mode.get(&Scope::Global), Some(&Mode::Readwrite));
+        assert!(store.get_schema(".", 3).unwrap().is_some(), "and the schema content itself");
     }
 }

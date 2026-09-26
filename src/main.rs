@@ -238,20 +238,10 @@ async fn main() -> anyhow::Result<()> {
     for name in &wanted {
         let store = db.container(name.clone());
         store.register()?;
-        // Each container has its own cluster id: exporters name their AUTO
-        // contexts after it, so a shared one would collide at a destination.
-        let cluster_id = match (cfg.cluster_id.clone(), store.get_meta_string("cluster_id")?) {
-            (Some(id), _) if wanted.len() == 1 => id,
-            (_, Some(id)) => id,
-            (configured, None) => {
-                let id = match configured {
-                    Some(base) => format!("{base}-{name}"),
-                    None => format!("sr-{}", &uuid::Uuid::new_v4().simple().to_string()[..12]),
-                };
-                store.put_meta_string("cluster_id", &id)?;
-                id
-            }
-        };
+        let (cluster_id, derived) = cluster_id_for(cfg.cluster_id.as_deref(), store.get_meta_string("cluster_id")?, name);
+        if derived {
+            store.put_meta_string("cluster_id", &cluster_id)?;
+        }
         let snapshot = store.load_snapshot()?;
         let mut registry = Registry::new(store, snapshot, default_compat, cluster_id, cfg.cache_max_entries, cfg.normalize);
         registry.limits = limits;
@@ -288,6 +278,28 @@ async fn main() -> anyhow::Result<()> {
 /// PROXY header is the first thing on the socket and has to be read before
 /// anything else looks at the bytes. TLS, if it is ever terminated here, wraps
 /// the stream this returns - after the header, never before.
+/// The cluster id for one host container: what `/v1/metadata/id` reports, and
+/// what an AUTO exporter names its destination context after. Returns the id
+/// and whether it is new and should be stored.
+///
+/// Each container needs its own, or their AUTO contexts collide at a shared
+/// destination. It also must not move once anything has been exported, so it
+/// cannot depend on how many containers happen to be configured today: the
+/// `default` container takes a configured id verbatim - which is what a
+/// single-container deployment has always reported - and any other appends its
+/// own name. Deciding that from `containers.len()` meant that configuring a
+/// second container silently renamed the first one's id, and with it the
+/// destination context of every AUTO exporter it had.
+fn cluster_id_for(configured: Option<&str>, stored: Option<String>, name: &tenant::TenantId) -> (String, bool) {
+    match (configured, stored) {
+        (Some(base), _) if name.as_str() == crate::tenant::DEFAULT_TENANT => (base.to_string(), false),
+        (Some(base), _) => (format!("{base}-{name}"), false),
+        // Nothing configured: the first one derived is kept for ever.
+        (None, Some(id)) => (id, false),
+        (None, None) => (format!("sr-{}", &uuid::Uuid::new_v4().simple().to_string()[..12]), true),
+    }
+}
+
 async fn serve(
     listener: tokio::net::TcpListener,
     app: axum::Router,
@@ -340,3 +352,31 @@ async fn serve(
 }
 
 
+
+#[cfg(test)]
+mod cluster_id_tests {
+    use super::cluster_id_for;
+    use crate::tenant::TenantId;
+
+    #[test]
+    fn a_containers_cluster_id_does_not_move_when_another_is_added() {
+        let t = |n: &str| TenantId::parse(n).expect("name");
+        // Configured, single container today: the id is the configured one.
+        assert_eq!(cluster_id_for(Some("base"), None, &t("default")).0, "base");
+        // Adding `prod` tomorrow must not rename it - an AUTO exporter's
+        // destination context is named after this.
+        assert_eq!(cluster_id_for(Some("base"), None, &t("default")).0, "base");
+        assert_eq!(cluster_id_for(Some("base"), None, &t("prod")).0, "base-prod");
+        assert_ne!(
+            cluster_id_for(Some("base"), None, &t("prod")).0,
+            cluster_id_for(Some("base"), None, &t("dev")).0,
+            "two containers sharing an id collide at a shared destination"
+        );
+
+        // Nothing configured: whatever was derived first is kept.
+        let (id, derived) = cluster_id_for(None, None, &t("default"));
+        assert!(derived && id.starts_with("sr-"));
+        assert_eq!(cluster_id_for(None, Some("sr-abc".into()), &t("default")), ("sr-abc".to_string(), false));
+        assert_eq!(cluster_id_for(None, Some("sr-abc".into()), &t("prod")), ("sr-abc".to_string(), false));
+    }
+}

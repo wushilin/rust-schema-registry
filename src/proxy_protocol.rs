@@ -179,6 +179,14 @@ impl<S: AsyncWrite + Unpin> AsyncWrite for Prefixed<S> {
     }
 }
 
+/// How long the PROXY header may take to arrive. A proxy writes it as the very
+/// first thing on the connection, so a real one is never near this; what it
+/// bounds is everything else. The header has to be read before the peer can be
+/// checked against `trust` - the bytes are what say who the peer claims to be -
+/// so until it arrives, any client at all is holding a task and a socket. This
+/// sits below hyper, which means hyper's own timeouts never get the chance.
+const HEADER_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
+
 /// Read a PROXY header if there is one and it may be believed.
 ///
 /// Returns the address to treat as the client's, and the stream positioned
@@ -192,7 +200,21 @@ pub async fn accept<S: AsyncRead + AsyncWrite + Unpin>(
     if !expect.on {
         return Ok((Prefixed::new(stream, Vec::new()), peer));
     }
+    match tokio::time::timeout(HEADER_TIMEOUT, read_header(stream, peer, expect, trusted)).await {
+        Ok(r) => r,
+        Err(_) => Err(io::Error::new(
+            io::ErrorKind::TimedOut,
+            format!("no PROXY header within {}s", HEADER_TIMEOUT.as_secs()),
+        )),
+    }
+}
 
+async fn read_header<S: AsyncRead + AsyncWrite + Unpin>(
+    stream: S,
+    peer: SocketAddr,
+    expect: Expect,
+    trusted: &Trusted,
+) -> io::Result<(Prefixed<S>, SocketAddr)> {
     let mut stream = stream;
     let mut buf = Vec::with_capacity(V1_MAX);
     let mut probe = [0u8; 12];

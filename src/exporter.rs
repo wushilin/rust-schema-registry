@@ -41,6 +41,7 @@ use serde_json::{Value, json};
 use crate::api::percent_encode_segment;
 use crate::context::{DEFAULT_CONTEXT, QualifiedSubject, qualify};
 use crate::model::*;
+use crate::error::ApiResult;
 use crate::registry::Registry;
 
 const BATCH: usize = 500;
@@ -110,8 +111,19 @@ pub async fn run(reg: Arc<Registry>, poll: Duration) {
 
 /// The lowest offset any exporter still needs; everything below it can go.
 fn exporter_offsets(reg: &Arc<Registry>) -> u64 {
-    let exporters = reg.store.list_exporters().unwrap_or_default();
-    let log_seq = reg.store.log_seq().unwrap_or(0);
+    prune_floor(reg.store.list_exporters(), reg.store.log_seq())
+}
+
+/// The point below which the change log can be dropped: the lowest offset any
+/// exporter still needs.
+///
+/// A failure anywhere means we do not know what is still needed, and then
+/// nothing is pruned. The two costs are not comparable: a log kept too long
+/// costs disk, while a log pruned too early is a backlog no exporter can ever
+/// replay. Reading the exporters and getting none back is different, and does
+/// mean the whole log is free.
+fn prune_floor(exporters: ApiResult<Vec<ExporterRecord>>, log_seq: ApiResult<u64>) -> u64 {
+    let (Ok(exporters), Ok(log_seq)) = (exporters, log_seq) else { return 0 };
     exporters.iter().map(|e| e.offset).min().unwrap_or(log_seq).min(log_seq)
 }
 
@@ -474,7 +486,48 @@ impl<'a> Destination<'a> {
 
 #[cfg(test)]
 mod tests {
-    use super::subject_matches;
+    use super::*;
+    use super::{prune_floor, subject_matches};
+
+    fn at(offsets: &[u64]) -> ApiResult<Vec<ExporterRecord>> {
+        Ok(offsets
+            .iter()
+            .map(|o| ExporterRecord {
+                info: ExporterInfo {
+                    name: format!("e{o}"),
+                    subjects: vec!["*".into()],
+                    context_type: "AUTO".into(),
+                    context: None,
+                    subject_rename_format: None,
+                    config: Default::default(),
+                },
+                state: ExporterState::Running,
+                offset: *o,
+                ts: 0,
+                trace: String::new(),
+            })
+            .collect())
+    }
+
+    #[test]
+    fn the_log_is_kept_for_the_exporter_that_is_furthest_behind() {
+        assert_eq!(prune_floor(at(&[7, 3, 9]), Ok(12)), 3);
+        // Caught up, or none at all: the whole log is free.
+        assert_eq!(prune_floor(at(&[12, 12]), Ok(12)), 12);
+        assert_eq!(prune_floor(at(&[]), Ok(12)), 12);
+        // An offset beyond the log (a reset that raced a write) never raises it.
+        assert_eq!(prune_floor(at(&[99]), Ok(12)), 12);
+    }
+
+    #[test]
+    fn nothing_is_pruned_when_the_exporters_cannot_be_read() {
+        // One unreadable exporter row used to read as "no exporters", which
+        // reads as "nothing needs the log" - and the backlog of every other
+        // exporter went with it, unrecoverably.
+        let unreadable = Err(crate::error::ApiError::internal("no"));
+        assert_eq!(prune_floor(unreadable, Ok(12)), 0);
+        assert_eq!(prune_floor(at(&[3]), Err(crate::error::ApiError::internal("no"))), 0);
+    }
 
     #[test]
     fn patterns() {

@@ -105,19 +105,33 @@ pub struct LogReads(pub bool);
 #[derive(Clone, Copy)]
 pub struct ClientAddr(pub std::net::SocketAddr);
 
-/// Resolve the `Host` header to a container, once, in front of everything.
+/// Resolve the request's authority to a container, once, in front of everything.
 pub async fn route_container(
     axum::extract::State(shared): axum::extract::State<Shared>,
     mut req: Request,
     next: axum::middleware::Next,
 ) -> Response {
-    let host = req.headers().get(axum::http::header::HOST).and_then(|v| v.to_str().ok()).map(String::from);
+    let host = request_authority(&req);
     let Some((_, registry)) = shared.containers.route(host.as_deref()) else {
         return crate::containers::Containers::no_such_host(host.as_deref()).into_response();
     };
     req.extensions_mut().insert(registry.clone());
     req.extensions_mut().insert(LogReads(shared.log_reads));
     next.run(req).await
+}
+
+/// Which host the client asked for.
+///
+/// HTTP/1.1 puts it in `Host`, but that is not the only place: HTTP/2 carries
+/// it in `:authority`, which hyper leaves in the URI and does not copy into a
+/// header, and an absolute-form request-target carries its own authority that
+/// RFC 7230 section 5.4 says wins over `Host`. Reading only the header made
+/// every h2 request 421 as soon as containers were configured.
+fn request_authority(req: &Request) -> Option<String> {
+    req.uri()
+        .authority()
+        .map(|a| a.as_str().to_string())
+        .or_else(|| req.headers().get(axum::http::header::HOST).and_then(|v| v.to_str().ok()).map(String::from))
 }
 
 /// Render a JSON body with the schema registry media type.
@@ -363,6 +377,11 @@ pub fn service(shared: Shared, max_body_bytes: usize) -> Service {
         // never reaches a handler.
         .layer(axum::middleware::from_fn(access_log))
         .layer(axum::middleware::from_fn_with_state(shared, route_container))
+        // Outermost of everything, so that "a panic anywhere in a request
+        // becomes a 500 for that request" is true of the whole stack. Inside
+        // the router it did not cover the URI rewriting, which is the layer
+        // that handles the rawest client input there is.
+        .layer(tower_http::catch_panic::CatchPanicLayer::custom(on_panic))
 }
 
 /// `ContextFilter` + `AliasFilter` (see `rewrite`), before routing.
@@ -442,10 +461,6 @@ pub fn router(shared: Shared, max_body_bytes: usize) -> Router {
 
     api.layer(axum::middleware::from_fn_with_state(shared.clone(), crate::auth::middleware))
         .layer(DefaultBodyLimit::max(max_body_bytes))
-        // A panic anywhere in a request (a schema parser meeting input it
-        // cannot handle, say) becomes a 500 for that request; the server and
-        // every other connection carry on.
-        .layer(tower_http::catch_panic::CatchPanicLayer::custom(on_panic))
         .with_state(shared)
 }
 

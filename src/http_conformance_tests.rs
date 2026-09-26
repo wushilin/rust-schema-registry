@@ -260,6 +260,42 @@ async fn a_request_body_over_the_limit_gets_413() {
     assert_eq!(response.status(), axum::http::StatusCode::PAYLOAD_TOO_LARGE);
 }
 
+#[tokio::test]
+async fn format_on_get_version_returns_the_serialized_protobuf() {
+    let (app, _dir) = fresh_app();
+    let schema = "syntax = \"proto3\"; message Example { string value = 1; }";
+    let req = Request::builder()
+        .method("POST")
+        .uri("/subjects/proto-value/versions")
+        .header("content-type", CT)
+        .body(Body::from(json!({"schema": schema, "schemaType": "PROTOBUF"}).to_string()))
+        .unwrap();
+    assert_eq!(app.clone().oneshot(req).await.unwrap().status(), axum::http::StatusCode::OK);
+
+    let req = Request::builder().uri("/subjects/proto-value/versions/1?format=serialized").body(Body::empty()).unwrap();
+    let response = app.oneshot(req).await.unwrap();
+    assert_eq!(response.status(), axum::http::StatusCode::OK);
+    let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body: Value = serde_json::from_slice(&body).unwrap();
+    assert_ne!(body["schema"], schema, "format must reach get_version_formatted");
+}
+
+#[tokio::test]
+async fn rule_set_and_rules_to_merge_are_rejected_with_42210() {
+    let (app, _dir) = fresh_app();
+    let req = Request::builder()
+        .method("POST")
+        .uri("/subjects/missing/versions/1/tags")
+        .header("content-type", CT)
+        .body(Body::from(r#"{"ruleSet":{},"rulesToMerge":{}}"#))
+        .unwrap();
+    let response = app.oneshot(req).await.unwrap();
+    assert_eq!(response.status(), axum::http::StatusCode::UNPROCESSABLE_ENTITY);
+    let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body: Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(body["error_code"], 42210);
+}
+
 fn error_code(v: &Value) -> Option<i64> {
     v["body"].get("error_code").and_then(Value::as_i64)
 }

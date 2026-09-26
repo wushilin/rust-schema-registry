@@ -164,6 +164,19 @@ impl std::fmt::Display for ApiError {
 
 impl std::error::Error for ApiError {}
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn corrupt_json_maps_to_the_backend_store_error_code() {
+        let source = serde_json::from_slice::<serde_json::Value>(b"not-json").unwrap_err();
+        let error = ApiError::from(source);
+        assert_eq!(error.code, 50001);
+        assert_eq!(error.status(), StatusCode::INTERNAL_SERVER_ERROR);
+    }
+}
+
 impl From<rocksdb::Error> for ApiError {
     fn from(e: rocksdb::Error) -> Self {
         ApiError::store(e)

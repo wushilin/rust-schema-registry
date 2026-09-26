@@ -13,10 +13,6 @@ branches that exist, with nothing asserting them.
 
 ## Cannot be covered by the conformance corpus at all
 
-* **`ruleSet` together with `rulesToMerge` should be 42210.** The valid
-  `rulesToMerge` / `rulesToRemove` selection and merge logic is now asserted in
-  `registry::schemas::tests`; the HTTP rejection branch is still untested.
-
 ## Exporter state machine
 
 Covered today: `RUNNING->PAUSED`, `PAUSED->PAUSED`, `PAUSED->RUNNING`,
@@ -39,11 +35,6 @@ Not covered:
 
 ## Store and restore
 
-* **Restore into a conflicting destination.** Every existing test restores into
-  an empty or wiped registry. Nobody restores a dump whose id 5 is schema A
-  into a registry whose id 5 is schema B. Restore is a sequence of writes with
-  no rollback, so a half-restore is representable and unexamined.
-* `ApiError::store` / 50001 is asserted nowhere.
 
 ## Transport
 
@@ -53,8 +44,6 @@ Not covered:
 
 ## Parameters with no test on the route that reads them
 
-* `format` on `GET /subjects/{s}/versions/{v}` (the corpus uses it only on
-  `.../schema` and `/schemas/ids/{id}`).
 * `normalize` on `POST /compatibility/subjects/{s}/versions/{v}`.
 * `subjectPrefix` on `GET /admin/api/backup`; `subjectPrefix` and `limit` on
   `/admin/api/overview`.

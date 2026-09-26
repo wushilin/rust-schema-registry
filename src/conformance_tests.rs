@@ -67,6 +67,29 @@ fn restore_preserves_exporter_state_and_does_not_rewind_an_existing_cursor() {
     assert_eq!(store.get_exporter("from-dump").unwrap().unwrap().offset, 42, "the restored cursor survives reopening the store");
 }
 
+#[test]
+fn restore_into_an_id_conflict_stops_after_prior_rows_were_written() {
+    let (r, _dir) = registry();
+    r.set_mode(Some("conflict"), Mode::Import, true).unwrap();
+    r.register("conflict", import_req(rec("Destination"), 5, Some(1)), false).unwrap();
+    let row = |subject: &str, schema: String, id| json!({
+        "type": "schema", "subject": subject, "version": 1, "id": id,
+        "schema": schema, "schemaType": "AVRO", "references": [], "deleted": false
+    });
+    let dump = crate::backup::Dump {
+        subject_order: vec!["first".into(), "conflict".into()],
+        subjects: std::collections::HashMap::from([
+            ("first".into(), vec![row("first", rec("First"), 6)]),
+            ("conflict".into(), vec![row("conflict", rec("Incoming"), 5)]),
+        ]),
+        ..Default::default()
+    };
+
+    assert!(crate::backup::restore_local(&r, &dump, false).is_err());
+    assert_eq!(r.list_versions("first", false, false).unwrap().len(), 1, "the earlier subject remains written");
+    assert_eq!(r.get_schema_by_id(5, Some("conflict"), false, None).unwrap().schema, rec("Destination"));
+}
+
 fn register(r: &Registry, subject: &str, name: &str) -> u32 {
     r.register(subject, req(rec(name)), false).unwrap_or_else(|e| panic!("register {subject}: {e}")).id
 }

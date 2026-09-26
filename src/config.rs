@@ -282,3 +282,120 @@ impl ServerConfig {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn load(toml_text: &str) -> anyhow::Result<ServerConfig> {
+        let cfg: ServerConfig = toml::from_str(toml_text)?;
+        cfg.validate()?;
+        Ok(cfg)
+    }
+
+    #[test]
+    fn the_example_config_is_valid() {
+        // Every operator starts from this file, and until now no test had read
+        // it: a renamed field or a `deny_unknown_fields` slip would ship.
+        let cfg = load(include_str!("../config.example.toml")).expect("config.example.toml must parse and validate");
+        assert!(!cfg.data_dir.as_os_str().is_empty());
+    }
+
+    #[test]
+    fn a_configuration_that_cannot_work_is_refused_at_startup() {
+        // Each of these is a way to get a server that runs but does not do what
+        // the file says. Refusing beats starting and surprising someone later.
+        let cases: &[(&str, &str)] = &[
+            (r#"log_format = "pretty""#, "log_format"),
+            (r#"default_compatibility = "SIDEWAYS""#, "default_compatibility"),
+            ("[auth]\nenabled = true", "no [[auth.users]]"),
+            (r#"[proxy]
+proxy_version = 3"#, "proxy"),
+            (r#"[proxy]
+trust = "not-a-cidr""#, "trust"),
+            (r#"[[containers]]
+name = "a"
+hosts = ["x"]
+
+[[containers]]
+name = "a"
+hosts = ["y"]"#, "duplicate host container"),
+            (r#"[[containers]]
+name = "a"
+hosts = []"#, "no hosts"),
+            (r#"[[containers]]
+name = "A B"
+hosts = ["x"]"#, "A B"),
+            (r#"[[containers]]
+name = "a"
+hosts = ["["]"#, "host pattern"),
+            (r#"[auth]
+enabled = true
+
+[[auth.users]]
+username = "u"
+password = "p"
+containers = ["nope"]
+
+[[containers]]
+name = "a"
+hosts = ["x"]"#, "unknown host container"),
+            (r#"[auth]
+enabled = true
+
+[[auth.users]]
+username = "a:b"
+password = "p""#, "invalid username"),
+            (r#"[auth]
+enabled = true
+
+[[auth.users]]
+username = "u"
+password = "p"
+
+[[auth.users]]
+username = "u"
+password = "q""#, "duplicate user"),
+            (r#"[auth]
+enabled = true
+
+[[auth.users]]
+username = "u"
+password = "p"
+roles = []"#, "no roles and no bindings"),
+            (r#"[auth]
+enabled = true
+
+[[auth.users]]
+username = "u"
+password = "p"
+[[auth.users.bindings]]
+role = "admin"
+subjects = []"#, "at least one subject pattern"),
+            (r#"[auth]
+enabled = true
+
+[[auth.users]]
+username = "u"
+password = "p"
+[[auth.users.bindings]]
+role = "admin"
+subjects = [".eu::"]"#, "subject pattern"),
+            // A typo in a field name is a setting that silently does nothing.
+            (r#"sync_write = true"#, "sync_write"),
+        ];
+        for (text, expected) in cases {
+            let err = load(text).err().unwrap_or_else(|| panic!("this should not have been accepted:\n{text}"));
+            let msg = format!("{err:#}");
+            assert!(msg.contains(expected), "expected {expected:?} in the refusal, got: {msg}");
+        }
+    }
+
+    #[test]
+    fn a_list_setting_may_be_written_as_one_line_or_as_a_list() {
+        let one = load("[proxy]\ntrust = \"10.0.0.0/8; 127.0.0.1/32\"").unwrap();
+        let many = load("[proxy]\ntrust = [\"10.0.0.0/8\", \"127.0.0.1/32\"]").unwrap();
+        assert_eq!(one.proxy.trust, many.proxy.trust);
+        assert_eq!(one.proxy.trust, vec!["10.0.0.0/8".to_string(), "127.0.0.1/32".to_string()]);
+    }
+}

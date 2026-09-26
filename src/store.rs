@@ -191,6 +191,26 @@ impl PhysicalStore {
         }
     }
 
+    /// Every write to the database goes through here.
+    ///
+    /// `sync_writes` is a promise made in the configuration - "fsync the WAL on
+    /// every write" - and it is kept only if nothing writes around it. It used
+    /// to be applied by the batch commit alone, so the cluster id, the log
+    /// floor, an exporter's cursor and the whole on-disk migration had their
+    /// own durability, quietly different from the one that was asked for.
+    fn write(&self, batch: WriteBatch) -> Result<(), rocksdb::Error> {
+        let mut wo = WriteOptions::default();
+        wo.set_sync(self.sync_writes);
+        self.db.write_opt(batch, &wo)
+    }
+
+    /// One key, with the same durability as any other write.
+    fn put(&self, cf: &str, key: impl AsRef<[u8]>, value: impl AsRef<[u8]>) -> Result<(), rocksdb::Error> {
+        let mut batch = WriteBatch::default();
+        batch.put_cf(self.cf(cf), key, value);
+        self.write(batch)
+    }
+
     fn cf(&self, name: &str) -> &ColumnFamily {
         self.db.cf_handle(name).expect("column family exists")
     }
@@ -249,18 +269,18 @@ impl PhysicalStore {
                 in_batch += 1;
                 moved += 1;
                 if in_batch >= 10_000 {
-                    self.db.write(std::mem::take(&mut batch))?;
+                    Self::write(self, std::mem::take(&mut batch))?;
                     in_batch = 0;
                 }
             }
             if in_batch > 0 {
-                self.db.write(batch)?;
+                Self::write(self, batch)?;
             }
         }
         let mut batch = WriteBatch::default();
         batch.put_cf(self.cf(CF_META), FORMAT_VERSION_KEY, FORMAT_VERSION.to_be_bytes());
         batch.put_cf(self.cf(CF_META), [TENANT_KEY_PREFIX, default.as_str().as_bytes()].concat(), b"");
-        self.db.write(batch)?;
+        Self::write(self, batch)?;
         if moved > 0 {
             tracing::info!(rows = moved, "migrated the store into the '{default}' host container");
         }
@@ -302,7 +322,7 @@ impl Store {
     /// Record that this container exists, so it survives a restart with no rows.
     pub fn register(&self) -> ApiResult<()> {
         let key = [TENANT_KEY_PREFIX, self.tenant.as_str().as_bytes()].concat();
-        self.db.db.put_cf(self.db.cf(CF_META), key, b"")?;
+        self.db.put(CF_META, key, b"")?;
         Ok(())
     }
 
@@ -357,7 +377,7 @@ impl Store {
     }
 
     pub fn put_meta_string(&self, key: &str, value: &str) -> ApiResult<()> {
-        self.db.db.put_cf(self.db.cf(CF_META), self.key(key.as_bytes()), value)?;
+        self.db.put(CF_META, self.key(key.as_bytes()), value)?;
         Ok(())
     }
 
@@ -377,7 +397,7 @@ impl Store {
         let mut batch = WriteBatch::default();
         batch.delete_range_cf(self.db.cf(CF_LOG), self.key(&0u64.to_be_bytes()), self.key(&before.to_be_bytes()));
         batch.put_cf(self.db.cf(CF_META), self.key(b"log_floor"), before.to_be_bytes());
-        self.db.db.write(batch)?;
+        self.db.write(batch)?;
         Ok(())
     }
 
@@ -417,7 +437,7 @@ impl Store {
 
     pub fn put_exporter(&self, rec: &ExporterRecord, _: &crate::modegate::Allowed) -> ApiResult<()> {
         let key = self.key(rec.info.name.as_bytes());
-        self.db.db.put_cf(self.db.cf(CF_EXPORTERS), key, serde_json::to_vec(rec)?)?;
+        self.db.put(CF_EXPORTERS, key, serde_json::to_vec(rec)?)?;
         Ok(())
     }
 
@@ -675,9 +695,7 @@ impl Tx<'_> {
             self.batch.put_cf(self.store.db.cf(CF_META), key, self.log_seq.to_be_bytes());
             self.ops.push(Op::SetLogSeq { seq: self.log_seq });
         }
-        let mut wo = WriteOptions::default();
-        wo.set_sync(self.store.db.sync_writes);
-        self.store.db.db.write_opt(self.batch, &wo)?;
+        self.store.db.write(self.batch)?;
         Ok(self.ops)
     }
 }

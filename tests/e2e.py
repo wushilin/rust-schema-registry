@@ -430,6 +430,27 @@ def main():
         r = c.post("/subjects/fresh/versions", {"schema": json.dumps({"type": "float"})})
         check("id counter survives restart", r[0] == 200 and r[1]["id"] > 5001, r)
 
+        # A graceful stop proves nothing about durability: RocksDB flushes on
+        # close either way. `sync_writes` defaults to true precisely so that an
+        # answered registration survives a kill, and that is what this checks -
+        # no shutdown path runs at all.
+        killed = c.post("/subjects/killed-value/versions", {"schema": json.dumps({"type": "boolean"})})
+        check("registered before the kill", killed[0] == 200, killed)
+        procs.remove(p2)
+        p2.kill()
+        p2.wait(10)
+        p3 = subprocess.Popen([BIN, "--config", src_cfg], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        procs.append(p3)
+        for _ in range(100):
+            try:
+                requests.get(f"http://127.0.0.1:{port}", timeout=0.2)
+                break
+            except requests.ConnectionError:
+                time.sleep(0.05)
+        r = c.get("/subjects/killed-value/versions/1")
+        check("a registration answered before SIGKILL is still there", r[0] == 200 and r[1]["id"] == killed[1]["id"], r)
+        check("and the subject is listed", "killed-value" in c.get("/subjects")[1])
+
         print("logical equality (normalize on by default)")
         js_a = '{"type":"object","properties":{"x":{"type":"string"},"y":{"type":"integer"}}}'
         js_b = '{"properties":{"y":{"type":"integer"},"x":{"type":"string"}},"type":"object"}'

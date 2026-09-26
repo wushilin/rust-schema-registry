@@ -15,8 +15,11 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 
-from e2e import BIN, FAILURES, Client, check, free_port
+import requests
+
+from e2e import BIN, CT, FAILURES, Client, check, free_port
 
 AVRO = json.dumps({"type": "record", "name": "R", "fields": [{"name": "a", "type": "int"}]})
 AVRO2 = json.dumps({"type": "record", "name": "R",
@@ -53,6 +56,12 @@ subjects = [".::xyz-*"]
 username = "plain"
 password = "plain-secret"
 roles = ["readonly"]
+
+# A registry-wide writer: owns subjects everywhere, owns no context's settings.
+[[auth.users]]
+username = "writer"
+password = "writer-secret"
+roles = ["write"]
 
 # No registry-wide role at all: sees only what its bindings name.
 [[auth.users]]
@@ -175,6 +184,84 @@ def main():
         check("owner may not create a foreign subject", owner.post("/subjects/nope-1/versions", {"schema": AVRO})[0] == 403)
         check("owner checks compatibility on its own subject",
               owner.post("/compatibility/subjects/abc-2/versions?verbose=true", {"schema": AVRO2})[0] == 200)
+
+        writer = Client(url, auth=("writer", "writer-secret"))
+
+        print("whole-container and whole-process endpoints need more than a role somewhere")
+        # `owner` is readonly everywhere plus admin of abc*/def*. That passes
+        # the path gate for /admin/api/*, so the handler is the only thing
+        # between it and rewriting every subject in the container.
+        check("a scoped admin may not back up the container", owner.get("/admin/api/backup")[0] == 403)
+        ndjson = lambda c, path, body: c.s.post(url + path, data=body, headers=CT)
+        check("nor restore it", ndjson(owner, "/admin/api/restore", "").status_code == 403)
+        check("root may back up", root.get("/admin/api/backup")[0] == 200)
+        # A dry run over HTTP, which only the CLI had ever exercised.
+        dump = root.s.get(url + "/admin/api/backup", headers=CT).text
+        r = ndjson(root, "/admin/api/restore?dryRun=true", dump)
+        check("a dry run reports without writing", r.status_code == 200 and r.json()["subjects"] > 0,
+              (r.status_code, r.text[:200]))
+        # Metrics counts and names every host container in the process.
+        check("metrics is not for a reader", plain.get("/metrics")[0] == 403)
+        check("nor for a scoped admin", owner.get("/metrics")[0] == 403)
+        check("metrics needs an operator", root.get("/metrics")[0] == 200)
+        check("and no credentials at all is 401", Client(url).get("/metrics")[0] == 401)
+
+        print("an exporter's destination credentials are not readable by a reader")
+        secret = {"name": "with-secret", "contextType": "CUSTOM", "context": ".dr", "subjects": ["abc*"],
+                  "config": {"schema.registry.url": "http://127.0.0.1:1",
+                             "basic.auth.user.info": "dr-admin:DO-NOT-LEAK"}}
+        check("root creates it", root.post("/exporters", secret)[0] == 200)
+        check("a reader may not read its config", plain.get("/exporters/with-secret/config")[0] == 403)
+        check("nor the record that carries it", plain.get("/exporters/with-secret")[0] == 403)
+        check("but may see that it exists", plain.get("/exporters")[0] == 200)
+        check("and how it is getting on", plain.get("/exporters/with-secret/status")[0] == 200)
+        check("root reads the config", "DO-NOT-LEAK" in str(root.get("/exporters/with-secret/config")[1]))
+        root.delete("/exporters/with-secret")
+
+        print("a writer does not own a context however the colon is spelled")
+        check("plain form is refused", writer.put("/config/:.eu:", {"compatibility": "NONE"})[0] == 403)
+        check("percent-encoded form too", writer.put("/config/%3A.eu%3A", {"compatibility": "NONE"})[0] == 403)
+        check("and the mode with it", writer.put("/mode/%3A.eu%3A", {"mode": "READONLY"})[0] == 403)
+        check("the context's settings are untouched",
+              root.get("/config/:.eu:")[1].get("compatibilityLevel") != "NONE", root.get("/config/:.eu:"))
+
+        print("a reader cannot register through a path that looks read-only")
+        check("tags is a write", plain.post("/subjects/abc-1/versions/1/tags", {"tagsToAdd": {"R.a": ["PII"]}})[0] == 403)
+        check("abc-1 still has one version", root.get("/subjects/abc-1/versions")[1] == [1],
+              root.get("/subjects/abc-1/versions"))
+
+        print("a hashed password from `hash-password` is what the server accepts")
+        # This is how auth is set up on the deployed instance: the CLI prints a
+        # bcrypt hash, the hash goes in the file. Nothing connected the two
+        # ends, so a change to the emitted cost or prefix would lock it out
+        # while every test stayed green.
+        hashed = subprocess.run([BIN, "hash-password", "s3cret"], capture_output=True, text=True, timeout=60)
+        check("hash-password succeeds", hashed.returncode == 0, hashed.stderr[-200:])
+        digest = hashed.stdout.strip().splitlines()[-1].strip()
+        check("and prints a bcrypt hash", digest.startswith("$2"), digest[:20])
+        hcfg = os.path.join(tmp, "hashed.toml")
+        hport = free_port()
+        with open(hcfg, "w") as f:
+            f.write(f'listen = "127.0.0.1:{hport}"\ndata_dir = "{os.path.join(tmp, "data3")}"\n\n'
+                    f'[auth]\nenabled = true\n\n[[auth.users]]\nusername = "hashed"\n'
+                    f'password = "{digest}"\nroles = ["admin"]\n')
+        hproc = subprocess.Popen([BIN, "--config", hcfg], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        try:
+            hurl = f"http://127.0.0.1:{hport}"
+            for _ in range(200):
+                try:
+                    requests.get(hurl, timeout=0.2)
+                    break
+                except requests.ConnectionError:
+                    time.sleep(0.05)
+            check("the hashed password logs in", Client(hurl, auth=("hashed", "s3cret")).get("/subjects")[0] == 200)
+            check("and a wrong one does not", Client(hurl, auth=("hashed", "wrong")).get("/subjects")[0] == 401)
+        finally:
+            hproc.terminate()
+            try:
+                hproc.wait(5)
+            except subprocess.TimeoutExpired:
+                hproc.kill()
 
         print("a bad pattern is a startup error, not a silent grant")
         bad = os.path.join(tmp, "bad.toml")

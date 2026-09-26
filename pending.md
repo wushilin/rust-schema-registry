@@ -19,8 +19,6 @@ Covered today: `RUNNING->PAUSED`, `PAUSED->PAUSED`, `PAUSED->RUNNING`,
 
 Not covered:
 
-* `reset` from `PAUSED` and from `ERROR`. `run()` skips `Paused|Failed`
-  records, so whether a reset un-sticks a paused exporter is unasserted.
 * `PAUSED->FAILED`: an explicitly paused exporter whose destination then
   acquires a conflict must fail on resume, not loop in ERROR.
 * Per-event cursor persistence after destination acknowledgement, and replay

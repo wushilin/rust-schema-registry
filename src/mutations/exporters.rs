@@ -300,6 +300,7 @@ impl Mutation for TransitionExporter {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::mutations::test_support::registry;
 
     fn info(context_type: &str, context: Option<&str>, subjects: &[&str]) -> ExporterInfo {
         ExporterInfo {
@@ -339,5 +340,46 @@ mod tests {
         bad = info("AUTO", None, &["*"]);
         bad.config.clear();
         assert!(validate(&bad).unwrap_err().message.contains("schema.registry.url"));
+    }
+
+    fn stored_record(reg: &crate::registry::Registry, state: ExporterState) {
+        let rec = ExporterRecord {
+            info: info("AUTO", None, &["*"]),
+            state,
+            offset: 17,
+            ts: 1,
+            trace: "previous failure".into(),
+        };
+        reg.store.put_exporter(&rec, &crate::modegate::Allowed::not_schema_state()).unwrap();
+    }
+
+    #[test]
+    fn reset_clears_cursor_and_trace_but_keeps_an_explicit_pause() {
+        let (reg, _dir) = registry();
+        stored_record(&reg, ExporterState::Paused);
+
+        let plan = TransitionExporter::new("x", "reset").plan(&ReadView::new(&reg)).unwrap();
+        let rec = plan.writes.iter().find_map(|w| match w {
+            Write::PutExporter { rec } => Some(rec),
+            _ => None,
+        }).expect("updated exporter");
+        assert_eq!(rec.offset, 0);
+        assert_eq!(rec.state, ExporterState::Paused);
+        assert!(rec.trace.is_empty());
+    }
+
+    #[test]
+    fn reset_restarts_an_error_exporter_from_the_beginning() {
+        let (reg, _dir) = registry();
+        stored_record(&reg, ExporterState::Error);
+
+        let plan = TransitionExporter::new("x", "reset").plan(&ReadView::new(&reg)).unwrap();
+        let rec = plan.writes.iter().find_map(|w| match w {
+            Write::PutExporter { rec } => Some(rec),
+            _ => None,
+        }).expect("updated exporter");
+        assert_eq!(rec.offset, 0);
+        assert_eq!(rec.state, ExporterState::Running);
+        assert!(rec.trace.is_empty());
     }
 }

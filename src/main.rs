@@ -109,6 +109,11 @@ enum Command {
         /// Only subjects with this prefix (`:*:` - every context - by default).
         #[arg(long)]
         subject_prefix: Option<String>,
+        /// Read using only the Confluent API, as for a source that is not this
+        /// software. The default asks this registry for its own dump first,
+        /// which carries what that API cannot express - an alias, for one.
+        #[arg(long)]
+        confluent_api: bool,
     },
     /// Replay a dump into a registry, keeping ids and version numbers. The
     /// destination must allow IMPORT mode; re-running is safe.
@@ -154,9 +159,9 @@ async fn main() -> anyhow::Result<()> {
         println!("{}", bcrypt::hash(password, *cost)?);
         return Ok(());
     }
-    if let Some(Command::Backup { from, from_auth, out, subject_prefix }) = &cli.command {
+    if let Some(Command::Backup { from, from_auth, out, subject_prefix, confluent_api }) = &cli.command {
         let src = migrate::Endpoint::new(from, from_auth.as_deref())?;
-        let dump = backup::read(&src, subject_prefix.as_deref()).await?;
+        let dump = backup::read(&src, subject_prefix.as_deref(), !*confluent_api).await?;
         let text = dump.to_ndjson();
         let (subjects, versions) = (dump.subject_order.len(), dump.version_count());
         if out == "-" {

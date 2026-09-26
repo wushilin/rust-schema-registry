@@ -1138,3 +1138,34 @@ fn an_id_reused_under_import_serves_its_new_content_not_the_cached_one() {
     assert_eq!(r.register("reuse-value", req, false).unwrap().id, old, "the import chose the old id");
     assert_eq!(resolve(&r, old, None).unwrap(), "New", "a stale cached body was served for a reused id");
 }
+
+#[test]
+fn a_dump_carries_an_alias_which_is_a_subject_with_no_versions_of_its_own() {
+    // An alias is a subject-level config and nothing else: no versions, no
+    // schemas. A dump that walks subjects by their versions never sees one,
+    // and a restore of it silently loses every alias in the registry.
+    let (r, _d) = registry();
+    register(&r, "real-value", "A");
+    r.set_config(
+        Some("alias-value"),
+        crate::model::ConfigRecord { alias: Some("real-value".into()), ..Default::default() },
+    )
+    .unwrap();
+    let alias_of = |reg: &Registry| {
+        reg.reader().subject_configs().into_iter().find(|(_, s, _)| s == "alias-value").and_then(|(_, _, c)| c.alias)
+    };
+    assert_eq!(alias_of(&r).as_deref(), Some("real-value"));
+
+    let dump = crate::backup::dump_local(&r, None).unwrap();
+    let aliased = dump
+        .configs
+        .iter()
+        .find(|(s, _)| s.as_deref() == Some("alias-value"))
+        .unwrap_or_else(|| panic!("the alias is not in the dump: {:?}", dump.configs));
+    assert_eq!(aliased.1["alias"], "real-value");
+
+    // And it comes back.
+    let (r2, _d2) = registry();
+    crate::backup::restore_local(&r2, &dump, false).unwrap();
+    assert_eq!(alias_of(&r2).as_deref(), Some("real-value"), "the alias did not survive the restore");
+}

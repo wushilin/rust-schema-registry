@@ -137,7 +137,25 @@ impl Dump {
 
 /// Read a whole registry over its REST API. Works against any Confluent-
 /// compatible server, this one included.
-pub async fn read(src: &Endpoint, subject_prefix: Option<&str>) -> anyhow::Result<Dump> {
+pub async fn read(src: &Endpoint, subject_prefix: Option<&str>, prefer_own: bool) -> anyhow::Result<Dump> {
+    // Our own registries serve the dump directly, and that one is complete:
+    // the walk below can only ask the Confluent API, which has no way to
+    // enumerate a subject that exists as nothing but a setting - an alias has
+    // no versions, so it is in no listing, and `GET /config/{it}` is a 404.
+    // Anything else falls through to the walk, which is what makes a dump from
+    // a foreign registry, and from Confluent itself, possible at all.
+    let admin = match subject_prefix {
+        Some(p) => format!("/admin/api/backup?subjectPrefix={}", percent_encode_segment(p)),
+        None => "/admin/api/backup".to_string(),
+    };
+    if prefer_own
+        && let Some(text) = src.get_text(&admin).await
+        && let Ok(d) = Dump::parse(&text)
+        && d.header.is_some()
+    {
+        return Ok(d);
+    }
+
     let mut d = Dump { header: Some(json!({"type": "registry", "format": FORMAT, "at": crate::model::now_millis()})), ..Default::default() };
     let prefix = subject_prefix.unwrap_or(":*:");
     let subjects: Vec<String> = serde_json::from_value(
@@ -476,11 +494,13 @@ pub fn dump_local(reg: &Registry, prefix: Option<&str>) -> ApiResult<Dump> {
         }
     }
 
-    for subject in reg.list_subjects(prefix.or(Some(":*:")), true, false)? {
-        let live = reg.list_versions(&subject, false, false).unwrap_or_default();
+    let subjects = reg.list_subjects(prefix.or(Some(":*:")), true, false)?;
+    let listed: std::collections::HashSet<String> = subjects.iter().cloned().collect();
+    for subject in &subjects {
+        let live = reg.list_versions(subject, false, false).unwrap_or_default();
         let mut rows = Vec::new();
-        for v in reg.list_versions(&subject, true, false)? {
-            let view = reg.get_version(&subject, VersionSpec::Exact(v), true)?;
+        for v in reg.list_versions(subject, true, false)? {
+            let view = reg.get_version(subject, VersionSpec::Exact(v), true)?;
             let mut row = serde_json::to_value(&view)?;
             row["type"] = json!("schema");
             row["deleted"] = json!(!live.contains(&v));
@@ -491,12 +511,35 @@ pub fn dump_local(reg: &Registry, prefix: Option<&str>) -> ApiResult<Dump> {
         }
         d.subject_order.push(subject.clone());
         d.subjects.insert(subject.clone(), rows);
-        if let Some(c) = scope_config(Some(&subject))? {
+        if let Some(c) = scope_config(Some(subject))? {
             d.configs.push((Some(subject.clone()), c));
         }
-        if let Some(m) = scope_mode(&subject)? {
-            d.modes.push((Some(subject), m));
+        if let Some(m) = scope_mode(subject)? {
+            d.modes.push((Some(subject.clone()), m));
         }
+    }
+
+    // A subject can exist as nothing but a setting: an alias is a
+    // subject-level config with no versions of its own, and `list_subjects`
+    // reports subjects by their versions, so walking those alone lost every
+    // alias in the registry. Their config comes from the snapshot directly,
+    // because `get_config` answers 40401 for a subject that has no versions.
+    let mut settings_only: Vec<(String, Value)> = Vec::new();
+    for (ctx, s, cfg) in reg.reader().subject_configs() {
+        let qualified = crate::context::qualify(&ctx, &s);
+        if listed.contains(&qualified) {
+            continue;
+        }
+        if let Some(p) = prefix
+            && !qualified.starts_with(p.trim_end_matches('*'))
+        {
+            continue;
+        }
+        settings_only.push((qualified, serde_json::to_value(&cfg)?));
+    }
+    settings_only.sort_by(|a, b| a.0.cmp(&b.0));
+    for (subject, cfg) in settings_only {
+        d.configs.push((Some(subject), cfg));
     }
 
     for name in reg.list_exporters()? {

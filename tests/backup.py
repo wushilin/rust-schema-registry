@@ -56,6 +56,14 @@ def populate(c, url):  # noqa: ARG001 - url kept for symmetry with the other sui
     c.delete("/subjects/dead-value")
     c.put("/config/user-value", {"compatibility": "BACKWARD_TRANSITIVE"})
     c.put("/mode/proto-value", {"mode": "READONLY"})
+    # An alias is a subject that has a setting and nothing else - no versions,
+    # so a dump that walks subjects by their versions never sees it.
+    c.put("/config/alias-value", {"alias": "user-value"})
+    # A rule set: listed in the dump format and never compared by this suite.
+    c.post("/subjects/ruled-value/versions",
+           {"schema": AVRO_USER,
+            "ruleSet": {"domainRules": [{"name": "checkLen", "kind": "CONDITION", "mode": "WRITE",
+                                         "type": "CEL", "expr": "size(message.name) < 100"}]}})
     # A destination nothing answers on: the exporter record is what a dump has
     # to carry, and a replicating one would add subjects while the test runs.
     c.post("/exporters", {"name": "to-dr", "contextType": "CUSTOM", "context": ".dr", "subjects": ["user-*"],
@@ -71,8 +79,13 @@ def state(c):
                  "config": c.get(f"/config/{subject}")[1], "mode": c.get(f"/mode/{subject}")[1], "versions": {}}
         for v in c.get(f"/subjects/{subject}/versions", deleted="true")[1]:
             s = c.get(f"/subjects/{subject}/versions/{v}", deleted="true")[1]
-            entry["versions"][str(v)] = {k: s.get(k) for k in ("id", "version", "schema", "schemaType", "references", "metadata")}
+            entry["versions"][str(v)] = {
+                k: s.get(k) for k in ("id", "version", "schema", "schemaType", "references", "metadata", "ruleSet")
+            }
         out["subjects"][subject] = entry
+    # Aliases have no versions, so they are not in /subjects at all; ask for
+    # the setting itself, which is the only trace of them.
+    out["aliases"] = {s: c.get(f"/config/{s}")[1] for s in ("alias-value",)}
     return out
 
 
@@ -108,6 +121,20 @@ def main():
         kinds = lambda text: sorted(json.loads(l)["type"] for l in text.strip().splitlines())
         check("same records either way", kinds(api_dump) == kinds(cli.stdout),
               f"{kinds(api_dump)} != {kinds(cli.stdout)}")
+
+        # `--confluent-api` is the path a dump from Confluent itself takes: it
+        # may only ask the Confluent API, so it cannot see a subject that is
+        # nothing but a setting. Everything with versions must still match.
+        walked = subprocess.run([BIN, "backup", "--from", url, "--confluent-api"], capture_output=True, text=True)
+        check("cli backup over the confluent api succeeds", walked.returncode == 0, walked.stderr[-300:])
+        schemas = lambda text: sorted(
+            (json.loads(l)["subject"], json.loads(l)["version"])
+            for l in text.strip().splitlines() if json.loads(l)["type"] == "schema")
+        check("the confluent api walk finds every version", schemas(walked.stdout) == schemas(api_dump),
+              f"{len(schemas(walked.stdout))} != {len(schemas(api_dump))}")
+        aliases = lambda text: [l for l in text.strip().splitlines() if '"alias"' in l]
+        check("our own dump carries the alias", aliases(api_dump), "no alias row in the admin dump")
+        check("and the confluent api cannot", not aliases(walked.stdout), aliases(walked.stdout)[:1])
         dump_path = os.path.join(tmp, "dump.ndjson")
         with open(dump_path, "w") as f:
             f.write(cli.stdout)

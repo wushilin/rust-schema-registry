@@ -70,6 +70,14 @@ impl Endpoint {
         self.send(self.request(reqwest::Method::GET, path), ok_codes).await
     }
 
+    /// A body that is not JSON - the newline-delimited dump. `None` when the
+    /// endpoint does not serve it, which is every registry but ours.
+    pub(crate) async fn get_text(&self, path: &str) -> Option<String> {
+        let resp = self.request(reqwest::Method::GET, path).send().await.ok()?;
+        resp.status().is_success().then_some(())?;
+        resp.text().await.ok()
+    }
+
     pub(crate) async fn post(&self, path: &str, body: &Value, ok_codes: &[u64]) -> anyhow::Result<Value> {
         self.send(self.request(reqwest::Method::POST, path).json(body), ok_codes).await
     }

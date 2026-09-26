@@ -468,7 +468,14 @@ pub fn router(shared: Shared, max_body_bytes: usize) -> Router {
 /// included. Aggregate counts only - no subject names, no schemas - so any
 /// authenticated caller may scrape it.
 async fn metrics_endpoint(axum::extract::State(shared): axum::extract::State<Shared>) -> Response {
-    let body = crate::metrics::metrics().render(&shared.containers);
+    // The gauges walk every version of every subject of every container, which
+    // on a large registry is a full scan and a large allocation. On a runtime
+    // worker that is a scrape loop stalling the whole server, so it goes to the
+    // blocking pool like any other scan.
+    let body = match tokio::task::spawn_blocking(move || crate::metrics::metrics().render(&shared.containers)).await {
+        Ok(b) => b,
+        Err(e) => return ApiError::internal(e).into_response(),
+    };
     let mut resp = (StatusCode::OK, body).into_response();
     resp.headers_mut()
         .insert(header::CONTENT_TYPE, HeaderValue::from_static("text/plain; version=0.0.4; charset=utf-8"));

@@ -2,6 +2,86 @@
 
 ## Unreleased
 
+### Fixed after a review of the whole implementation
+
+**Authorization.** Four ways a caller reached past their role, all found by
+asking the same question twice in two ways:
+
+* `POST /subjects/{s}/versions/{v}/tags` registers a version, and was
+  classified as a read-only POST, so any `readonly` caller could write to any
+  subject it could read. Read-only POSTs are now matched by shape.
+* `/config/%3A.eu%3A` is `/config/:.eu:`, a context's own settings, and the
+  percent-encoded spelling passed the "subject-scoped" test - letting a
+  `write` user put a whole context into `READONLY` or `IMPORT`. The decision
+  now uses the target that was already decoded, not the raw path.
+* Backup and restore asked "does this caller see every subject", which is true
+  of a registry-wide `readonly` role. With any narrow `admin` binding that was
+  whole-container backup and restore, including the global config. They now
+  require admin everywhere.
+* **`GET /metrics` and an exporter's config now need the admin role.** Metrics
+  names and counts every host container in the process; an exporter's config
+  map carries the destination's credentials. Which exporters exist and how
+  each is getting on stay readable to any role.
+
+**The change log could hold less than what was committed**, which an exporter
+notices and nothing else does:
+
+* **The migration into host containers orphaned the whole change log.** A log
+  key is a big-endian u64, so every sequence below 2^56 starts with the byte
+  that marks the store's own rows, and those were skipped in every column
+  family instead of only in `meta`. An upgraded registry kept answering
+  correctly while its exporters silently skipped their backlog.
+* Two contexts could commit holding the same log sequence, because the
+  sequence was read under a per-context lock, and one log row would overwrite
+  the other. The counter lock now lives with the counter and a transaction
+  cannot be opened without it.
+* A single exporter record that would not deserialize read as "no exporters",
+  which read as "nothing needs the log", and pruned every other exporter's
+  backlog. Nothing is pruned now when anything cannot be read.
+
+**Other data kept, or handed back, correctly:**
+
+* **Aliases survive a backup.** An alias is a subject with a setting and no
+  versions, and both dump paths walked subjects by their versions.
+  `backup --from` now asks one of our own registries for its own dump and
+  falls back to the Confluent API walk, which `--confluent-api` selects.
+* **A container's cluster id no longer moves when another container is
+  configured.** It used to depend on how many there were, so adding a second
+  renamed the first - and an AUTO exporter names its destination context after
+  it.
+* `sync_writes` applies to every write. It had been honoured by the batch
+  commit alone, leaving the cluster id, the log floor, exporter cursors and
+  the on-disk migration with their own durability.
+* A permanent delete drops the freed schema body from the cache, which is what
+  reclaiming it was for.
+
+**Transport and process:**
+
+* **HTTP/2 clients work with host containers.** The authority arrives in
+  `:authority`, which hyper leaves in the URI, so every h2 request answered
+  421 as soon as containers were configured. An absolute-form request-target's
+  authority is honoured too, as RFC 7230 section 5.4 requires.
+* The PROXY header read has a five-second timeout. It necessarily happens
+  before the peer can be checked against `trust`, so any client could hold a
+  task and a socket indefinitely, below hyper where its timeouts never apply.
+* Route and method labels are bounded. Both were built from client-controlled
+  input before authentication, and an unrecognised value became a counter and
+  a histogram that are never evicted - unbounded memory from an anonymous
+  scanner. Anything unrecognised is now one label.
+* `/metrics` renders on the blocking pool; it walks every version of every
+  container.
+* The panic guard sits outside the URI rewriting rather than inside it.
+* `backup --out` writes beside the target and renames, so an interrupted
+  backup leaves the previous dump intact.
+
+### Tested that was not
+
+Concurrency (two writers in one context, sixteen across contexts, a reader
+running against a writer), SIGKILL durability, `ServerConfig::validate`'s
+fifteen refusals plus `config.example.toml` itself, the `hash-password` ->
+config -> login round trip, aliases and rule sets through a backup,
+`?dryRun=true` over HTTP, and every authorization rule above over real HTTP.
+
 * `[proxy]` is now an explicit section, and off by default:
 
   ```toml

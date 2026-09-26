@@ -146,6 +146,17 @@ fn be_u64(b: &[u8]) -> u64 {
     a.copy_from_slice(&b[..8]);
     u64::from_be_bytes(a)
 }
+/// Like `be_u64`, for the one place that must not panic: a short value means a
+/// corrupt row, and everywhere else that is a startup failure with a message.
+/// In the exporter's read loop it would instead kill the task, silently, for
+/// the life of the process - an exporter that has simply stopped.
+fn try_be_u64(b: &[u8]) -> Option<u64> {
+    b.get(..8).map(|v| {
+        let mut a = [0u8; 8];
+        a.copy_from_slice(v);
+        u64::from_be_bytes(a)
+    })
+}
 
 // ---------------------------------------------------------------------------
 // The database
@@ -414,7 +425,11 @@ impl Store {
             if !k.starts_with(&self.prefix) {
                 break;
             }
-            out.push((be_u64(&k[self.prefix.len()..]), serde_json::from_slice(&v)?));
+            let Some(seq) = k.get(self.prefix.len()..).and_then(try_be_u64) else {
+                tracing::error!(container = %self.tenant, key = ?k, "malformed change log key; stopping this read here");
+                break;
+            };
+            out.push((seq, serde_json::from_slice(&v)?));
             if out.len() >= limit {
                 break;
             }

@@ -167,7 +167,11 @@ async fn main() -> anyhow::Result<()> {
         if out == "-" {
             print!("{text}");
         } else {
-            std::fs::write(out, &text)?;
+            // Write beside the target and rename, so an interrupted backup
+            // leaves yesterday's dump intact rather than half of today's.
+            let tmp = format!("{out}.partial");
+            std::fs::write(&tmp, &text).map_err(|e| anyhow::anyhow!("writing {tmp}: {e}"))?;
+            std::fs::rename(&tmp, out).map_err(|e| anyhow::anyhow!("renaming {tmp} to {out}: {e}"))?;
             eprintln!("{subjects} subjects, {versions} versions, {} bytes -> {out}", text.len());
         }
         return Ok(());

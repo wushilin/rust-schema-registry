@@ -72,13 +72,33 @@ pub fn metrics() -> &'static Metrics {
     m
 }
 
-/// A path as a label: its shape, never its subject. `/subjects/orders-value/
-/// versions` is `/subjects/*/versions`, so one label covers every subject
-/// instead of one label per subject.
+/// The first segment of every path the router serves. A request for anything
+/// else is one label, `/other`, however many ways it is spelled.
+///
+/// This is the whole defence against unbounded label cardinality: the label is
+/// built from a client-controlled path, on every request, before authentication,
+/// and each new value costs a counter and a histogram for the life of the
+/// process. `every_served_route_has_a_known_first_segment` keeps this list
+/// honest when a route is added.
+const KNOWN_ROOTS: &[&str] = &[
+    "", "subjects", "schemas", "contexts", "config", "mode", "compatibility", "exporters", "metrics", "admin",
+    "_admin", "v1",
+];
+
+/// A path as a label: its shape, never its subject, and never anything a
+/// client invented. `/subjects/orders-value/versions` is `/subjects/*/versions`,
+/// so one label covers every subject instead of one label per subject; a path
+/// the router does not serve is `/other`, so a scanner cannot mint labels.
 pub fn route_shape(path: &str) -> String {
+    let trimmed = path.trim_matches('/');
+    let mut segs = trimmed.split('/');
+    let root = segs.next().unwrap_or("");
+    if !KNOWN_ROOTS.contains(&root) {
+        return "/other".into();
+    }
     let mut out = String::new();
     let mut after = None;
-    for seg in path.trim_matches('/').split('/') {
+    for seg in trimmed.split('/') {
         out.push('/');
         // The segment after `subjects`, `config`, `mode`, `contexts`,
         // `exporters` or `ids` is a name; everything else is structure.
@@ -88,7 +108,26 @@ pub fn route_shape(path: &str) -> String {
         out.push_str(if is_name { "*" } else { seg });
         after = Some(seg);
     }
+    // A path can be served under a known root and still be arbitrarily deep
+    // or carry a segment nothing names. Both would be new labels.
+    if out.len() > 64 || out.contains('"') || out.contains('\\') {
+        return "/other".into();
+    }
     if out.is_empty() { "/".into() } else { out }
+}
+
+/// The HTTP methods the router answers. Anything else is one label: a method
+/// token is client-controlled too, and `curl -X WHATEVER` is free.
+pub fn method_label(method: &str) -> &'static str {
+    match method {
+        "GET" => "GET",
+        "POST" => "POST",
+        "PUT" => "PUT",
+        "DELETE" => "DELETE",
+        "HEAD" => "HEAD",
+        "OPTIONS" => "OPTIONS",
+        _ => "other",
+    }
 }
 
 impl Metrics {
@@ -222,6 +261,44 @@ mod tests {
         assert_eq!(route_shape("/exporters/to-dr/status"), "/exporters/*/status");
         assert_eq!(route_shape("/contexts/.eu"), "/contexts/*");
         assert_eq!(route_shape("/subjects"), "/subjects");
+    }
+
+    #[test]
+    fn a_path_the_router_does_not_serve_is_one_label() {
+        // The label is built from a client-controlled path on every request,
+        // before authentication, and every distinct value costs a counter and
+        // a histogram for the life of the process. Anything unrecognised has
+        // to collapse, or a loop over invented paths is unbounded memory.
+        assert_eq!(route_shape("/nope"), "/other");
+        assert_eq!(route_shape("/unauth-junk-1"), "/other");
+        assert_eq!(route_shape("/subjects/a/versions/1/made-up/deeper/deeper/deeper/deeper/deeper"), "/other");
+        // And nothing that would break the exposition format gets through.
+        assert_eq!(route_shape("/a%22b"), "/other");
+        assert!(!route_shape("/subjects/a\"b/versions").contains('"'));
+        // Methods are client-controlled too.
+        assert_eq!(method_label("GET"), "GET");
+        assert_eq!(method_label("FOOBAR"), "other");
+        assert_eq!(method_label("get"), "other");
+    }
+
+    #[test]
+    fn every_served_route_has_a_known_first_segment() {
+        // `KNOWN_ROOTS` is what keeps the label set bounded, so adding a route
+        // without adding its root here would quietly report it as `/other`.
+        // The router is the source of truth; this reads it.
+        let src = include_str!("api/mod.rs");
+        let mut seen = 0;
+        for line in src.lines() {
+            let Some(rest) = line.trim().strip_prefix(".route(\"") else { continue };
+            let Some(path) = rest.split('"').next() else { continue };
+            let root = path.trim_matches('/').split('/').next().unwrap_or("");
+            assert!(
+                KNOWN_ROOTS.contains(&root),
+                "the router serves {path}, so \"{root}\" belongs in KNOWN_ROOTS"
+            );
+            seen += 1;
+        }
+        assert!(seen > 30, "only found {seen} routes - this test has stopped reading the router");
     }
 
     #[test]

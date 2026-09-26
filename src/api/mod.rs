@@ -75,7 +75,13 @@ pub async fn access_log(req: Request, next: axum::middleware::Next) -> Response 
     let resp = next.run(req).await;
     let status = resp.status().as_u16();
     let elapsed_us = started.elapsed().as_micros() as u64;
-    crate::metrics::metrics().request(method.as_str(), &crate::metrics::route_shape(&path), status, &container, elapsed_us);
+    crate::metrics::metrics().request(
+        crate::metrics::method_label(method.as_str()),
+        &crate::metrics::route_shape(&path),
+        status,
+        &container,
+        elapsed_us,
+    );
     let read = matches!(method, axum::http::Method::GET | axum::http::Method::HEAD | axum::http::Method::OPTIONS);
     if status >= 500 {
         tracing::error!(%method, path, status, container, client, elapsed_us, "request failed");

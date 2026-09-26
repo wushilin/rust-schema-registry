@@ -69,6 +69,12 @@ impl Pattern {
     pub fn touches_context(&self, ctx: &str) -> bool {
         self.context.matches(ctx)
     }
+
+    /// `*::*`: every subject in every context, which is the same reach as a
+    /// registry-wide role.
+    pub fn is_everything(&self) -> bool {
+        self.context.is_any() && self.subject.is_any()
+    }
 }
 
 /// A `*`-glob. Literals are the common case and compare directly.
@@ -200,8 +206,20 @@ impl Principal {
     }
 
     /// Does this caller see every subject? (No bindings, or a global role.)
+    ///
+    /// This is about *visibility*, not power: a registry-wide `readonly` role
+    /// sees everything and may change nothing. Anything that acts on the whole
+    /// container wants `is_global_admin` instead.
     pub fn sees_everything(&self) -> bool {
         !self.roles.is_empty() || self.bindings.is_empty()
+    }
+
+    /// Is this caller an admin of every subject in every context? What a
+    /// whole-container operation - a backup, a restore - needs, since it reads
+    /// or writes subjects the caller never named.
+    pub fn is_global_admin(&self) -> bool {
+        self.roles.contains(&Role::Admin)
+            || self.bindings.iter().any(|(r, ps)| *r == Role::Admin && ps.iter().any(Pattern::is_everything))
     }
 
     /// May this caller know that this subject exists?
@@ -271,11 +289,28 @@ fn is_admin_ui(path: &str) -> bool {
     path.starts_with("/admin") || path.starts_with("/_admin")
 }
 
+/// Endpoints that report on the whole process rather than on one subject: the
+/// console, and the metrics exposition, which counts every host container and
+/// names them and their exporters. Containers share nothing logically, so a
+/// caller who may use one of them may not read the others' shape.
+fn is_whole_process(path: &str) -> bool {
+    is_admin_ui(path) || path == "/metrics"
+}
+
+/// An exporter's definition carries the destination's credentials in its
+/// config map (`basic.auth.user.info`), so reading it is an admin operation
+/// even though reading its name and state is not.
+fn reveals_exporter_credentials(path: &str) -> bool {
+    let segs: Vec<&str> = path.trim_matches('/').split('/').collect();
+    matches!(segs.as_slice(), ["exporters", _] | ["exporters", _, "config"])
+}
+
 /// Is this request allowed?
 pub fn authorized(p: &Principal, method: &axum::http::Method, path: &str) -> bool {
-    let roles = match target_of(path) {
-        Target::Subject(q) => p.roles_for_subject(&q),
-        Target::Context(ctx) => p.roles_for_context(&ctx),
+    let target = target_of(path);
+    let roles = match &target {
+        Target::Subject(q) => p.roles_for_subject(q),
+        Target::Context(ctx) => p.roles_for_context(ctx),
         // Listings are allowed for anyone holding the role that path needs;
         // the handler then filters the response to what the caller may see.
         Target::Listing => {
@@ -283,30 +318,42 @@ pub fn authorized(p: &Principal, method: &axum::http::Method, path: &str) -> boo
         }
         Target::Global => p.roles.clone(),
     };
-    allows(&roles, method, path)
+    allows(&roles, method, path, &target)
+}
+
+/// The POSTs that only look something up. Confluent has exactly two shapes: a
+/// schema lookup under a subject, and a compatibility check. Everything else
+/// posted under `/subjects/` writes - `.../versions` registers, and so does
+/// `.../versions/{v}/tags`, which is why this is a shape and not a suffix test.
+fn is_lookup_post(path: &str) -> bool {
+    let segs: Vec<&str> = path.trim_matches('/').split('/').collect();
+    matches!(segs.as_slice(), ["subjects", _] | ["compatibility", "subjects", _, "versions", ..])
 }
 
 /// The role rules themselves, once we know which roles apply here.
-fn allows(roles: &[Role], method: &axum::http::Method, path: &str) -> bool {
+fn allows(roles: &[Role], method: &axum::http::Method, path: &str, target: &Target) -> bool {
     use axum::http::Method;
-    // The admin UI shows every subject, schema and setting at once: admins only.
-    if is_admin_ui(path) {
+    // These show every subject, setting and container at once: admins only.
+    if is_whole_process(path) {
         return roles.contains(&Role::Admin);
     }
     if roles.contains(&Role::Admin) {
         return true;
     }
-    let read_only_request = matches!(*method, Method::GET | Method::HEAD | Method::OPTIONS)
-        || (*method == Method::POST
-            && (path.starts_with("/compatibility/") || (path.starts_with("/subjects/") && !path.ends_with("/versions"))));
+    if reveals_exporter_credentials(path) {
+        return false;
+    }
+    let read_only_request =
+        matches!(*method, Method::GET | Method::HEAD | Method::OPTIONS) || (*method == Method::POST && is_lookup_post(path));
     if read_only_request {
         return !roles.is_empty();
     }
     if roles.contains(&Role::Write) {
-        // Writers manage schemas and subject-scoped settings, not global ones or exporters.
-        // `/config/{subject}` is subject-scoped; `/config` (global) and `/config/:.ctx:` (context) are not.
-        let subject_scoped = (path.starts_with("/config/") || path.starts_with("/mode/")) && !path.ends_with(':');
-        return path.starts_with("/subjects/") || subject_scoped;
+        // Writers manage schemas and subject-scoped settings, not global ones,
+        // a context's own settings, or exporters. Which of those the path names
+        // was already decided - and decoded - by `target_of`; asking the raw
+        // path a second time let `/config/%3A.eu%3A` pass as a subject.
+        return matches!(target, Target::Subject(_));
     }
     false
 }
@@ -412,6 +459,74 @@ mod tests {
         let g = user(&[Role::Readonly], &[]);
         assert!(g.sees_everything());
         assert!(g.can_see_subject(".eu", "anything"));
+    }
+
+    #[test]
+    fn a_reader_cannot_write_through_a_path_that_merely_looks_read_only() {
+        // POST /subjects/x/versions/1/tags registers a new version. It is a
+        // write however the path is spelled, and the same is true of any
+        // future POST under a subject that is not a lookup.
+        let ro = user(&[Role::Readonly], &[]);
+        assert!(!authorized(&ro, &Method::POST, "/subjects/foo/versions/1/tags"));
+        assert!(!authorized(&ro, &Method::POST, "/subjects/foo/versions"));
+        // The two POSTs that really are lookups stay open to a reader.
+        assert!(authorized(&ro, &Method::POST, "/subjects/foo"));
+        assert!(authorized(&ro, &Method::POST, "/compatibility/subjects/foo/versions/latest"));
+        // A writer may do all of them on its own subjects.
+        let w = user(&[Role::Write], &[]);
+        assert!(authorized(&w, &Method::POST, "/subjects/foo/versions/1/tags"));
+    }
+
+    #[test]
+    fn percent_encoding_a_context_does_not_make_it_a_subject() {
+        // `/config/%3A.eu%3A` is `/config/:.eu:`: the context's own settings,
+        // which a writer does not own. Deciding that from the raw path let a
+        // writer set a whole context to READONLY.
+        let w = user(&[Role::Write], &[]);
+        for path in ["/config/:.eu:", "/config/%3A.eu%3A", "/mode/:.eu:", "/mode/%3A.eu%3A", "/mode/%3a.eu%3a"] {
+            assert!(!authorized(&w, &Method::PUT, path), "a writer must not own {path}");
+        }
+        // The subject inside that context is still theirs.
+        assert!(authorized(&w, &Method::PUT, "/config/%3A.eu%3Aorders"));
+    }
+
+    #[test]
+    fn the_metrics_exposition_is_an_operator_endpoint() {
+        // It counts, names and reports on every host container in the process,
+        // so it is not something one container's reader may scrape.
+        let ro = user(&[Role::Readonly], &[]);
+        let scoped_admin = user(&[], &[(Role::Admin, &[".eu::*"])]);
+        let root = user(&[Role::Admin], &[]);
+        assert!(!authorized(&ro, &Method::GET, "/metrics"));
+        assert!(!authorized(&scoped_admin, &Method::GET, "/metrics"));
+        assert!(authorized(&root, &Method::GET, "/metrics"));
+    }
+
+    #[test]
+    fn only_an_admin_reads_an_exporters_destination_credentials() {
+        // The config map holds `basic.auth.user.info` for the destination.
+        let ro = user(&[Role::Readonly], &[]);
+        assert!(!authorized(&ro, &Method::GET, "/exporters/to-dr"));
+        assert!(!authorized(&ro, &Method::GET, "/exporters/to-dr/config"));
+        // Which exporters exist, and how each is getting on, stay readable.
+        assert!(authorized(&ro, &Method::GET, "/exporters"));
+        assert!(authorized(&ro, &Method::GET, "/exporters/to-dr/status"));
+        let root = user(&[Role::Admin], &[]);
+        assert!(authorized(&root, &Method::GET, "/exporters/to-dr/config"));
+    }
+
+    #[test]
+    fn whole_container_operations_need_an_admin_everywhere() {
+        // Backup and restore cover every subject, so a role over some of them
+        // is not enough - including the readonly-everywhere plus admin-here
+        // shape, which `sees_everything()` answered yes to.
+        let scoped = user(&[Role::Readonly], &[(Role::Admin, &[".::abc*"])]);
+        assert!(scoped.sees_everything(), "it does see every subject");
+        assert!(!scoped.is_global_admin(), "but it is not an admin of every subject");
+        let root = user(&[Role::Admin], &[]);
+        assert!(root.is_global_admin());
+        let wildcard = user(&[], &[(Role::Admin, &["*::*"])]);
+        assert!(wildcard.is_global_admin(), "an admin binding over everything is one");
     }
 
     #[test]

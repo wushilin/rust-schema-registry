@@ -42,7 +42,7 @@ pub async fn subject_detail(st: AppState, Path(subject): Path<String>) -> ApiRes
 /// sets, config, modes, exporters - so it restores into another build, and
 /// into Confluent.
 pub async fn backup(st: AppState, caller: Caller, p: Params) -> ApiResult<Response> {
-    if !caller.0.sees_everything() {
+    if !caller.0.is_global_admin() {
         return Err(ApiError::forbidden("A backup covers every subject, so it needs registry-wide admin"));
     }
     let prefix = p.get("subjectPrefix").map(String::from);
@@ -60,7 +60,7 @@ pub async fn backup(st: AppState, caller: Caller, p: Params) -> ApiResult<Respon
 /// `POST /admin/api/restore`: replay a dump into this container, keeping ids
 /// and version numbers. `?dryRun=true` reports what it would do.
 pub async fn restore(st: AppState, caller: Caller, p: Params, body: axum::body::Bytes) -> ApiResult<Sr<Value>> {
-    if !caller.0.sees_everything() {
+    if !caller.0.is_global_admin() {
         return Err(ApiError::forbidden("A restore writes every subject, so it needs registry-wide admin"));
     }
     let text = String::from_utf8(body.to_vec()).map_err(|e| ApiError::unprocessable(format!("not text: {e}")))?;

@@ -35,6 +35,38 @@ fn import_req(schema: String, id: i32, version: Option<i32>) -> RegisterSchemaRe
     RegisterSchemaRequest { schema: Some(schema), id: Some(id), version, ..Default::default() }
 }
 
+#[test]
+fn restore_preserves_exporter_state_and_does_not_rewind_an_existing_cursor() {
+    let (r, dir) = registry();
+    let rec = crate::model::ExporterRecord {
+        info: crate::model::ExporterInfo {
+            name: "from-dump".into(),
+            subjects: vec!["*".into()],
+            context_type: "AUTO".into(),
+            context: None,
+            subject_rename_format: None,
+            config: serde_json::from_value(json!({"schema.registry.url": "http://127.0.0.1:1"})).unwrap(),
+        },
+        state: crate::model::ExporterState::Paused,
+        offset: 42,
+        ts: 123,
+        trace: "operator pause".into(),
+    };
+    let dump = crate::backup::Dump { exporters: vec![serde_json::to_value(&rec).unwrap()], ..Default::default() };
+    assert_eq!(crate::backup::restore_local(&r, &dump, false).unwrap().exporters, 1);
+    assert_eq!(r.get_exporter("from-dump").unwrap().state, crate::model::ExporterState::Paused);
+    assert_eq!(r.get_exporter("from-dump").unwrap().offset, 42);
+
+    let mut retry = rec;
+    retry.state = crate::model::ExporterState::Running;
+    retry.offset = 0;
+    assert_eq!(crate::backup::restore_local(&r, &crate::backup::Dump { exporters: vec![serde_json::to_value(retry).unwrap()], ..Default::default() }, false).unwrap().exporters, 0);
+    assert_eq!(r.get_exporter("from-dump").unwrap().offset, 42, "rerunning restore must not move the cursor backward");
+    drop(r);
+    let store = Store::open(dir.path(), false).unwrap();
+    assert_eq!(store.get_exporter("from-dump").unwrap().unwrap().offset, 42, "the restored cursor survives reopening the store");
+}
+
 fn register(r: &Registry, subject: &str, name: &str) -> u32 {
     r.register(subject, req(rec(name)), false).unwrap_or_else(|e| panic!("register {subject}: {e}")).id
 }

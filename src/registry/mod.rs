@@ -606,7 +606,7 @@ impl Registry {
     // ---------------- exporters ----------------
 
     /// The worker's own bookkeeping takes the exporter lock directly: a cursor
-    /// written after every batch is not a mutation, and running it through the
+    /// written after every event is not a mutation, and running it through the
     /// engine would make an export wait behind registrations.
     fn exporter_lock(&self) -> std::sync::MutexGuard<'_, ()> {
         self.locks.exporters.lock().unwrap_or_else(|e| e.into_inner())
@@ -615,6 +615,10 @@ impl Registry {
     /// The exporter verbs, in `mutations::exporters`.
     pub fn create_exporter(&self, req: ExporterUpdateRequest) -> ApiResult<String> {
         crate::engine::run(self, crate::mutations::CreateExporter::new(req))
+    }
+
+    pub fn restore_exporter(&self, rec: ExporterRecord) -> ApiResult<bool> {
+        crate::engine::run(self, crate::mutations::RestoreExporter::new(rec))
     }
 
     pub fn update_exporter(&self, name: &str, req: ExporterUpdateRequest) -> ApiResult<String> {
@@ -690,4 +694,3 @@ pub fn exporter_status_json(rec: &ExporterRecord) -> Value {
     }
     v
 }
-

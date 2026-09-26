@@ -14,7 +14,9 @@
 //! 3. `POST /subjects/{dest-subject}/versions {schema, schemaType, references, id, version, ...}`
 //! 4. soft/hard deletes are replayed as `DELETE ...[?permanent=true]`
 //!
-//! Progress is committed after each batch. What a failure does depends on what
+//! The log offset is committed after each event succeeds. A crash between the
+//! destination accepting an event and that commit replays that event once.
+//! What a failure does depends on what
 //! kind it is:
 //!
 //! * transient (destination down, 5xx, timeout) -> ERROR, retried from the
@@ -234,15 +236,16 @@ async fn export_batch(
             };
             if let Err(e) = result {
                 let halt = e.at(&format!("event {seq} ({:?} {}:{})", ev.kind, qualify(&ev.ctx, &ev.subject), ev.version));
-                // Progress up to the event before this one, so a resume picks
-                // up exactly where it stopped.
-                reg.exporter_state(&rec.info.name, rec.offset, offset, halt.state, Some(halt.trace.clone()))?;
+                // Keep every acknowledged event durable; this failed one is
+                // replayed if the destination accepted it before the error.
+                reg.exporter_state(&rec.info.name, offset, offset, halt.state, Some(halt.trace.clone()))?;
                 return Err(halt);
             }
         }
-        offset = seq + 1;
+        let next = seq + 1;
+        reg.exporter_progress(&rec.info.name, offset, next, None)?;
+        offset = next;
     }
-    reg.exporter_progress(&rec.info.name, rec.offset, offset, None)?;
     Ok(events.len() == BATCH)
 }
 

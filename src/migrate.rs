@@ -82,6 +82,22 @@ impl Endpoint {
         self.send(self.request(reqwest::Method::POST, path).json(body), ok_codes).await
     }
 
+    pub(crate) async fn post_text(&self, path: &str, body: &str) -> anyhow::Result<Option<Value>> {
+        let resp = self
+            .request(reqwest::Method::POST, path)
+            .header("Content-Type", "application/x-ndjson")
+            .body(body.to_string())
+            .send()
+            .await?;
+        if matches!(resp.status(), reqwest::StatusCode::NOT_FOUND | reqwest::StatusCode::FORBIDDEN | reqwest::StatusCode::PAYLOAD_TOO_LARGE) {
+            return Ok(None);
+        }
+        let status = resp.status();
+        let value: Value = resp.json().await.unwrap_or(Value::Null);
+        if status.is_success() { return Ok(Some(value)); }
+        anyhow::bail!("{status}: {value}")
+    }
+
     pub(crate) async fn put(&self, path: &str, body: &Value, ok_codes: &[u64]) -> anyhow::Result<Value> {
         self.send(self.request(reqwest::Method::PUT, path).json(body), ok_codes).await
     }

@@ -12,7 +12,7 @@
 //! {"type":"config","subject":null,"config":{"compatibilityLevel":"BACKWARD"}}
 //! {"type":"mode","subject":":.eu:","mode":"READONLY"}
 //! {"type":"schema","subject":"a","version":1,"id":5,"deleted":false,…}
-//! {"type":"exporter","name":"to-dr","info":{…}}
+//! {"type":"exporter","info":{…},"state":"RUNNING","offset":…}
 //! ```
 //!
 //! Restoring replays it through IMPORT mode, which is what `migrate` already
@@ -96,8 +96,20 @@ impl Dump {
                     }
                     d.subjects.entry(s).or_default().push(v);
                 }
-                // Written as {"type":"exporter","info":{…}}; keep the info.
-                "exporter" => d.exporters.push(v.get("info").cloned().unwrap_or(v)),
+                "exporter" => {
+                    let info = v.get("info").cloned().unwrap_or_else(|| {
+                        let mut value = v.clone();
+                        if let Some(obj) = value.as_object_mut() { obj.remove("type"); }
+                        value
+                    });
+                    d.exporters.push(json!({
+                        "info": info,
+                        "state": v.get("state").and_then(Value::as_str).unwrap_or("RUNNING"),
+                        "offset": v.get("offset").and_then(Value::as_u64).unwrap_or(0),
+                        "ts": v.get("ts").and_then(Value::as_i64).unwrap_or(0),
+                        "trace": v.get("trace").and_then(Value::as_str).unwrap_or(""),
+                    }));
+                }
                 _ => {}
             }
         }
@@ -128,7 +140,9 @@ impl Dump {
             }
         }
         for e in &self.exporters {
-            out.push_str(&json!({"type": "exporter", "info": e}).to_string());
+            let mut record = e.clone();
+            record["type"] = json!("exporter");
+            out.push_str(&record.to_string());
             out.push('\n');
         }
         out
@@ -210,7 +224,7 @@ pub async fn read(src: &Endpoint, subject_prefix: Option<&str>, prefer_own: bool
             if let Ok(info) = src.get(&format!("/exporters/{}", percent_encode_segment(name)), &[404]).await
                 && info.is_object()
             {
-                d.exporters.push(info);
+                d.exporters.push(json!({"info": info, "state": "RUNNING", "offset": 0, "ts": 0, "trace": ""}));
             }
         }
     }
@@ -243,6 +257,8 @@ async fn scope_mode(src: &Endpoint, subject: Option<&str>) -> anyhow::Result<Opt
     Ok(v.get("mode").and_then(Value::as_str).map(String::from))
 }
 
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Restored {
     pub subjects: usize,
     pub versions: usize,
@@ -255,6 +271,12 @@ pub struct Restored {
 /// Write a dump into a registry, preserving ids and version numbers.
 pub async fn restore(dump: &Dump, dst: &Endpoint, dry_run: bool) -> anyhow::Result<Restored> {
     let mut out = Restored { subjects: 0, versions: 0, soft_deleted: 0, configs: 0, modes: 0, exporters: 0 };
+    // Our admin restore can install exporter cursors and states in the same
+    // operation as the rest of the dump. Other registries do not expose that
+    // extension, so they fall through to the public API replay below.
+    if let Some(result) = dst.post_text("/admin/api/restore", &dump.to_ndjson()).await? {
+        return Ok(serde_json::from_value(result)?);
+    }
     if dry_run {
         out.subjects = dump.subject_order.len();
         out.versions = dump.version_count();
@@ -317,13 +339,20 @@ pub async fn restore(dump: &Dump, dst: &Endpoint, dry_run: bool) -> anyhow::Resu
         }
     }
 
-    for info in &dump.exporters {
-        let Some(name) = info.get("name").and_then(Value::as_str) else { continue };
-        // 40950: an exporter by that name is already there - leave the
-        // running one alone, a restore must be repeatable.
-        dst.post("/exporters", info, &[40950]).await?;
-        let _ = name;
-        out.exporters += 1;
+    if !dump.exporters.is_empty() {
+        let exporters_only = Dump { exporters: dump.exporters.clone(), ..Default::default() };
+        if let Some(result) = dst.post_text("/admin/api/restore", &exporters_only.to_ndjson()).await? {
+            out.exporters += result.get("exporters").and_then(Value::as_u64).unwrap_or(0) as usize;
+        } else {
+            for record in &dump.exporters {
+                let info = &record["info"];
+                if info.get("name").and_then(Value::as_str).is_none() { continue; }
+                // 40950: an exporter by that name is already there - leave
+                // the running one alone, a restore must be repeatable.
+                dst.post("/exporters", info, &[40950]).await?;
+                out.exporters += 1;
+            }
+        }
     }
     Ok(out)
 }
@@ -395,10 +424,21 @@ mod tests {
     fn an_exporter_survives_the_round_trip() {
         let d = Dump::parse(r#"{"type":"exporter","info":{"name":"to-dr","subjects":["*"]}}"#).unwrap();
         assert_eq!(d.exporters.len(), 1);
-        assert_eq!(d.exporters[0]["name"], "to-dr", "the record is the exporter, not the envelope");
-        // And writing it back out keeps that true.
+        assert_eq!(d.exporters[0]["info"]["name"], "to-dr");
+        assert_eq!(d.exporters[0]["state"], "RUNNING");
+        assert_eq!(d.exporters[0]["offset"], 0);
         let again = Dump::parse(&d.to_ndjson()).unwrap();
-        assert_eq!(again.exporters[0]["name"], "to-dr");
+        assert_eq!(again.exporters[0], d.exporters[0]);
+    }
+
+    #[test]
+    fn exporter_state_and_offset_survive_a_dump_round_trip() {
+        let d = Dump::parse(r#"{"type":"exporter","info":{"name":"to-dr","subjects":["*"]},"state":"PAUSED","offset":27,"ts":1234,"trace":"operator pause"}"#).unwrap();
+        let again = Dump::parse(&d.to_ndjson()).unwrap();
+        assert_eq!(again.exporters[0]["state"], "PAUSED");
+        assert_eq!(again.exporters[0]["offset"], 27);
+        assert_eq!(again.exporters[0]["ts"], 1234);
+        assert_eq!(again.exporters[0]["trace"], "operator pause");
     }
 
     #[test]
@@ -543,7 +583,7 @@ pub fn dump_local(reg: &Registry, prefix: Option<&str>) -> ApiResult<Dump> {
     }
 
     for name in reg.list_exporters()? {
-        d.exporters.push(serde_json::to_value(&reg.get_exporter(&name)?.info)?);
+        d.exporters.push(serde_json::to_value(reg.get_exporter(&name)?)?);
     }
     Ok(d)
 }
@@ -620,15 +660,10 @@ pub fn restore_local(reg: &Registry, dump: &Dump, dry_run: bool) -> ApiResult<Re
         }
     }
 
-    for info in &dump.exporters {
-        let req: crate::model::ExporterUpdateRequest = serde_json::from_value(info.clone())
+    for record in &dump.exporters {
+        let rec: crate::model::ExporterRecord = serde_json::from_value(record.clone())
             .map_err(|e| crate::error::ApiError::unprocessable(format!("exporter: {e}")))?;
-        match reg.create_exporter(req) {
-            Ok(_) => out.exporters += 1,
-            // Already there: leave the running one alone.
-            Err(e) if e.code == 40950 => {}
-            Err(e) => return Err(e),
-        }
+        if reg.restore_exporter(rec)? { out.exporters += 1; }
     }
     Ok(out)
 }

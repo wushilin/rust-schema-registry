@@ -6,19 +6,7 @@ items are recorded in the CHANGELOG under "Unreleased".
 
 Ordered by what it costs if left alone.
 
-## 1. An exporter's state and offset do not survive a restore
-
-`restore_local` / `restore` replay `ExporterInfo` and nothing else, so an
-exporter that was `PAUSED` or `FAILED` comes back `RUNNING` at offset 0 and
-re-exports everything. The dump already carries the record; it is the envelope
-that is dropped on the way in.
-
-Decide first whether a restored exporter *should* resume where it stopped: into
-a different registry that is wrong, into the same one it is the only right
-answer. Probably a flag on the restore, defaulting to "start over", with the
-state carried in the dump either way.
-
-## 2. The exporter's bootstrap path never deletes
+## 1. The exporter's bootstrap path never deletes
 
 `src/exporter.rs:180`. An exporter whose next event has been pruned exports
 current state and jumps to the log end - but it only *adds*. A subject the
@@ -53,11 +41,10 @@ Not covered:
   records, so whether a reset un-sticks a paused exporter is unasserted.
 * `PAUSED->FAILED`: an explicitly paused exporter whose destination then
   acquires a conflict must fail on resume, not loop in ERROR.
-* **State and offset across a restart** - the durable part of the feature.
 * `PUT /exporters/{name}` and `GET /exporters/{name}/config` are called by no
   test at all.
 * `DELETE` of an actively RUNNING exporter mid-replay.
-* The bootstrap-after-pruning path (pending issue 2 above). Making `PRUNE_EVERY`
+* The bootstrap-after-pruning path (pending issue 1 above). Making `PRUNE_EVERY`
   configurable is the cheaper change and unlocks an end-to-end assertion.
 
 ## Store and restore

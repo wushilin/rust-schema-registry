@@ -89,6 +89,28 @@ impl CreateExporter {
     }
 }
 
+/// Restore an exporter record without moving an existing cursor backward.
+pub struct RestoreExporter {
+    rec: ExporterRecord,
+}
+
+impl RestoreExporter {
+    pub fn new(rec: ExporterRecord) -> Self { Self { rec } }
+}
+
+impl Mutation for RestoreExporter {
+    type Output = bool;
+
+    fn target(&self) -> Target { Target::Exporters }
+    fn intent(&self) -> Intent { Intent::NotSchemaState }
+
+    fn plan(&self, view: &ReadView<'_>) -> ApiResult<Plan<bool>> {
+        if view.exporter(&self.rec.info.name)?.is_some() { return Ok(Plan::new(false)); }
+        validate(&self.rec.info)?;
+        Ok(Plan::new(true).write(Write::PutExporter { rec: self.rec.clone() }))
+    }
+}
+
 impl Mutation for CreateExporter {
     type Output = String;
 

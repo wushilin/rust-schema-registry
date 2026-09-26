@@ -24,7 +24,7 @@ pub use delete_context::DeleteContext;
 pub use delete_subject::DeleteSubject;
 pub use delete_subject_config::DeleteSubjectConfig;
 pub use delete_subject_version::DeleteSubjectVersion;
-pub use exporters::{CreateExporter, DeleteExporter, TransitionExporter, UpdateExporter};
+pub use exporters::{CreateExporter, DeleteExporter, RestoreExporter, TransitionExporter, UpdateExporter};
 pub use register_schema::RegisterSchema;
 pub use set_mode::{DeleteMode, SetMode};
 pub use update_compatibility::UpdateCompatibility;
@@ -47,7 +47,7 @@ pub enum Target {
     /// The registry as a whole: global config and mode.
     Global,
     /// The exporter records. Their own lock, because the worker writes its
-    /// cursor after every batch and must not wait behind a registration.
+    /// cursor after every event and must not wait behind a registration.
     Exporters,
 }
 

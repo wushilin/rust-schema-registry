@@ -214,4 +214,15 @@ mod tests {
         assert_eq!(decode_basic(&format!("BASIC {encoded}")), Some(("a".into(), "pw".into())));
         assert_ne!(cache_key("a", "b\0secret", "same"), cache_key("a\0b", "secret", "same"));
     }
+
+    #[test]
+    fn bcrypt_slots_cap_parallel_hash_work() {
+        let auth = Auth::disabled();
+        let held: Vec<_> = (0..BCRYPT_CONCURRENCY)
+            .map(|_| auth.bcrypt_slots.clone().try_acquire_owned().expect("available slot"))
+            .collect();
+        assert!(auth.bcrypt_slots.clone().try_acquire_owned().is_err());
+        drop(held);
+        assert!(auth.bcrypt_slots.clone().try_acquire_owned().is_ok());
+    }
 }

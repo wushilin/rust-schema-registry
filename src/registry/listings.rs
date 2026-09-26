@@ -324,13 +324,13 @@ impl Registry {
     }
 
     /// The `alias` configured for exactly this subject (`AliasFilter`).
-    pub fn alias_of(&self, subject: &str) -> Option<String> {
+    pub fn alias_of(&self, subject: &str) -> ApiResult<Option<String>> {
         let r = &self.reader();
         if !r.has_aliases() {
-            return None;
+            return Ok(None);
         }
-        let q = QualifiedSubject::parse(subject).ok()?;
-        r.get_config(&Self::scope_for(&q)).ok()??.alias
+        let Ok(q) = QualifiedSubject::parse(subject) else { return Ok(None) };
+        Ok(r.get_config(&Self::scope_for(&q))?.and_then(|c| c.alias))
     }
 
 }

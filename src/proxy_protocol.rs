@@ -156,6 +156,7 @@ impl<S> Prefixed<S> {
 
 impl<S: AsyncRead + Unpin> AsyncRead for Prefixed<S> {
     fn poll_read(mut self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &mut ReadBuf<'_>) -> Poll<io::Result<()>> {
+        if buf.remaining() == 0 { return Poll::Ready(Ok(())); }
         if self.at < self.prefix.len() {
             let take = (self.prefix.len() - self.at).min(buf.remaining());
             let at = self.at;

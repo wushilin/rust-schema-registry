@@ -393,8 +393,7 @@ async fn prematch(mut req: Request) -> Result<Request, ApiError> {
         return Ok(req); // no container: the router answers with 421 below
     };
     let alias_of = move |subject: &str| registry.alias_of(subject);
-    let new = rewrite::prematch(req.uri().path(), req.uri().query(), is_delete_context, &alias_of)
-        .map_err(|e| ApiError::new(400, e))?;
+    let new = rewrite::prematch(req.uri().path(), req.uri().query(), is_delete_context, &alias_of)?;
     if let Ok(uri) = new.parse::<axum::http::Uri>() {
         *req.uri_mut() = uri;
     }

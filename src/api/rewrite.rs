@@ -108,22 +108,22 @@ fn set_param(pairs: &mut Vec<(String, String)>, name: &str, values: &[String]) {
 /// Port of Confluent's `AliasFilter`: the path segment after `subjects`, and
 /// the `subject` parameter of `/schemas/ids/...`, are replaced by the
 /// subject's configured alias. `alias_of` gets the decoded subject.
-fn alias_filter(path: &str, pairs: &mut Vec<(String, String)>, alias_of: &dyn Fn(&str) -> Option<String>) -> String {
-    let replace = |raw: &str, decoded: &str| -> Option<String> {
+fn alias_filter(path: &str, pairs: &mut Vec<(String, String)>, alias_of: &dyn Fn(&str) -> crate::error::ApiResult<Option<String>>) -> crate::error::ApiResult<String> {
+    let replace = |raw: &str, decoded: &str| -> crate::error::ApiResult<Option<String>> {
         if raw.is_empty() {
-            return None;
+            return Ok(None);
         }
-        let alias = alias_of(decoded).filter(|a| !a.is_empty())?;
+        let Some(alias) = alias_of(decoded)?.filter(|a| !a.is_empty()) else { return Ok(None) };
         // qualifySubjectWithParent: an unqualified alias lives in the parent's
         // context. (The parent is the raw, still-encoded segment, as in Jersey.)
-        let a = crate::context::QualifiedSubject::parse(&alias).ok()?;
-        let parent = crate::context::QualifiedSubject::parse(raw).ok()?;
+        let Ok(a) = crate::context::QualifiedSubject::parse(&alias) else { return Ok(None) };
+        let Ok(parent) = crate::context::QualifiedSubject::parse(raw) else { return Ok(None) };
         let target = if a.context == "." && parent.context != "." {
             crate::context::QualifiedSubject::new(&parent.context, &alias)
         } else {
             a
         };
-        Some(target.qualified())
+        Ok(Some(target.qualified()))
     };
     let mut out = String::new();
     let mut subject_path_found = false;
@@ -131,7 +131,7 @@ fn alias_filter(path: &str, pairs: &mut Vec<(String, String)>, alias_of: &dyn Fn
         out.push('/');
         let mut m = seg.to_string();
         if subject_path_found {
-            if let Some(a) = replace(seg, &super::percent_decode(seg)) {
+            if let Some(a) = replace(seg, &super::percent_decode(seg))? {
                 m = encode_segment(&a);
             }
             subject_path_found = false;
@@ -147,11 +147,11 @@ fn alias_filter(path: &str, pairs: &mut Vec<(String, String)>, alias_of: &dyn Fn
     let p = path.trim_matches('/');
     if p.starts_with("schemas/ids") {
         let subject = pairs.iter().find(|(k, _)| k == "subject").map(|(_, v)| v.clone()).unwrap_or_default();
-        if let Some(a) = replace(&subject, &subject) {
+        if let Some(a) = replace(&subject, &subject)? {
             set_param(pairs, "subject", &[a]);
         }
     }
-    out
+    Ok(out)
 }
 
 fn encode_segment(s: &str) -> String {
@@ -180,7 +180,7 @@ fn encode_query_value(s: &str) -> String {
 
 /// Everything Confluent's pre-matching filters do to a request URI, in their
 /// order: `ContextFilter` (priority 4000), then `AliasFilter` (5100).
-pub fn prematch(path: &str, query: Option<&str>, is_delete_context: bool, alias_of: &dyn Fn(&str) -> Option<String>) -> Result<String, String> {
+pub fn prematch(path: &str, query: Option<&str>, is_delete_context: bool, alias_of: &dyn Fn(&str) -> crate::error::ApiResult<Option<String>>) -> crate::error::ApiResult<String> {
     let path = clean_path(path).unwrap_or_else(|| path.to_string());
     let mut pairs: Vec<(String, String)> = query.map(super::query_pairs).unwrap_or_default();
     let raw_query = query.map(String::from);
@@ -189,13 +189,13 @@ pub fn prematch(path: &str, query: Option<&str>, is_delete_context: bool, alias_
     let bare = path.trim_start_matches('/').to_string();
     // `DELETE /contexts/{ctx}` is ours (not Confluent's); leave it alone.
     if bare.starts_with("contexts/") && !is_delete_context {
-        let (p, ctx) = context_filter_path(&bare)?;
-        context_filter_query(&p, &ctx, &mut pairs)?;
+        let (p, ctx) = context_filter_path(&bare).map_err(|e| crate::error::ApiError::new(400, e))?;
+        context_filter_query(&p, &ctx, &mut pairs).map_err(|e| crate::error::ApiError::new(400, e))?;
         path = format!("/{p}");
         changed_query = true;
     }
     let before = pairs.clone();
-    let new_path = alias_filter(&path, &mut pairs, alias_of);
+    let new_path = alias_filter(&path, &mut pairs, alias_of)?;
     changed_query |= before != pairs;
     let query = if changed_query {
         let q: Vec<String> = pairs.iter().map(|(k, v)| format!("{}={}", encode_query_value(k), encode_query_value(v))).collect();
@@ -224,7 +224,7 @@ mod tests {
 
     #[test]
     fn context_filter() {
-        let none = |_: &str| None;
+        let none = |_: &str| Ok(None);
         let pm = |p: &str, q: Option<&str>| super::prematch(p, q, false, &none).unwrap();
         assert_eq!(pm("/contexts/.dev/subjects/foo/versions", None), "/subjects/:.dev:foo/versions");
         assert_eq!(pm("/contexts/dev/subjects", Some("deleted=true")), "/subjects?deleted=true&subjectPrefix=:.dev:");
@@ -237,7 +237,7 @@ mod tests {
 
     #[test]
     fn alias_filter() {
-        let alias = |s: &str| (s == "a").then(|| "t".to_string());
+        let alias = |s: &str| Ok((s == "a").then(|| "t".to_string()));
         let pm = |p: &str, q: Option<&str>| super::prematch(p, q, false, &alias).unwrap();
         assert_eq!(pm("/subjects/a/versions", None), "/subjects/t/versions");
         assert_eq!(pm("/compatibility/subjects/a/versions/1", None), "/compatibility/subjects/t/versions/1");

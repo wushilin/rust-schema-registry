@@ -439,6 +439,11 @@ schema-registry backup  --from http://localhost:8081 --out dump.ndjson
 schema-registry restore --from dump.ndjson --to http://localhost:8081 [--dry-run]
 ```
 
+Treat dumps as secrets: exporter configuration can include destination credentials
+(`basic.auth.user.info`) and is preserved so the dump can be restored. Files
+written by `backup --out` are created with mode `0600`; protect streamed dumps
+and any copies separately.
+
 The same thing over HTTP, for the container the request reaches:
 `GET /admin/api/backup` streams it, `POST /admin/api/restore` replays it
 (`?dryRun=true` reports what it would do). Both need registry-wide admin.

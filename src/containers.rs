@@ -31,7 +31,7 @@ impl Containers {
         for c in configured {
             let Ok(name) = TenantId::parse(&c.name) else { continue };
             for h in &c.hosts {
-                if let Ok(p) = glob::Pattern::new(&h.to_ascii_lowercase()) {
+                if let Ok(p) = glob::Pattern::new(&host_pattern(&h.to_ascii_lowercase())) {
                     routes.push((p, name.clone()));
                 }
             }
@@ -58,11 +58,11 @@ impl Containers {
     /// include it.
     pub fn route(&self, host: Option<&str>) -> Option<(&TenantId, &Arc<Registry>)> {
         let host = host.unwrap_or_default().to_ascii_lowercase();
-        let without_port = host.rsplit_once(':').map(|(h, _)| h.to_string()).unwrap_or_else(|| host.clone());
+        let without_port = without_port(&host);
         let name = self
             .routes
             .iter()
-            .find(|(p, _)| p.matches(&host) || (!p.as_str().contains(':') && p.matches(&without_port)))
+            .find(|(p, _)| p.matches(&host) || (!has_port(p.as_str()) && p.matches(&without_port)))
             .map(|(_, n)| n)?;
         self.by_name.get_key_value(name)
     }
@@ -72,6 +72,26 @@ impl Containers {
     pub fn no_such_host(host: Option<&str>) -> ApiError {
         ApiError::new(42101, format!("No host container is configured for host '{}'", host.unwrap_or("")))
     }
+}
+
+fn host_pattern(host: &str) -> String {
+    if host.starts_with('[') && host.contains(':') { glob::Pattern::escape(host) } else { host.to_string() }
+}
+
+fn without_port(host: &str) -> String {
+    if let Some(end) = host.find(']') {
+        if host.as_bytes().get(end + 1) == Some(&b':') { return host[..=end].to_string(); }
+        if end == host.len() - 1 { return host.to_string(); }
+    }
+    host.rsplit_once(':').map(|(h, _)| h.to_string()).unwrap_or_else(|| host.to_string())
+}
+
+fn has_port(pattern: &str) -> bool {
+    if pattern.starts_with("[[]") {
+        return pattern.find("[]]").is_some_and(|end| pattern.as_bytes().get(end + 3) == Some(&b':'));
+    }
+    if let Some(end) = pattern.find(']') { return pattern.as_bytes().get(end + 1) == Some(&b':'); }
+    pattern.contains(':')
 }
 
 #[cfg(test)]
@@ -93,10 +113,10 @@ mod tests {
     /// patterns pick rather than the registry behind it.
     fn picked(c: &Containers, host: &str) -> Option<String> {
         let host = host.to_ascii_lowercase();
-        let without_port = host.rsplit_once(':').map(|(h, _)| h.to_string()).unwrap_or_else(|| host.clone());
+        let without_port = without_port(&host);
         c.routes
             .iter()
-            .find(|(p, _)| p.matches(&host) || (!p.as_str().contains(':') && p.matches(&without_port)))
+            .find(|(p, _)| p.matches(&host) || (!has_port(p.as_str()) && p.matches(&without_port)))
             .map(|(_, n)| n.to_string())
     }
 
@@ -112,6 +132,14 @@ mod tests {
         assert_eq!(picked(&c, "sr-dev.example.com:8081").as_deref(), Some("dev"));
         assert_eq!(picked(&c, "sr-dev.example.com").as_deref(), None);
         assert_eq!(picked(&c, "unknown.example.com"), None);
+    }
+
+    #[test]
+    fn bracketed_ipv6_hosts_match_with_or_without_port() {
+        let c = containers(&[("v6", &["[::1]"])]);
+        assert_eq!(picked(&c, "[::1]").as_deref(), Some("v6"));
+        assert_eq!(picked(&c, "[::1]:8081").as_deref(), Some("v6"));
+        assert_eq!(without_port("[::1]"), "[::1]");
     }
 
     #[test]

@@ -83,7 +83,8 @@ impl Auth {
 }
 
 fn decode_basic(header_value: &str) -> Option<(String, String)> {
-    let encoded = header_value.strip_prefix("Basic ").or_else(|| header_value.strip_prefix("basic "))?;
+    let (scheme, encoded) = header_value.split_once(' ')?;
+    if !scheme.eq_ignore_ascii_case("Basic") { return None; }
     let decoded = base64::engine::general_purpose::STANDARD.decode(encoded.trim()).ok()?;
     let decoded = String::from_utf8(decoded).ok()?;
     let (user, password) = decoded.split_once(':')?;
@@ -91,7 +92,12 @@ fn decode_basic(header_value: &str) -> Option<(String, String)> {
 }
 
 fn cache_key(user: &str, password: &str, stored: &str) -> [u8; 32] {
-    Sha256::digest(format!("{user}\0{password}\0{stored}").as_bytes()).into()
+    let mut h = Sha256::new();
+    for part in [user.as_bytes(), password.as_bytes(), stored.as_bytes()] {
+        h.update((part.len() as u64).to_be_bytes());
+        h.update(part);
+    }
+    h.finalize().into()
 }
 
 pub async fn middleware(State(shared): State<crate::api::Shared>, mut req: Request, next: Next) -> Response {
@@ -175,5 +181,12 @@ mod tests {
         assert!(auth.authenticate(&h("b", "secret")).is_some());
         assert!(auth.authenticate(&h("b", "secret")).is_some()); // cached path
         assert!(auth.authenticate(&h("c", "x")).is_none());
+    }
+
+    #[test]
+    fn basic_scheme_is_case_insensitive_and_cache_key_is_unambiguous() {
+        let encoded = base64::engine::general_purpose::STANDARD.encode("a:pw");
+        assert_eq!(decode_basic(&format!("BASIC {encoded}")), Some(("a".into(), "pw".into())));
+        assert_ne!(cache_key("a", "b\0secret", "same"), cache_key("a\0b", "secret", "same"));
     }
 }

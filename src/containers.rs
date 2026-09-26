@@ -97,6 +97,7 @@ fn has_port(pattern: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tower::ServiceExt;
 
     fn containers(cfg: &[(&str, &[&str])]) -> Containers {
         let configured: Vec<ContainerConfig> = cfg
@@ -140,6 +141,24 @@ mod tests {
         assert_eq!(picked(&c, "[::1]").as_deref(), Some("v6"));
         assert_eq!(picked(&c, "[::1]:8081").as_deref(), Some("v6"));
         assert_eq!(without_port("[::1]"), "[::1]");
+    }
+
+    #[tokio::test]
+    async fn a_request_without_host_gets_421_when_containers_are_configured() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = crate::store::Store::open(dir.path(), false).unwrap();
+        let snap = store.load_snapshot().unwrap();
+        let tenant = TenantId::parse("prod").unwrap();
+        let registry = Arc::new(crate::registry::Registry::new(
+            store, snap, crate::model::CompatibilityLevel::Backward, "prod".into(), 10, false,
+        ));
+        let cfg = [ContainerConfig { name: "prod".into(), hosts: vec!["registry.example.com".into()] }];
+        let containers = Arc::new(Containers::new(&cfg, HashMap::from([(tenant, registry)])));
+        let shared = crate::api::Shared { containers, auth: Arc::new(crate::auth::Auth::disabled()), log_reads: false };
+        let app = crate::api::service(shared, 1024);
+        let req = axum::http::Request::builder().uri("/subjects").body(axum::body::Body::empty()).unwrap();
+        let response = app.oneshot(req).await.unwrap();
+        assert_eq!(response.status(), axum::http::StatusCode::MISDIRECTED_REQUEST);
     }
 
     #[test]

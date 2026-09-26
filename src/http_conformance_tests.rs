@@ -229,6 +229,10 @@ async fn send(app: &api::Service, st: &Value, ids: &mut Ids) -> Value {
 }
 
 fn fresh_app() -> (api::Service, tempfile::TempDir) {
+    fresh_app_with_limit(16 << 20)
+}
+
+fn fresh_app_with_limit(max_body_bytes: usize) -> (api::Service, tempfile::TempDir) {
     let dir = tempfile::tempdir().unwrap();
     let store = Store::open(dir.path(), false).unwrap();
     let snap = store.load_snapshot().unwrap();
@@ -240,7 +244,20 @@ fn fresh_app() -> (api::Service, tempfile::TempDir) {
         std::collections::HashMap::from([(crate::tenant::TenantId::default_tenant(), Arc::new(registry))]),
     );
     let shared = api::Shared { containers: Arc::new(containers), auth: Arc::new(Auth::disabled()), log_reads: false };
-    (api::service(shared, 16 << 20), dir)
+    (api::service(shared, max_body_bytes), dir)
+}
+
+#[tokio::test]
+async fn a_request_body_over_the_limit_gets_413() {
+    let (app, _dir) = fresh_app_with_limit(16);
+    let req = Request::builder()
+        .method("POST")
+        .uri("/subjects/s/versions")
+        .header("content-type", CT)
+        .body(Body::from(r#"{"schema":"a much longer body"}"#))
+        .unwrap();
+    let response = app.oneshot(req).await.unwrap();
+    assert_eq!(response.status(), axum::http::StatusCode::PAYLOAD_TOO_LARGE);
 }
 
 fn error_code(v: &Value) -> Option<i64> {

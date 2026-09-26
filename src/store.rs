@@ -952,4 +952,40 @@ mod tests {
         assert_eq!(store.load_snapshot().unwrap().mode.get(&Scope::Global), Some(&Mode::Readwrite));
         assert!(store.get_schema(".", 3).unwrap().is_some(), "and the schema content itself");
     }
+
+    #[test]
+    fn an_interrupted_format_migration_finishes_mixed_prefixed_rows_once() {
+        let dir = tempfile::tempdir().unwrap();
+        let prefix = TenantId::default_tenant().key_prefix();
+        {
+            let mut opts = Options::default();
+            opts.create_if_missing(true);
+            opts.create_missing_column_families(true);
+            let cfs = ALL_CFS.iter().map(|n| ColumnFamilyDescriptor::new(*n, Options::default()));
+            let db = DB::open_cf_descriptors(&opts, dir.path(), cfs).unwrap();
+            let cf = db.cf_handle(CF_CONFIG).unwrap();
+            // These rows represent a process that stopped after committing
+            // one migration batch but before stamping the format version.
+            db.put_cf(cf, [prefix.as_slice(), b"already-moved"].concat(), b"one").unwrap();
+            db.put_cf(cf, b"still-legacy", b"two").unwrap();
+        }
+
+        let physical = PhysicalStore::open(dir.path(), false).unwrap();
+        let rows: Vec<(Vec<u8>, Vec<u8>)> = physical.db.iterator_cf(physical.cf(CF_CONFIG), IteratorMode::Start)
+            .map(|r| { let (k, v) = r.unwrap(); (k.to_vec(), v.to_vec()) })
+            .collect();
+        assert_eq!(rows.len(), 2, "restarting must neither lose nor duplicate a row");
+        assert!(rows.contains(&( [prefix.as_slice(), b"already-moved"].concat(), b"one".to_vec())));
+        assert!(rows.contains(&( [prefix.as_slice(), b"still-legacy"].concat(), b"two".to_vec())));
+    }
+
+    #[test]
+    fn one_corrupt_config_row_stops_snapshot_loading() {
+        let dir = tempfile::tempdir().unwrap();
+        let physical = PhysicalStore::open(dir.path(), false).unwrap();
+        let store = physical.container(TenantId::default_tenant());
+        let key = store.key(&Scope::Global.key());
+        physical.db.put_cf(physical.cf(CF_CONFIG), key, b"not-json").unwrap();
+        assert!(store.load_snapshot().is_err(), "a corrupt row must not be silently skipped");
+    }
 }

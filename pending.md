@@ -29,6 +29,8 @@ Not covered:
   records, so whether a reset un-sticks a paused exporter is unasserted.
 * `PAUSED->FAILED`: an explicitly paused exporter whose destination then
   acquires a conflict must fail on resume, not loop in ERROR.
+* Per-event cursor persistence after destination acknowledgement, and replay
+  when the process stops between acknowledgement and the cursor write.
 * `PUT /exporters/{name}` and `GET /exporters/{name}/config` are called by no
   test at all.
 * `DELETE` of an actively RUNNING exporter mid-replay.
@@ -37,28 +39,17 @@ Not covered:
 
 ## Store and restore
 
-* **An interrupted migration.** `migrate_to_current_format` writes in 10,000
-  row batches and stamps the format version only at the end; the comment says
-  re-running is safe and nothing checks it. Seed a directory where some keys
-  carry the prefix and some do not, with no version key, and assert every row
-  lands exactly once.
 * **Restore into a conflicting destination.** Every existing test restores into
   an empty or wiped registry. Nobody restores a dump whose id 5 is schema A
   into a registry whose id 5 is schema B. Restore is a sequence of writes with
   no rollback, so a half-restore is representable and unexamined.
-* **A single corrupt row stops the process.** `load_snapshot` propagates any
-  `serde_json` failure, so one bad byte means the registry does not start, with
-  no way to skip the row. Whether that is the intended answer should be pinned
-  down by a test either way. `ApiError::store` / 50001 is asserted nowhere.
+* `ApiError::store` / 50001 is asserted nowhere.
 
 ## Transport
 
-* A body over `max_body_bytes` should be 413. Untested; `fresh_app()` is
-  already there to build on.
 * The panic guard turning a panic into a 500 while the server and other
   connections survive. Needs a deliberately-panicking test route, so it is
   worth less than the rest - record it rather than build it.
-* A request with no `Host` header at all, once containers are configured.
 
 ## Parameters with no test on the route that reads them
 

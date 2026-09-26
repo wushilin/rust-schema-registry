@@ -96,3 +96,22 @@ impl Mutation for DeleteSubject {
         Ok(plan)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::model::RegisterSchemaRequest;
+    use crate::mutations::test_support::registry;
+
+    #[test]
+    fn soft_delete_plans_version_hides_and_clears_subject_settings() {
+        let (reg, _dir) = registry();
+        reg.register("s", RegisterSchemaRequest { schema: Some("\"string\"".into()), ..Default::default() }, false).unwrap();
+        let mutation = DeleteSubject::new("s", false).unwrap();
+        let plan = mutation.plan(&ReadView::new(&reg)).unwrap();
+        assert_eq!(plan.output, vec![1]);
+        assert!(plan.writes.iter().any(|w| matches!(w, Write::PutVersion { subject, rec, .. } if subject == "s" && rec.deleted)));
+        assert!(plan.writes.iter().any(|w| matches!(w, Write::DeleteConfig { scope: Scope::Subject(_, s) } if s == "s")));
+        assert_eq!(plan.events.len(), 1);
+    }
+}

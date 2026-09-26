@@ -45,3 +45,24 @@ impl Mutation for DeleteContext {
             .write(Write::DeleteMode { scope: Scope::Context(self.ctx.clone()) }))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::model::RegisterSchemaRequest;
+    use crate::mutations::test_support::registry;
+
+    #[test]
+    fn empty_context_deletes_its_existence_and_scoped_settings() {
+        let (reg, _dir) = registry();
+        let plan = DeleteContext::new("empty").unwrap().plan(&ReadView::new(&reg)).unwrap();
+        assert!(matches!(plan.writes.as_slice(), [
+            Write::DeleteContext { ctx },
+            Write::DeleteConfig { scope: Scope::Context(config_ctx) },
+            Write::DeleteMode { scope: Scope::Context(mode_ctx) }
+        ] if ctx == ".empty" && config_ctx == ".empty" && mode_ctx == ".empty"));
+
+        reg.register(":.busy:item", RegisterSchemaRequest { schema: Some("\"string\"".into()), ..Default::default() }, false).unwrap();
+        assert_eq!(DeleteContext::new("busy").unwrap().plan(&ReadView::new(&reg)).err().unwrap().code, 42211);
+    }
+}

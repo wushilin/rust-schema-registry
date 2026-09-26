@@ -41,14 +41,10 @@ Not covered:
 
 ## Form gaps rather than holes
 
-* `mutations/set_mode.rs`, `register_schema.rs`, `delete_subject.rs`,
-  `delete_subject_version.rs`, `delete_context.rs` have no `#[cfg(test)]`
-  module, although `plan()` is pure precisely so a verb is testable without a
-  server. Only three of the eight verbs exploit that. They are covered
-  indirectly by the HTTP replay, so this buys clarity, not safety.
-* `containers.py` never calls `/v1/metadata/id`, so no suite asserts that two
-  containers report different cluster ids over HTTP (the derivation itself now
-  has a unit test).
+* `/v1/metadata/id` is covered over HTTP by routing requests to two
+  containers and checking that each response reports its own cluster id.
+* The five mutation plans (`set_mode`, `register_schema`, `delete_subject`,
+  `delete_subject_version`, and `delete_context`) now have focused unit tests.
 * `/metrics` per-container gauges are only ever asserted for `default`.
 * `tests/conformance/*.sh` and `*.py` are documented manual two-server probes
   and are not in `run_integration.sh`. Deliberate, but worth running before

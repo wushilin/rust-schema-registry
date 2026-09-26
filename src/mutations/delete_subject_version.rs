@@ -98,3 +98,21 @@ impl Mutation for DeleteSubjectVersion {
         Ok(plan)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::model::RegisterSchemaRequest;
+    use crate::mutations::test_support::registry;
+
+    #[test]
+    fn soft_deleting_the_last_version_plans_its_event_and_settings_cleanup() {
+        let (reg, _dir) = registry();
+        reg.register("s", RegisterSchemaRequest { schema: Some("\"string\"".into()), ..Default::default() }, false).unwrap();
+        let mutation = DeleteSubjectVersion::new("s", VersionSpec::Exact(1), false).unwrap();
+        let plan = mutation.plan(&ReadView::new(&reg)).unwrap();
+        assert_eq!(plan.output, 1);
+        assert_eq!(plan.events.len(), 1);
+        assert!(plan.writes.iter().any(|w| matches!(w, Write::DeleteMode { scope: Scope::Subject(_, s) } if s == "s")));
+    }
+}

@@ -206,3 +206,20 @@ impl Mutation for RegisterSchema {
         Ok(plan)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::mutations::test_support::registry;
+
+    #[test]
+    fn registering_the_same_schema_plans_no_second_write() {
+        let (reg, _dir) = registry();
+        let req = RegisterSchemaRequest { schema: Some("\"string\"".into()), ..Default::default() };
+        reg.register("s", req.clone(), false).unwrap();
+        let mutation = RegisterSchema::new("s", req, false).unwrap();
+        let plan = mutation.plan(&ReadView::new(&reg)).unwrap();
+        assert!(plan.writes.is_empty());
+        assert!(plan.events.is_empty());
+    }
+}

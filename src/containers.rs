@@ -161,6 +161,34 @@ mod tests {
         assert_eq!(response.status(), axum::http::StatusCode::MISDIRECTED_REQUEST);
     }
 
+    #[tokio::test]
+    async fn metadata_id_reports_the_cluster_for_the_routed_container() {
+        let a_dir = tempfile::tempdir().unwrap();
+        let b_dir = tempfile::tempdir().unwrap();
+        let make = |path: &std::path::Path, id: &str| {
+            let store = crate::store::Store::open(path, false).unwrap();
+            let snap = store.load_snapshot().unwrap();
+            Arc::new(crate::registry::Registry::new(store, snap, crate::model::CompatibilityLevel::Backward, id.into(), 10, false))
+        };
+        let a = TenantId::parse("alpha").unwrap();
+        let b = TenantId::parse("beta").unwrap();
+        let configured = [
+            ContainerConfig { name: "alpha".into(), hosts: vec!["alpha.registry".into()] },
+            ContainerConfig { name: "beta".into(), hosts: vec!["beta.registry".into()] },
+        ];
+        let containers = Arc::new(Containers::new(&configured, HashMap::from([(a, make(a_dir.path(), "cluster-a")), (b, make(b_dir.path(), "cluster-b"))])));
+        let shared = crate::api::Shared { containers, auth: Arc::new(crate::auth::Auth::disabled()), log_reads: false };
+        let app = crate::api::service(shared, 1024);
+        for (host, expected) in [("alpha.registry", "cluster-a"), ("beta.registry", "cluster-b")] {
+            let request = axum::http::Request::builder().uri("/v1/metadata/id").header("host", host).body(axum::body::Body::empty()).unwrap();
+            let response = app.clone().oneshot(request).await.unwrap();
+            assert_eq!(response.status(), axum::http::StatusCode::OK);
+            let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+            let body: serde_json::Value = serde_json::from_slice(&body).unwrap();
+            assert_eq!(body["scope"]["clusters"]["kafka-cluster"], expected);
+        }
+    }
+
     #[test]
     fn without_configuration_everything_is_the_default_container() {
         let c = containers(&[]);

@@ -159,3 +159,23 @@ impl Mutation for DeleteMode {
         Ok(Plan::new(previous).write(Write::DeleteMode { scope }))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::model::RegisterSchemaRequest;
+    use crate::mutations::test_support::registry;
+
+    #[test]
+    fn import_requires_no_live_subjects_and_plans_cleanup_of_deleted_rows() {
+        let (reg, _dir) = registry();
+        reg.register("s", RegisterSchemaRequest { schema: Some("\"string\"".into()), ..Default::default() }, false).unwrap();
+        let import = SetMode::new(Some("s"), Mode::Import, false).unwrap();
+        assert_eq!(import.plan(&ReadView::new(&reg)).err().unwrap().code, 42205);
+
+        reg.delete_subject("s", false).unwrap();
+        let plan = import.plan(&ReadView::new(&reg)).unwrap();
+        assert!(plan.writes.iter().any(|w| matches!(w, Write::PutMode { scope: Scope::Subject(_, s), mode: Mode::Import } if s == "s")));
+        assert!(plan.writes.iter().any(|w| matches!(w, Write::DeleteSchema { .. })));
+    }
+}

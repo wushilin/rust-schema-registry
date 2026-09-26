@@ -27,12 +27,6 @@ Not covered:
 * The bootstrap-after-pruning path. Making `PRUNE_EVERY` configurable is the
   cheaper change and unlocks an end-to-end assertion.
 
-## Transport
-
-* The panic guard turning a panic into a 500 while the server and other
-  connections survive. Needs a deliberately-panicking test route, so it is
-  worth less than the rest - record it rather than build it.
-
 ## Form gaps rather than holes
 
 * `tests/conformance/*.sh` and `*.py` are documented manual two-server probes

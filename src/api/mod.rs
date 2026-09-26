@@ -458,9 +458,17 @@ pub fn router(shared: Shared, max_body_bytes: usize) -> Router {
         .fallback(not_found)
         .method_not_allowed_fallback(method_not_allowed);
 
+    #[cfg(test)]
+    let api = api.route("/__test/panic", get(test_panic));
+
     api.layer(axum::middleware::from_fn_with_state(shared.clone(), crate::auth::middleware))
         .layer(DefaultBodyLimit::max(max_body_bytes))
         .with_state(shared)
+}
+
+#[cfg(test)]
+async fn test_panic() -> &'static str {
+    panic!("deliberate test panic")
 }
 
 /// `GET /metrics`: what the whole process has been doing, every container

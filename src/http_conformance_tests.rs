@@ -261,6 +261,19 @@ async fn a_request_body_over_the_limit_gets_413() {
 }
 
 #[tokio::test]
+async fn the_panic_guard_returns_500_and_keeps_the_service_usable() {
+    let (app, _dir) = fresh_app();
+    let response = app.clone().oneshot(Request::builder().uri("/__test/panic").body(Body::empty()).unwrap()).await.unwrap();
+    assert_eq!(response.status(), axum::http::StatusCode::INTERNAL_SERVER_ERROR);
+    let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body: Value = serde_json::from_slice(&body).unwrap();
+    assert!(body.get("error_code").is_some(), "panic response should use the normal API error shape: {body}");
+
+    let response = app.oneshot(Request::builder().uri("/v1/metadata/version").body(Body::empty()).unwrap()).await.unwrap();
+    assert_eq!(response.status(), axum::http::StatusCode::OK, "a panic must not poison later requests");
+}
+
+#[tokio::test]
 async fn format_on_get_version_returns_the_serialized_protobuf() {
     let (app, _dir) = fresh_app();
     let schema = "syntax = \"proto3\"; message Example { string value = 1; }";

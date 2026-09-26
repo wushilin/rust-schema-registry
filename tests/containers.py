@@ -12,6 +12,7 @@ by whichever container happens to be first.
 
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -161,6 +162,18 @@ def main():
               sorted(r["subject"] for r in ov["subjects"]) == ["orders-value"],
               [r["subject"] for r in ov["subjects"]])
         check("and reports which container it is", ov.get("container") == "prod", ov.get("container"))
+
+        print("metrics keep each container's gauges separate")
+        metrics_status, metrics = prod.get("/metrics")
+        check("metrics responds", metrics_status == 200, metrics_status)
+        prod_subjects = re.search(r'^sr_subjects\{container="prod"\} (\d+)$', metrics, re.M)
+        dev_subjects = re.search(r'^sr_subjects\{container="dev"\} (\d+)$', metrics, re.M)
+        check("metrics has prod gauge", prod_subjects is not None, metrics)
+        check("metrics has dev gauge", dev_subjects is not None, metrics)
+        if prod_subjects and dev_subjects:
+            check("container gauges report their own subject counts",
+                  (int(prod_subjects.group(1)), int(dev_subjects.group(1))) == (1, 3),
+                  (prod_subjects.group(1), dev_subjects.group(1)))
 
         print("a Host header is routing, not permission")
         bound = Client(url, "sr.example.com", ("prod-only", "prod-secret"))

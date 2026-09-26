@@ -289,6 +289,28 @@ async fn main() -> anyhow::Result<()> {
     serve(listener, app, expect, trusted).await
 }
 
+#[cfg(test)]
+mod cli_tests {
+    use super::*;
+
+    #[test]
+    fn migrate_accepts_deleted_prefix_and_destination_auth_options() {
+        let cli = Cli::try_parse_from([
+            "schema-registry", "migrate", "--from", "http://source",
+            "--to", "http://destination", "--skip-deleted",
+            "--subject-prefix", ":.eu:", "--to-auth", "admin:secret",
+        ]).expect("migrate options parse");
+        match cli.command {
+            Some(Command::Migrate { skip_deleted, subject_prefix, to_auth, .. }) => {
+                assert!(skip_deleted);
+                assert_eq!(subject_prefix.as_deref(), Some(":.eu:"));
+                assert_eq!(to_auth.as_deref(), Some("admin:secret"));
+            }
+            _ => panic!("expected migrate command"),
+        }
+    }
+}
+
 /// Accept connections ourselves rather than through `axum::serve`, because the
 /// PROXY header is the first thing on the socket and has to be read before
 /// anything else looks at the bytes. TLS, if it is ever terminated here, wraps

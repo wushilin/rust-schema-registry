@@ -35,17 +35,8 @@ Not covered:
   connections survive. Needs a deliberately-panicking test route, so it is
   worth less than the rest - record it rather than build it.
 
-## Parameters with no test on the route that reads them
-
-* `migrate --skip-deleted`, `--subject-prefix`, `--to-auth`.
-
 ## Form gaps rather than holes
 
-* `/v1/metadata/id` is covered over HTTP by routing requests to two
-  containers and checking that each response reports its own cluster id.
-* The five mutation plans (`set_mode`, `register_schema`, `delete_subject`,
-  `delete_subject_version`, and `delete_context`) now have focused unit tests.
-* `/metrics` per-container gauges are only ever asserted for `default`.
 * `tests/conformance/*.sh` and `*.py` are documented manual two-server probes
   and are not in `run_integration.sh`. Deliberate, but worth running before
   they rot.

@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+**Additional review fixes.** Basic auth now bounds concurrent bcrypt work to
+four requests and verifies unknown usernames against a dummy bcrypt digest;
+at capacity it returns the same 401 challenge. The auth cache key encodes
+component lengths, and the `Basic` scheme is parsed case-insensitively.
+Bracketed IPv6 host patterns now route with or without a port, zero-length
+proxy reads preserve the pending prefix, alias lookup errors propagate, and
+`backup --out` writes mode-0600 files. The backup section documents that dumps
+contain destination credentials.
+
 ### Fixed after a review of the whole implementation
 
 **Authorization.** Four ways a caller reached past their role, all found by

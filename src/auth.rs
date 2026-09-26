@@ -34,17 +34,35 @@ pub struct Auth {
     realm: String,
     users: HashMap<String, (String, Arc<Principal>)>,
     verified: RwLock<HashSet<[u8; 32]>>,
+    dummy_hash: String,
+    bcrypt_slots: Arc<tokio::sync::Semaphore>,
 }
+
+const BCRYPT_CONCURRENCY: usize = 4;
 
 impl Auth {
     pub fn new(cfg: &AuthConfig) -> Self {
         let users =
             cfg.users.iter().map(|u| (u.username.clone(), (u.password.clone(), Arc::new(Principal::from_user(u))))).collect();
-        Self { enabled: cfg.enabled, realm: cfg.realm.clone(), users, verified: RwLock::new(HashSet::new()) }
+        Self {
+            enabled: cfg.enabled,
+            realm: cfg.realm.clone(),
+            users,
+            verified: RwLock::new(HashSet::new()),
+            dummy_hash: bcrypt::hash("schema-registry-dummy-password", 10).expect("valid dummy bcrypt cost"),
+            bcrypt_slots: Arc::new(tokio::sync::Semaphore::new(BCRYPT_CONCURRENCY)),
+        }
     }
 
     pub fn disabled() -> Self {
-        Self { enabled: false, realm: String::new(), users: HashMap::new(), verified: RwLock::new(HashSet::new()) }
+        Self {
+            enabled: false,
+            realm: String::new(),
+            users: HashMap::new(),
+            verified: RwLock::new(HashSet::new()),
+            dummy_hash: String::new(),
+            bcrypt_slots: Arc::new(tokio::sync::Semaphore::new(BCRYPT_CONCURRENCY)),
+        }
     }
 
     /// Fast path: credentials already verified (no bcrypt). `None` = unknown, not "invalid".
@@ -58,7 +76,10 @@ impl Auth {
     /// Returns what the caller may do, if the credentials are valid.
     fn authenticate(&self, header_value: &str) -> Option<Arc<Principal>> {
         let (user, password) = decode_basic(header_value)?;
-        let (stored, principal) = self.users.get(&user)?;
+        let Some((stored, principal)) = self.users.get(&user) else {
+            let _ = bcrypt::verify(&password, &self.dummy_hash);
+            return None;
+        };
         let cache_key = cache_key(&user, &password, stored);
         if self.verified.read().map(|s| s.contains(&cache_key)).unwrap_or(false) {
             return Some(principal.clone());
@@ -113,9 +134,13 @@ pub async fn middleware(State(shared): State<crate::api::Shared>, mut req: Reque
     let principal = match auth.cached(&creds) {
         Some(p) => Some(p),
         None => {
-            // First sight of these credentials: bcrypt is CPU-heavy, keep it off the async workers.
+            // Bound bcrypt work before it reaches Tokio's shared blocking pool.
+            let Ok(permit) = auth.bcrypt_slots.clone().try_acquire_owned() else { return challenge(auth) };
             let auth2 = shared.auth.clone();
-            tokio::task::spawn_blocking(move || auth2.authenticate(&creds)).await.ok().flatten()
+            tokio::task::spawn_blocking(move || {
+                let _permit = permit;
+                auth2.authenticate(&creds)
+            }).await.ok().flatten()
         }
     };
     let Some(principal) = principal else {

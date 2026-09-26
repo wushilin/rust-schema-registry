@@ -46,25 +46,52 @@ pub struct ServerConfig {
     /// Log every request, not only writes and failures. Reads are the bulk of
     /// the traffic, so this is off unless someone is looking for something.
     pub log_reads: bool,
-    /// `auto` (the default), `off` or `required`: whether to read a PROXY
-    /// protocol header from the first bytes of a connection.
-    pub proxy_protocol: String,
-    /// Whose PROXY headers are believed, as CIDRs. Written either as a list
-    /// or as one string with `;` or `,` between them:
-    ///
-    /// ```toml
-    /// proxy_trust = "192.168.44.0/24;127.0.0.1/32"
-    /// ```
-    ///
-    /// Defaults to loopback and the private ranges - a proxy on the LAN, never
-    /// a client on the internet.
-    #[serde(deserialize_with = "one_or_many")]
-    pub proxy_trust: Vec<String>,
+    pub proxy: ProxyConfig,
     pub auth: AuthConfig,
     /// Host containers: several logically separate registries in one process
     /// and one store. Without any, there is one named `default` that answers
     /// on every host, and nothing about the API changes.
     pub containers: Vec<ContainerConfig>,
+}
+
+/// `[proxy]`: what sits in front, if anything.
+///
+/// Off unless said otherwise. When something does sit in front, say which
+/// version of the PROXY protocol it sends rather than leaving the server to
+/// guess: a header of the other version is then refused loudly instead of
+/// working by accident.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct ProxyConfig {
+    /// Read the PROXY protocol header from the first bytes of a connection.
+    pub proxy_on: bool,
+    /// 1 (a line of text) or 2 (binary). Only read when `proxy_on`.
+    pub proxy_version: u8,
+    /// Whose headers are believed, as CIDRs - written as a list or as one
+    /// string with `;` or `,` between them. Anyone can write those bytes, so a
+    /// client on the internet must not be able to choose what the log says.
+    /// Defaults to loopback and the private ranges.
+    #[serde(deserialize_with = "one_or_many")]
+    pub trust: Vec<String>,
+}
+
+impl Default for ProxyConfig {
+    fn default() -> Self {
+        Self {
+            proxy_on: false,
+            proxy_version: 2,
+            trust: crate::proxy_protocol::DEFAULT_TRUSTED.iter().map(|s| s.to_string()).collect(),
+        }
+    }
+}
+
+impl ProxyConfig {
+    pub fn expect(&self) -> Result<crate::proxy_protocol::Expect, String> {
+        Ok(crate::proxy_protocol::Expect {
+            on: self.proxy_on,
+            version: crate::proxy_protocol::Version::parse(self.proxy_version)?,
+        })
+    }
 }
 
 /// `[[containers]]`: a container and the hosts that reach it.
@@ -100,8 +127,7 @@ impl Default for ServerConfig {
             schema_search_max_limit: 1000,
             subject_search_default_limit: 20_000,
             subject_search_max_limit: 20_000,
-            proxy_protocol: "auto".into(),
-            proxy_trust: crate::proxy_protocol::DEFAULT_TRUSTED.iter().map(|s| s.to_string()).collect(),
+            proxy: ProxyConfig::default(),
             log_format: "text".into(),
             log_reads: false,
             auth: AuthConfig::default(),
@@ -202,8 +228,8 @@ impl ServerConfig {
     }
 
     pub fn validate(&self) -> anyhow::Result<()> {
-        crate::proxy_protocol::Mode::parse(&self.proxy_protocol).map_err(|e| anyhow::anyhow!(e))?;
-        crate::proxy_protocol::Trusted::parse(&self.proxy_trust).map_err(|e| anyhow::anyhow!("proxy_trust: {e}"))?;
+        crate::proxy_protocol::Version::parse(self.proxy.proxy_version).map_err(|e| anyhow::anyhow!("[proxy] {e}"))?;
+        crate::proxy_protocol::Trusted::parse(&self.proxy.trust).map_err(|e| anyhow::anyhow!("[proxy] trust: {e}"))?;
         if !matches!(self.log_format.as_str(), "text" | "json") {
             anyhow::bail!("log_format must be 'text' or 'json', not '{}'", self.log_format);
         }

@@ -25,12 +25,13 @@ BIN = resolve_binary()
 V2_SIG = b"\r\n\r\n\x00\r\nQUIT\n"
 
 
-def start(tmp, name, trust):
+def start(tmp, name, trust, version=2, on=True):
     port = free_port()
     cfg = os.path.join(tmp, f"{name}.toml")
     with open(cfg, "w") as f:
         f.write(f'listen = "127.0.0.1:{port}"\ndata_dir = "{tmp}/{name}"\n'
-                f'proxy_trust = "{trust}"\nlog_reads = true\nlog_format = "json"\n')
+                f'log_reads = true\nlog_format = "json"\n\n'
+                f'[proxy]\nproxy_on = {str(on).lower()}\nproxy_version = {version}\ntrust = "{trust}"\n')
     log = open(os.path.join(tmp, f"{name}.log"), "w")
     proc = subprocess.Popen([BIN, "--config", cfg], stdout=log, stderr=subprocess.STDOUT)
     for _ in range(100):
@@ -103,22 +104,45 @@ def main():
     procs = []
     try:
         # Loopback is trusted here, so our headers are believed.
-        proc, port, log = start(tmp, "trusting", "127.0.0.1/32;192.168.44.0/24")
+        # proxy_on with version 2, trusting loopback.
+        proc, port, log = start(tmp, "trusting", "127.0.0.1/32;192.168.44.0/24", version=2)
         procs.append(proc)
 
-        print("a header from a trusted peer names the client")
+        print("a v2 header from a trusted peer names the client")
         check("direct connection works", request(port)[0] == 200)
-        check("v1 works", request(port, v1())[0] == 200)
         check("v2 works", request(port, v2())[0] == 200)
         # v2 LOCAL: the proxy's own health check, speaking for nobody.
         check("v2 LOCAL works", request(port, v2(command=0x20, family=0x00))[0] == 200)
         time.sleep(0.4)
         seen = clients(log)
         check("direct is logged as the socket", any(c.startswith("127.0.0.1:") for c in seen), seen)
-        check("v1 is logged as the header said", any(c == "198.51.100.7:56324" for c in seen), seen)
         check("v2 is logged as the header said", any(c == "203.0.113.9:4711" for c in seen), seen)
         check("a LOCAL header falls back to the socket",
               sum(1 for c in seen if c.startswith("127.0.0.1:")) >= 2, seen)
+
+        print("the version we were not told to expect is refused")
+        check("a v1 header is not believed when configured for v2", request(port, v1())[0] in (400, 0))
+        time.sleep(0.3)
+        check("and the mismatch is logged",
+              any("other version" in str(r.get("message", "")) for r in records(log)),
+              "no warning about the version")
+
+        print("a v1 proxy, configured as such")
+        proc1, port1, log1 = start(tmp, "v1", "127.0.0.1/32", version=1)
+        procs.append(proc1)
+        check("v1 works", request(port1, v1())[0] == 200)
+        check("direct still works", request(port1)[0] == 200)
+        time.sleep(0.4)
+        check("v1 is logged as the header said", "198.51.100.7:56324" in clients(log1), clients(log1))
+
+        print("off by default: nothing is read")
+        proc0, port0, log0 = start(tmp, "off", "127.0.0.1/32", on=False)
+        procs.append(proc0)
+        check("direct works", request(port0)[0] == 200)
+        check("a header is just bytes", request(port0, v2())[0] in (400, 0))
+        time.sleep(0.4)
+        check("and nobody is logged under the header's address",
+              all(c != "203.0.113.9:4711" for c in clients(log0)), clients(log0))
 
         print("metrics count what happened, and name no subject")
         status, body = request(port, path="/metrics")
@@ -161,8 +185,8 @@ def main():
               all(c != "198.51.100.7:56324" for c in seen2), seen2)
         # A refused claim must say so: a bare 400 leaves an operator with a
         # misconfigured proxy_trust and no idea why nothing works.
-        warned = [r for r in records(log2) if "proxy_trust" in str(r.get("message", ""))]
-        check("the server says the peer is not trusted", warned, "no warning naming proxy_trust")
+        warned = [r for r in records(log2) if "is not in [proxy] trust" in str(r.get("message", ""))]
+        check("the server says the peer is not trusted", warned, "no warning naming the trust setting")
         check("and names who it was",
               any("127.0.0.1" in str(r.get("peer", "")) for r in warned), warned[:1])
     finally:

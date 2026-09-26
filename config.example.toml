@@ -23,23 +23,7 @@ cache_max_entries = 20000
 max_body_bytes = 16777216
 exporter_poll_seconds = 10
 
-# The PROXY protocol: when something sits in front (a load balancer, a TLS
-# terminator), it writes the original client address as the first bytes of the
-# connection - before TLS, long before HTTP. Both versions are recognised by
-# those bytes, so one listener serves proxied and direct connections.
-#
-#   auto     (default) read a header when a trusted peer sends one
-#   off      never look; the socket is the client
-#   required a trusted peer must send one, for a port only the proxy reaches
-proxy_protocol = "auto"
-
-# Whose headers are believed. Anyone can write those bytes, so a client on the
-# internet must not be able to choose what appears in the log. Either form:
-#   proxy_trust = "192.168.44.0/24;127.0.0.1/32"
-#   proxy_trust = ["192.168.44.0/24", "127.0.0.1/32"]
-# Defaults to loopback and the private ranges.
-# proxy_trust = "127.0.0.0/8;10.0.0.0/8;172.16.0.0/12;192.168.0.0/16"
-
+# Records go to stdout, warnings and errors to stderr.
 # Records go to stdout, warnings and errors to stderr. `json` writes one JSON
 # object per line with the same fields as the readable layout.
 log_format = "text"
@@ -64,6 +48,25 @@ log_reads = false
 # [[containers]]
 # name = "dev"
 # hosts = ["*.dev.example.com"]
+
+# What sits in front, if anything. Off unless said otherwise: a server nobody
+# has told about a proxy treats the socket as the client.
+#
+# When something does sit in front, it writes the original client address as
+# the first bytes of the connection - before TLS, long before HTTP - and this
+# server reads them there. Say which version it sends rather than leaving the
+# server to guess: a header of the other version is then refused loudly instead
+# of working by accident.
+[proxy]
+proxy_on = false
+# 1 (a line of text) or 2 (binary, what current proxies default to).
+proxy_version = 2
+# Whose headers are believed. Anyone can write those bytes, so a client on the
+# internet must not be able to choose what appears in the log. Either form:
+#   trust = "192.168.44.0/24;127.0.0.1/32"
+#   trust = ["192.168.44.0/24", "127.0.0.1/32"]
+# Defaults to loopback and the private ranges.
+# trust = "127.0.0.0/8;10.0.0.0/8;172.16.0.0/12;192.168.0.0/16"
 
 [auth]
 enabled = false

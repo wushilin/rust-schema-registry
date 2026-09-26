@@ -1,5 +1,21 @@
 # Changelog
 
+## Unreleased
+
+* `[proxy]` is now an explicit section, and off by default:
+
+  ```toml
+  [proxy]
+  proxy_on      = true
+  proxy_version = 2
+  trust         = "192.168.44.0/24;127.0.0.1/32"
+  ```
+
+  It replaces `proxy_protocol` and `proxy_trust` from 0.2.0. The version is
+  declared rather than auto-detected: a header of the other version is refused
+  with a warning, so a mismatch between this and the proxy is visible instead
+  of working by accident.
+
 ## 0.2.0
 
 Everything a single-node registry did in 0.1.0, plus the things you need to run

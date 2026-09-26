@@ -70,7 +70,7 @@ deletes, configs and modes out of a Confluent.
 | Backup / restore | `schema-registry backup --from URL` and `restore --from dump --to URL`, plus `GET /admin/api/backup` and `POST /admin/api/restore`: a newline-delimited JSON dump of subjects, versions, ids, references, metadata, rule sets, config, modes and exporters |
 | Logging | one record per mutation and per request, with the client address, as text or JSON; records on stdout, warnings and errors on stderr |
 | Metrics | `GET /metrics` in Prometheus' text format: requests and mutations by shape and outcome, durations, and per-container gauges |
-| Behind a proxy | PROXY protocol v1 and v2, auto-detected from the first bytes, believed only from configured networks |
+| Behind a proxy | PROXY protocol v1 or v2 (declared, not guessed), read from the first bytes of the connection, believed only from configured networks |
 | Admin UI | `/admin`: one page over the same REST API - register schemas and new versions (with a compatibility check), subjects, versions and schemas, compatibility and mode per subject/context/global, contexts, exporters (pause/resume/reset/create/edit), soft and permanent deletes. Admin role only |
 | Migration | `schema-registry migrate --from URL --to URL`: copies every subject, version, id, reference, soft delete, config and mode from another registry |
 
@@ -460,9 +460,15 @@ accepted socket. Both versions are recognised by those bytes, so one listener
 serves proxied and direct connections without being told which to expect.
 
 ```toml
-proxy_protocol = "auto"                               # auto | off | required
-proxy_trust    = "192.168.44.0/24;127.0.0.1/32"       # or a list
+[proxy]
+proxy_on      = true
+proxy_version = 2                            # 1 or 2, whatever the proxy sends
+trust         = "192.168.44.0/24;127.0.0.1/32"
 ```
+
+**It is off unless you say otherwise**, and the version is declared rather than
+guessed: a header of the other version is refused with a warning, so a mismatch
+between this and the proxy shows up immediately instead of half-working.
 
 **A header is only believed from a trusted network.** Anyone can write those
 bytes, so believing them from the open internet would let a client choose what
@@ -479,9 +485,10 @@ WARN proxy_protocol: PROXY header from an address that is not in proxy_trust:
 That line is the difference between a puzzling 400 and a `proxy_trust` an
 operator can fix. The default trust set is loopback and the private ranges.
 
-`required` refuses a connection without a header, for a port only the proxy
-should reach. If TLS is ever terminated here rather than in front, it wraps the
-stream *after* this - the header comes first, always.
+A connection without a header is served as a direct one - a health check, or
+something bypassing the proxy - under the socket's address. If TLS is ever
+terminated here rather than in front, it wraps the stream *after* this: the
+header comes first, always.
 
 ## Logging
 

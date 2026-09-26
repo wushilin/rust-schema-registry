@@ -271,17 +271,17 @@ async fn main() -> anyhow::Result<()> {
     let app = api::service(api::Shared { containers, auth, log_reads: cfg.log_reads }, cfg.max_body_bytes);
 
     let listener = tokio::net::TcpListener::bind(cfg.listen).await?;
-    let mode = proxy_protocol::Mode::parse(&cfg.proxy_protocol).map_err(|e| anyhow::anyhow!(e))?;
-    let trusted = Arc::new(proxy_protocol::Trusted::parse(&cfg.proxy_trust).map_err(|e| anyhow::anyhow!(e))?);
+    let expect = cfg.proxy.expect().map_err(|e| anyhow::anyhow!(e))?;
+    let trusted = Arc::new(proxy_protocol::Trusted::parse(&cfg.proxy.trust).map_err(|e| anyhow::anyhow!(e))?);
     tracing::info!(
         listen = %cfg.listen,
         data_dir = %cfg.data_dir.display(),
         containers = %container_names,
         auth = cfg.auth.enabled,
-        proxy_protocol = %cfg.proxy_protocol,
+        proxy = if cfg.proxy.proxy_on { format!("v{}", cfg.proxy.proxy_version) } else { "off".to_string() },
         "schema registry started"
     );
-    serve(listener, app, mode, trusted).await
+    serve(listener, app, expect, trusted).await
 }
 
 /// Accept connections ourselves rather than through `axum::serve`, because the
@@ -291,7 +291,7 @@ async fn main() -> anyhow::Result<()> {
 async fn serve(
     listener: tokio::net::TcpListener,
     app: axum::Router,
-    mode: proxy_protocol::Mode,
+    expect: proxy_protocol::Expect,
     trusted: Arc<proxy_protocol::Trusted>,
 ) -> anyhow::Result<()> {
     let mut shutdown = Box::pin(tokio::signal::ctrl_c());
@@ -314,7 +314,7 @@ async fn serve(
         let app = app.clone();
         let trusted = trusted.clone();
         tokio::spawn(async move {
-            let (stream, client) = match proxy_protocol::accept(socket, peer, mode, &trusted).await {
+            let (stream, client) = match proxy_protocol::accept(socket, peer, expect, &trusted).await {
                 Ok(pair) => pair,
                 Err(e) => {
                     tracing::warn!(%peer, error = %e, "rejected connection");

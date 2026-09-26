@@ -34,27 +34,56 @@ const V1_PREFIX: &[u8; 6] = b"PROXY ";
 /// v1 headers are at most 107 bytes plus CRLF.
 const V1_MAX: usize = 108;
 
-/// What to do with a connection's first bytes.
+/// What the server expects on a connection's first bytes, from `[proxy]`.
+///
+/// Off by default: a server nobody has told about a proxy should treat the
+/// socket as the client, not go looking for headers.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum Mode {
-    /// Never look; the peer address is the client address.
-    Off,
-    /// Read a header when a trusted peer sends one (the default).
-    #[default]
-    Auto,
-    /// A trusted peer must send one; a connection without it is dropped.
-    /// For a listener only the proxy can reach.
-    Required,
+pub struct Expect {
+    /// `proxy_on`.
+    pub on: bool,
+    /// `proxy_version`. Which version the thing in front is configured to
+    /// send; a header of the other version is refused rather than guessed at,
+    /// so a mismatch is visible instead of half-working.
+    pub version: Version,
 }
 
-impl Mode {
-    pub fn parse(s: &str) -> Result<Self, String> {
-        match s.to_ascii_lowercase().as_str() {
-            "off" | "none" | "false" => Ok(Mode::Off),
-            "auto" => Ok(Mode::Auto),
-            "required" => Ok(Mode::Required),
-            other => Err(format!("proxy_protocol must be 'off', 'auto' or 'required', not '{other}'")),
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Version {
+    /// A line of text, readable in a packet capture.
+    One,
+    /// Binary, and what current proxies default to.
+    #[default]
+    Two,
+}
+
+impl Version {
+    pub fn parse(v: u8) -> Result<Self, String> {
+        match v {
+            1 => Ok(Version::One),
+            2 => Ok(Version::Two),
+            other => Err(format!("proxy_version must be 1 or 2, not {other}")),
         }
+    }
+
+    fn signature(self) -> &'static [u8] {
+        match self {
+            Version::One => V1_PREFIX,
+            Version::Two => V2_SIGNATURE,
+        }
+    }
+
+    fn number(self) -> u8 {
+        match self {
+            Version::One => 1,
+            Version::Two => 2,
+        }
+    }
+}
+
+impl Expect {
+    pub fn off() -> Self {
+        Self { on: false, version: Version::Two }
     }
 }
 
@@ -157,15 +186,11 @@ impl<S: AsyncWrite + Unpin> AsyncWrite for Prefixed<S> {
 pub async fn accept<S: AsyncRead + AsyncWrite + Unpin>(
     stream: S,
     peer: SocketAddr,
-    mode: Mode,
+    expect: Expect,
     trusted: &Trusted,
 ) -> io::Result<(Prefixed<S>, SocketAddr)> {
-    if mode == Mode::Off {
+    if !expect.on {
         return Ok((Prefixed::new(stream, Vec::new()), peer));
-    }
-    let untrusted = !trusted.contains(peer.ip());
-    if untrusted && mode == Mode::Required {
-        return Err(io::Error::new(io::ErrorKind::PermissionDenied, format!("{peer} is not a trusted proxy")));
     }
 
     let mut stream = stream;
@@ -180,32 +205,42 @@ pub async fn accept<S: AsyncRead + AsyncWrite + Unpin>(
         have += n;
     }
     buf.extend_from_slice(&probe[..have]);
-    let looks_like_header = (have >= V2_SIGNATURE.len() && buf[..12] == *V2_SIGNATURE)
-        || (have >= V1_PREFIX.len() && buf[..6] == *V1_PREFIX);
 
-    if untrusted {
+    let starts_with = |sig: &[u8]| have >= sig.len() && buf[..sig.len()] == *sig;
+    let wanted = starts_with(expect.version.signature());
+    let other = starts_with(match expect.version {
+        Version::One => V2_SIGNATURE,
+        Version::Two => V1_PREFIX,
+    });
+
+    if !trusted.contains(peer.ip()) {
         // Looked, did not touch. The bytes go back into the stream and will be
         // read as the HTTP they claimed not to be - which fails, as it should.
         // Saying so here is the difference between a puzzling 400 and a
-        // misconfigured `proxy_trust` an operator can fix.
-        if looks_like_header {
-            tracing::warn!(
-                %peer,
-                "PROXY header from an address that is not in proxy_trust: ignoring it, and the request will not parse"
-            );
+        // misconfigured `trust` an operator can fix.
+        if wanted || other {
+            tracing::warn!(%peer, "PROXY header from an address that is not in [proxy] trust: ignoring it, and the request will not parse");
         }
         return Ok((Prefixed::new(stream, buf), peer));
     }
-
-    if have >= V2_SIGNATURE.len() && buf[..12] == *V2_SIGNATURE {
-        return read_v2(stream, buf, peer).await;
+    if other {
+        // The proxy in front is sending the version we were not told to expect.
+        // Guessing would paper over a configuration mistake.
+        tracing::warn!(
+            %peer,
+            expected = expect.version.number(),
+            "PROXY header is the other version: refusing it, set proxy_version to match the proxy"
+        );
+        return Ok((Prefixed::new(stream, buf), peer));
     }
-    if have >= V1_PREFIX.len() && buf[..6] == *V1_PREFIX {
-        return read_v1(stream, buf, peer).await;
+    if wanted {
+        return match expect.version {
+            Version::One => read_v1(stream, buf, peer).await,
+            Version::Two => read_v2(stream, buf, peer).await,
+        };
     }
-    if mode == Mode::Required {
-        return Err(io::Error::new(io::ErrorKind::InvalidData, format!("{peer} sent no PROXY header")));
-    }
+    // No header at all: a direct connection, a health check, something
+    // bypassing the proxy. The socket is the best we know.
     Ok((Prefixed::new(stream, buf), peer))
 }
 
@@ -328,7 +363,8 @@ mod tests {
     #[tokio::test]
     async fn a_v1_header_from_the_lan_names_the_client() {
         let stream = std::io::Cursor::new(b"PROXY TCP4 198.51.100.7 10.0.0.2 56324 8081\r\nGET / HTTP/1.1\r\n".to_vec());
-        let (mut rest, client) = accept(stream, addr("10.0.0.2:40000"), Mode::Auto, &Trusted::default_lan()).await.unwrap();
+        let expect = Expect { on: true, version: Version::One };
+        let (mut rest, client) = accept(stream, addr("10.0.0.2:40000"), expect, &Trusted::default_lan()).await.unwrap();
         assert_eq!(client, addr("198.51.100.7:56324"));
         // And the payload starts exactly after the header.
         let mut out = String::new();
@@ -348,7 +384,7 @@ mod tests {
         h.extend_from_slice(&8081u16.to_be_bytes());
         h.extend_from_slice(b"hello");
         let (mut rest, client) =
-            accept(std::io::Cursor::new(h), addr("10.0.0.2:40000"), Mode::Auto, &Trusted::default_lan()).await.unwrap();
+            accept(std::io::Cursor::new(h), addr("10.0.0.2:40000"), Expect { on: true, version: Version::Two }, &Trusted::default_lan()).await.unwrap();
         assert_eq!(client, addr("198.51.100.7:4711"));
         let mut out = String::new();
         rest.read_to_string(&mut out).await.unwrap();
@@ -361,8 +397,9 @@ mod tests {
         // client pretending. Whatever parses next will reject them.
         let claim = b"PROXY TCP4 10.0.0.1 10.0.0.2 1 2\r\nGET / HTTP/1.1\r\n";
         let peer = addr("198.51.100.7:33000");
+        let expect = Expect { on: true, version: Version::One };
         let (mut rest, client) =
-            accept(std::io::Cursor::new(claim.to_vec()), peer, Mode::Auto, &Trusted::default_lan()).await.unwrap();
+            accept(std::io::Cursor::new(claim.to_vec()), peer, expect, &Trusted::default_lan()).await.unwrap();
         assert_eq!(client, peer, "the socket is the only thing worth believing here");
         let mut out = Vec::new();
         rest.read_to_end(&mut out).await.unwrap();
@@ -375,7 +412,7 @@ mod tests {
         let (mut rest, client) = accept(
             std::io::Cursor::new(payload.to_vec()),
             addr("10.0.0.5:5000"),
-            Mode::Auto,
+            Expect { on: true, version: Version::Two },
             &Trusted::default_lan(),
         )
         .await
@@ -387,12 +424,43 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn required_means_required() {
-        let direct = std::io::Cursor::new(b"GET / HTTP/1.1\r\n".to_vec());
-        assert!(accept(direct, addr("10.0.0.5:5000"), Mode::Required, &Trusted::default_lan()).await.is_err());
-        // ...and an untrusted peer cannot satisfy it by claiming one.
-        let claim = std::io::Cursor::new(b"PROXY TCP4 10.0.0.1 10.0.0.2 1 2\r\n".to_vec());
-        assert!(accept(claim, addr("198.51.100.7:1"), Mode::Required, &Trusted::default_lan()).await.is_err());
+    async fn off_means_nothing_is_read() {
+        // Not told about a proxy: the socket is the client, and a header is
+        // just the first bytes of whatever this is.
+        let claim = b"PROXY TCP4 198.51.100.7 10.0.0.2 1 2\r\nGET / HTTP/1.1\r\n";
+        let peer = addr("10.0.0.2:40000");
+        let (mut rest, client) = accept(std::io::Cursor::new(claim.to_vec()), peer, Expect::off(), &Trusted::default_lan())
+            .await
+            .unwrap();
+        assert_eq!(client, peer);
+        let mut out = Vec::new();
+        rest.read_to_end(&mut out).await.unwrap();
+        assert_eq!(out, claim, "not one byte was eaten");
+    }
+
+    #[tokio::test]
+    async fn the_other_version_is_refused_rather_than_guessed_at() {
+        // Configured for v1, sent v2: a mistake worth seeing, not papering over.
+        let mut h = V2_SIGNATURE.to_vec();
+        h.push(0x21);
+        h.push(0x11);
+        h.extend_from_slice(&12u16.to_be_bytes());
+        h.extend_from_slice(&[198, 51, 100, 7]);
+        h.extend_from_slice(&[10, 0, 0, 2]);
+        h.extend_from_slice(&4711u16.to_be_bytes());
+        h.extend_from_slice(&8081u16.to_be_bytes());
+        let peer = addr("10.0.0.2:40000");
+        let expect = Expect { on: true, version: Version::One };
+        let (_, client) = accept(std::io::Cursor::new(h), peer, expect, &Trusted::default_lan()).await.unwrap();
+        assert_eq!(client, peer, "the header was not believed");
+    }
+
+    #[test]
+    fn a_version_that_does_not_exist_is_refused() {
+        assert!(Version::parse(1).is_ok());
+        assert!(Version::parse(2).is_ok());
+        assert!(Version::parse(0).is_err());
+        assert!(Version::parse(3).is_err());
     }
 
     #[tokio::test]
@@ -403,7 +471,7 @@ mod tests {
         h.push(0x00); // AF_UNSPEC
         h.extend_from_slice(&0u16.to_be_bytes());
         let peer = addr("10.0.0.2:40000");
-        let (_, client) = accept(std::io::Cursor::new(h), peer, Mode::Auto, &Trusted::default_lan()).await.unwrap();
+        let (_, client) = accept(std::io::Cursor::new(h), peer, Expect { on: true, version: Version::Two }, &Trusted::default_lan()).await.unwrap();
         assert_eq!(client, peer);
     }
 }

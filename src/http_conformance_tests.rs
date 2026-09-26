@@ -296,6 +296,90 @@ async fn rule_set_and_rules_to_merge_are_rejected_with_42210() {
     assert_eq!(body["error_code"], 42210);
 }
 
+#[tokio::test]
+async fn exporter_put_and_config_get_round_trip_through_their_routes() {
+    let (app, _dir) = fresh_app();
+    let create = Request::builder()
+        .method("POST")
+        .uri("/exporters")
+        .header("content-type", CT)
+        .body(Body::from(json!({
+            "name": "route-test",
+            "subjects": ["before-*"],
+            "config": {"schema.registry.url": "http://127.0.0.1:1"}
+        }).to_string()))
+        .unwrap();
+    assert_eq!(app.clone().oneshot(create).await.unwrap().status(), axum::http::StatusCode::OK);
+
+    let update = Request::builder()
+        .method("PUT")
+        .uri("/exporters/route-test")
+        .header("content-type", CT)
+        .body(Body::from(r#"{"subjects":["after-*"]}"#))
+        .unwrap();
+    assert_eq!(app.clone().oneshot(update).await.unwrap().status(), axum::http::StatusCode::OK);
+
+    let response = app.oneshot(Request::builder().uri("/exporters/route-test/config").body(Body::empty()).unwrap()).await.unwrap();
+    assert_eq!(response.status(), axum::http::StatusCode::OK);
+    let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body: Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(body["schema.registry.url"], "http://127.0.0.1:1");
+}
+
+#[tokio::test]
+async fn normalize_query_reaches_version_compatibility_checks() {
+    let (app, _dir) = fresh_app();
+    let schema = json!({"type":"record","name":"CompatThing","fields":[{"name":"f","type":"string"}]}).to_string();
+    let register = Request::builder()
+        .method("POST")
+        .uri("/subjects/compat-value/versions")
+        .header("content-type", CT)
+        .body(Body::from(json!({"schema": schema}).to_string()))
+        .unwrap();
+    assert_eq!(app.clone().oneshot(register).await.unwrap().status(), axum::http::StatusCode::OK);
+
+    let request = Request::builder()
+        .method("POST")
+        .uri("/compatibility/subjects/compat-value/versions/1?normalize=true")
+        .header("content-type", CT)
+        .body(Body::from(json!({"schema": schema}).to_string()))
+        .unwrap();
+    let response = app.oneshot(request).await.unwrap();
+    assert_eq!(response.status(), axum::http::StatusCode::OK);
+    let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body: Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(body["is_compatible"], true);
+}
+
+#[tokio::test]
+async fn admin_backup_prefix_and_overview_prefix_and_limit_filter_their_routes() {
+    let (app, _dir) = fresh_app();
+    for subject in ["x-one", "x-two", "y-three"] {
+        let register = Request::builder()
+            .method("POST")
+            .uri(format!("/subjects/{subject}/versions"))
+            .header("content-type", CT)
+            .body(Body::from(r#"{"schema":"\"string\""}"#))
+            .unwrap();
+        assert_eq!(app.clone().oneshot(register).await.unwrap().status(), axum::http::StatusCode::OK);
+    }
+
+    let response = app.clone().oneshot(Request::builder().uri("/admin/api/overview?subjectPrefix=x&limit=1").body(Body::empty()).unwrap()).await.unwrap();
+    assert_eq!(response.status(), axum::http::StatusCode::OK);
+    let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let overview: Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(overview["counts"]["subjects"], 2);
+    assert_eq!(overview["counts"]["shown"], 1);
+    assert!(overview["subjects"][0]["subject"].as_str().unwrap().starts_with('x'));
+
+    let response = app.oneshot(Request::builder().uri("/admin/api/backup?subjectPrefix=x").body(Body::empty()).unwrap()).await.unwrap();
+    assert_eq!(response.status(), axum::http::StatusCode::OK);
+    let dump = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let dump = String::from_utf8(dump.to_vec()).unwrap();
+    assert!(dump.contains("x-one") && dump.contains("x-two"));
+    assert!(!dump.contains("y-three"));
+}
+
 fn error_code(v: &Value) -> Option<i64> {
     v["body"].get("error_code").and_then(Value::as_i64)
 }

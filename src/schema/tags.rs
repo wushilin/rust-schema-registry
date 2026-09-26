@@ -163,3 +163,26 @@ fn json_edit(v: &mut Value, segments: &[&str], edit: &TagEdit, adding: bool) -> 
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn avro_field_tags_add_remove_and_report_missing_paths() {
+        let schema = r#"{"type":"record","name":"User","fields":[{"name":"name","type":"string"}]}"#;
+        let add = TagEdit { path: "User.name".into(), record: false, tags: vec!["PII".into(), "SENSITIVE".into()] };
+        let tagged = apply(SchemaType::Avro, schema, &[add.clone()], &[]).unwrap();
+        let value: Value = serde_json::from_str(&tagged).unwrap();
+        assert_eq!(value["fields"][0][TAGS_KEY], json!(["PII", "SENSITIVE"]));
+
+        let remove = TagEdit { path: "User.name".into(), record: false, tags: vec!["PII".into()] };
+        let untagged = apply(SchemaType::Avro, &tagged, &[], &[remove]).unwrap();
+        let value: Value = serde_json::from_str(&untagged).unwrap();
+        assert_eq!(value["fields"][0][TAGS_KEY], json!(["SENSITIVE"]));
+
+        let missing = TagEdit { path: "User.missing".into(), record: false, tags: vec!["PII".into()] };
+        assert_eq!(apply(SchemaType::Avro, schema, &[missing], &[]).unwrap_err(), no_match("User.missing"));
+    }
+}

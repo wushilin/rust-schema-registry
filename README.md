@@ -444,6 +444,11 @@ Treat dumps as secrets: exporter configuration can include destination credentia
 written by `backup --out` are created with mode `0600`; protect streamed dumps
 and any copies separately.
 
+Dumps from this registry also carry exporter state and offsets. This registry's
+restore preserves them. Restoring into Confluent recreates exporter
+configuration through its public API, which cannot set the saved state or
+offset, so those exporters start over there.
+
 The same thing over HTTP, for the container the request reaches:
 `GET /admin/api/backup` streams it, `POST /admin/api/restore` replays it
 (`?dryRun=true` reports what it would do). Both need registry-wide admin.

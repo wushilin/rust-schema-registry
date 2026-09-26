@@ -4,8 +4,8 @@
 //! the registry rather than the store: subjects, versions, ids, references,
 //! metadata, rule sets, config, modes and exporters. Nothing about RocksDB,
 //! key layout or on-disk format appears in it, so a dump restores into a
-//! different build - and, since it is written with the public API's own
-//! shapes, into Confluent as well.
+//! different build. Registry records use public API shapes and replay into
+//! Confluent; exporter progress is this implementation's optional extension.
 //!
 //! ```text
 //! {"type":"registry","format":1,"container":"prod","clusterId":"sr-…","at":…}

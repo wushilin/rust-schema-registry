@@ -290,3 +290,59 @@ impl Registry {
         Ok(rules)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::TempDir;
+
+    fn registry() -> (Registry, TempDir) {
+        let dir = tempfile::tempdir().unwrap();
+        let store = crate::store::Store::open(dir.path(), false).unwrap();
+        let snap = store.load_snapshot().unwrap();
+        (Registry::new(store, snap, CompatibilityLevel::Backward, "test".into(), 100, false), dir)
+    }
+
+    fn register(r: &Registry, schema: &str, rules: Value) {
+        r.register("s", RegisterSchemaRequest { schema: Some(schema.into()), rule_set: Some(rules), ..Default::default() }, false).unwrap();
+    }
+
+    fn rules(name: &str, action: &str) -> Value {
+        let rule = json!({"name": name, "kind": "TRANSFORM", "mode": "UPGRADE", "type": "CEL", "expr": action});
+        json!({"migrationRules": [rule.clone()], "domainRules": [rule]})
+    }
+
+    #[test]
+    fn rules_to_merge_selects_the_requested_predecessor_and_removes_names() {
+        let (r, _dir) = registry();
+        r.set_config(Some("s"), ConfigRecord { compatibility_level: Some(CompatibilityLevel::None), ..Default::default() }).unwrap();
+        register(&r, "\"string\"", rules("old", "one"));
+        register(&r, "\"int\"", rules("current", "two"));
+        let q = QualifiedSubject::parse("s").unwrap();
+
+        for (new_version, predecessor) in [(Some(1), "old"), (Some(2), "old"), (Some(3), "current"), (None, "current")] {
+            let req = TagSchemaRequest { new_version, rules_to_merge: Some(rules("added", "three")), ..Default::default() };
+            let merged = r.rule_set_for_tags(&r.reader(), &q, &req).unwrap().unwrap();
+            let names: Vec<&str> = merged["migrationRules"].as_array().unwrap().iter().filter_map(|x| x["name"].as_str()).collect();
+            assert!(names.contains(&predecessor), "newVersion={new_version:?}: {names:?}");
+            assert!(names.contains(&"added"), "newVersion={new_version:?}: {names:?}");
+        }
+
+        let req = TagSchemaRequest { new_version: Some(3), rules_to_merge: Some(rules("current", "replacement")), ..Default::default() };
+        let merged = r.rule_set_for_tags(&r.reader(), &q, &req).unwrap().unwrap();
+        assert_eq!(merged["migrationRules"][0]["expr"], "replacement", "a merged rule with the same name replaces its predecessor");
+        assert_eq!(merged["domainRules"][0]["expr"], "replacement");
+
+        let req = TagSchemaRequest {
+            new_version: Some(3),
+            rules_to_merge: Some(rules("added", "three")),
+            rules_to_remove: vec!["current".into()],
+            ..Default::default()
+        };
+        let merged = r.rule_set_for_tags(&r.reader(), &q, &req).unwrap().unwrap();
+        let names: Vec<&str> = merged["migrationRules"].as_array().unwrap().iter().filter_map(|x| x["name"].as_str()).collect();
+        assert!(!names.contains(&"current"));
+        assert!(names.contains(&"added"));
+        assert!(!merged["domainRules"].as_array().unwrap().iter().any(|x| x["name"] == "current"));
+    }
+}

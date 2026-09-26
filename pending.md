@@ -13,13 +13,9 @@ branches that exist, with nothing asserting them.
 
 ## Cannot be covered by the conformance corpus at all
 
-* **`rulesToMerge` / `rulesToRemove`** (`src/registry/schemas.rs:262`,
-  porting `maybeModifyPreviousRuleSet`). The corpus's `ruleSet` steps only send
-  `ruleSet`, the `/tags` steps only send `metadata`/`tagsToAdd`/`tagsToRemove`,
-  and `allowed.json` already relaxes `reg-metadata#14/#15` because community
-  Confluent drops rule sets. So a unit test is the only option. The
-  `newVersion`-relative version selection is three untested branches, and
-  `ruleSet` together with `rulesToMerge` should be 42210.
+* **`ruleSet` together with `rulesToMerge` should be 42210.** The valid
+  `rulesToMerge` / `rulesToRemove` selection and merge logic is now asserted in
+  `registry::schemas::tests`; the HTTP rejection branch is still untested.
 
 ## Exporter state machine
 

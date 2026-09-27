@@ -38,8 +38,22 @@ jobs:
 
       - name: clang, for bindgen
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y clang
+        run: sudo apt-get update && sudo apt-get install -y clang libclang-dev
 
+      - name: libclang, for bindgen
+        if: runner.os == 'macOS'
+        run: |
+          set -eu
+          for p in "$(xcode-select -p)/usr/lib" \
+                   "$(xcode-select -p)/Toolchains/XcodeDefault.xctoolchain/usr/lib" \
+                   "$(brew --prefix llvm 2>/dev/null || true)/lib"; do
+            if [ -f "$p/libclang.dylib" ]; then
+              echo "LIBCLANG_PATH=$p" >> "$GITHUB_ENV"
+              echo "found libclang in $p"
+              exit 0
+            fi
+          done
+          echo "no libclang.dylib found" >&2; exit 1
       - name: libclang, for bindgen
         if: runner.os == 'Windows'
         shell: bash
@@ -68,7 +82,7 @@ jobs:
           key: ubuntu-latest-cargo-${{ hashFiles('Cargo.lock') }}
           restore-keys: ubuntu-latest-cargo-
 
-      - run: sudo apt-get update && sudo apt-get install -y clang
+      - run: sudo apt-get update && sudo apt-get install -y clang libclang-dev
 
       - run: pip install requests
 
@@ -98,7 +112,7 @@ jobs:
             target
           key: lint-cargo-${{ hashFiles('Cargo.lock') }}
           restore-keys: lint-cargo-
-      - run: sudo apt-get update && sudo apt-get install -y clang
+      - run: sudo apt-get update && sudo apt-get install -y clang libclang-dev
       # Not `-D warnings`: the tree is not warning-clean, and turning that into
       # a gate in the same change that adds CI would be a second change.
       - run: cargo clippy --locked --all-targets

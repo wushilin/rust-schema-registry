@@ -21,8 +21,10 @@ Not covered:
 
 * `PAUSED->FAILED`: an explicitly paused exporter whose destination then
   acquires a conflict must fail on resume, not loop in ERROR.
-* Per-event cursor persistence after destination acknowledgement, and replay
-  when the process stops between acknowledgement and the cursor write.
+* The exporter-specific crash window between destination acknowledgement and
+  cursor persistence has not been simulated. The destination side is verified:
+  an exact IMPORT replay against Confluent 7.9.0 returns 200 and leaves the
+  subject at one version with the original id and schema.
 * `DELETE` of an actively RUNNING exporter mid-replay.
 * The bootstrap-after-pruning path. Making `PRUNE_EVERY` configurable is the
   cheaper change and unlocks an end-to-end assertion.

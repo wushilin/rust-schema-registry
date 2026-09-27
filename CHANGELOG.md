@@ -7,6 +7,11 @@ after the RocksDB batch and changelog row are durable. The exporter still
 recovers work from its stored changelog offset, so restart or queue lag cannot
 lose an event.
 
+An exact IMPORT replay was checked against a fresh Confluent Schema Registry
+7.9.0. Both POSTs returned 200, and the repeated write left the subject at one
+version with the same id and schema. Confluent adds `schema` and `version` to
+the replay response; the first response contains only `id`.
+
 **Additional review fixes.** Basic auth now bounds concurrent bcrypt work to
 four requests and verifies unknown usernames against a dummy bcrypt digest;
 at capacity it returns the same 401 challenge. The auth cache key encodes

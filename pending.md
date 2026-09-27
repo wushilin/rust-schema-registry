@@ -47,7 +47,29 @@ anything structural.
 Recommended: either move to `tokio::sync::broadcast`, or say why the crate
 earns its place.
 
-## 3. `GET /subjects` with no prefix lists every context
+## 3. FreeBSD does not build
+
+Neither architecture produces a binary, so releases do not include one.
+
+* **amd64** gets as far as compiling the bundled RocksDB - `librocksdb-sys`
+  builds on its own without error - and then the final link fails with
+  `ld: error: unable to find library -lrocksdb`. So something emits a dynamic
+  link directive for a library no package installs, while the static archive
+  the build script just produced is not found. `ROCKSDB_NO_PKG_CONFIG=1` made no
+  difference, so it is not the pkg-config path. The next thing to look at is
+  whether the archive lands in an `OUT_DIR` the final link searches, and whether
+  the `cc` crate's `ar` step really succeeded. The job builds in a QEMU VM
+  (`vmactions/freebsd-vm`) on a Linux runner, so an `ar`/`ranlib` mismatch there
+  is plausible.
+* **aarch64** has no prebuilt standard library - `rustup target list` does not
+  offer `aarch64-unknown-freebsd` at all - so it needs nightly `-Zbuild-std`
+  plus a FreeBSD/arm64 sysroot with a cross-compiled RocksDB. A self-hosted
+  runner is the realistic route.
+
+The release job is `continue-on-error` so neither holds up the platforms that do
+build, and the publish step refuses only if nothing built at all.
+
+## 4. `GET /subjects` with no prefix lists every context
 
 Measured here: a bare `GET /subjects` returns `[":.eu:in-ctx","plain"]`, the
 same as `?subjectPrefix=:*:`, while `?subjectPrefix=:.:` returns `["plain"]`.

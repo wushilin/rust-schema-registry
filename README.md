@@ -11,10 +11,13 @@ serializers work against it unchanged.
 
 Prebuilt binaries are on the [releases
 page](https://github.com/wushilin/rust-schema-registry/releases) for Linux,
-macOS and Windows on amd64 and aarch64, and for FreeBSD on amd64, each with a
-`SHA256SUMS` alongside. `aarch64-unknown-freebsd` is not there: Rust ships no
-standard library for it, so it needs `-Zbuild-std` and a cross-compiled
-RocksDB.
+macOS and Windows on amd64 and aarch64, with a `SHA256SUMS` alongside.
+
+FreeBSD is not there yet, on either architecture. On amd64 the build gets as far
+as compiling the bundled RocksDB and then asks the linker for a dynamic
+`-lrocksdb` that no package provides; on aarch64 Rust ships no standard library
+at all, so it needs `-Zbuild-std` and a cross-compiled RocksDB. Both are open -
+see `pending.md`. Building from source on a FreeBSD host is untested.
 
 Or build it, which needs a C++ toolchain and libclang for RocksDB's bindings
 (`clang libclang-dev` on Debian and Ubuntu):

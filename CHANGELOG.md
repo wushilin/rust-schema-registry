@@ -8,7 +8,13 @@ authorization layer let callers past their role in three ways, and the change
 log could hold less than what was committed in three more.
 
 **Binaries are now built and published by CI** for Linux, macOS and Windows on
-both amd64 and aarch64, and for FreeBSD on amd64.
+both amd64 and aarch64. FreeBSD is not among them yet on either architecture;
+`pending.md` says how far each gets.
+
+Setting up that pipeline found a portability bug worth naming here: **the crate
+did not compile on Windows at all.** `backup --out` set the dump to mode 0600
+through `std::os::unix::fs::PermissionsExt`, which does not exist there. The
+mode is now set only where a mode means something.
 
 ### Upgrading
 

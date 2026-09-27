@@ -1,0 +1,104 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  # The gate the brief names: unit tests plus the recorded HTTP conformance
+  # replay. RocksDB is built from C++ source, so every platform needs a C++
+  # toolchain and libclang for bindgen.
+  test:
+    name: test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo and the RocksDB build
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ matrix.os }}-cargo-${{ hashFiles('Cargo.lock') }}
+          restore-keys: ${{ matrix.os }}-cargo-
+
+      - name: clang, for bindgen
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y clang
+
+      - name: libclang, for bindgen
+        if: runner.os == 'Windows'
+        shell: bash
+        run: echo "LIBCLANG_PATH=C:\Program Files\LLVM\bin" >> "$GITHUB_ENV"
+
+      - run: cargo test --locked --all-targets
+
+  # The python suites drive a real server over HTTP. They are the half of the
+  # gate `cargo test` cannot reach, and they are cheap enough to run on every
+  # push. Java and the Confluent CLI suites are left to `run_integration.sh`
+  # locally - they want Maven and a Confluent, which this job does not have.
+  integration:
+    name: integration (linux)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ubuntu-latest-cargo-${{ hashFiles('Cargo.lock') }}
+          restore-keys: ubuntu-latest-cargo-
+
+      - run: sudo apt-get update && sudo apt-get install -y clang
+
+      - run: pip install requests
+
+      - run: cargo build --locked
+
+      - name: e2e, exporter, rbac, containers, backup, proxy
+        working-directory: tests
+        run: |
+          set -e
+          for suite in e2e exporter rbac containers backup proxy; do
+            echo "== $suite"
+            python3 "$suite.py" ../target/debug/schema-registry
+          done
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: lint-cargo-${{ hashFiles('Cargo.lock') }}
+          restore-keys: lint-cargo-
+      - run: sudo apt-get update && sudo apt-get install -y clang
+      # Not `-D warnings`: the tree is not warning-clean, and turning that into
+      # a gate in the same change that adds CI would be a second change.
+      - run: cargo clippy --locked --all-targets

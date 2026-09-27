@@ -1,0 +1,183 @@
+name: release
+
+# Tag and forget: pushing `v0.3.0` builds every platform and publishes the
+# release with the binaries attached. `workflow_dispatch` builds without
+# publishing, which is how to check a change to this file before tagging.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  # Every target is built on a runner of its own architecture. RocksDB is
+  # compiled from C++ source here, so cross-compiling it would mean carrying a
+  # sysroot and a cross C++ toolchain per target; a native runner is both
+  # simpler and what actually gets tested.
+  build:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: linux-amd64
+            os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+          - name: linux-aarch64
+            os: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-gnu
+          - name: macos-amd64
+            os: macos-13
+            target: x86_64-apple-darwin
+          - name: macos-aarch64
+            os: macos-14
+            target: aarch64-apple-darwin
+          - name: windows-amd64
+            os: windows-latest
+            target: x86_64-pc-windows-msvc
+          - name: windows-aarch64
+            os: windows-11-arm
+            target: aarch64-pc-windows-msvc
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: clang, for bindgen
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y clang
+
+      - name: LLVM, for bindgen
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          if [ -d "/c/Program Files/LLVM/bin" ]; then
+            echo "LIBCLANG_PATH=C:\Program Files\LLVM\bin" >> "$GITHUB_ENV"
+          else
+            choco install llvm -y --no-progress
+            echo "LIBCLANG_PATH=C:\Program Files\LLVM\bin" >> "$GITHUB_ENV"
+          fi
+
+      - name: Build
+        run: cargo build --release --locked --bin schema-registry --target ${{ matrix.target }}
+
+      - name: Package
+        shell: bash
+        run: |
+          set -eu
+          version="${GITHUB_REF_NAME#v}"
+          [ "$version" = "$GITHUB_REF_NAME" ] && version="$(git rev-parse --short HEAD)"
+          stem="schema-registry-${version}-${{ matrix.name }}"
+          mkdir -p "dist/$stem"
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            cp "target/${{ matrix.target }}/release/schema-registry.exe" "dist/$stem/"
+          else
+            cp "target/${{ matrix.target }}/release/schema-registry" "dist/$stem/"
+            strip "dist/$stem/schema-registry" || true
+          fi
+          cp README.md CHANGELOG.md config.example.toml "dist/$stem/"
+          cd dist
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            7z a -tzip "$stem.zip" "$stem" >/dev/null
+          else
+            tar czf "$stem.tar.gz" "$stem"
+          fi
+          rm -rf "$stem"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.name }}
+          path: dist/*
+          if-no-files-found: error
+
+  # FreeBSD has no GitHub runner, so the build happens in a VM on one. Only
+  # amd64: rustup ships no std for aarch64-unknown-freebsd (it is tier 3), so
+  # that target needs `-Zbuild-std` and a cross-compiled RocksDB, or a
+  # self-hosted FreeBSD/arm64 runner. See pending.md.
+  build-freebsd:
+    name: freebsd-amd64
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build in a FreeBSD VM
+        uses: vmactions/freebsd-vm@v1
+        with:
+          usesh: true
+          copyback: true
+          prepare: pkg install -y rust llvm cmake gmake bash
+          run: |
+            set -eu
+            cargo build --release --locked --bin schema-registry
+
+      - name: Package
+        shell: bash
+        run: |
+          set -eu
+          version="${GITHUB_REF_NAME#v}"
+          [ "$version" = "$GITHUB_REF_NAME" ] && version="$(git rev-parse --short HEAD)"
+          stem="schema-registry-${version}-freebsd-amd64"
+          mkdir -p "dist/$stem"
+          cp target/release/schema-registry "dist/$stem/"
+          cp README.md CHANGELOG.md config.example.toml "dist/$stem/"
+          tar czf "dist/$stem.tar.gz" -C dist "$stem"
+          rm -rf "dist/$stem"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: freebsd-amd64
+          path: dist/*
+          if-no-files-found: error
+
+  publish:
+    # Only a tag publishes. A manual run is a build check and stops here.
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [build, build-freebsd]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: staging
+
+      - name: Collect and checksum
+        run: |
+          set -eu
+          mkdir -p dist
+          find staging -type f \( -name '*.tar.gz' -o -name '*.zip' \) -exec mv {} dist/ \;
+          cd dist
+          sha256sum * > SHA256SUMS
+          ls -l
+
+      - name: Release notes from the changelog
+        run: |
+          set -eu
+          version="${GITHUB_REF_NAME#v}"
+          # The section for this version, up to the next heading.
+          awk -v v="## $version" '
+            $0 == v {found=1; next}
+            found && /^## / {exit}
+            found {print}
+          ' CHANGELOG.md > notes.md
+          if [ ! -s notes.md ]; then
+            echo "See CHANGELOG.md for what changed in $version." > notes.md
+          fi
+          cat notes.md
+
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            --title "${GITHUB_REF_NAME#v}" \
+            --notes-file notes.md \
+            dist/*

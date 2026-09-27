@@ -198,6 +198,12 @@ def main():
         got = until(lambda: s.get("/exporters/broken/status")[1].get("state") == "ERROR")
         check("exporter reports ERROR", got, s.get("/exporters/broken/status"))
         check("error trace is kept", s.get("/exporters/broken/status")[1].get("trace"), s.get("/exporters/broken/status"))
+        failed_offset = s.get("/exporters/broken/status")[1].get("offset")
+        time.sleep(1.5)
+        retried_status = s.get("/exporters/broken/status")[1]
+        check("failed retries leave the durable cursor before the event",
+              retried_status.get("offset") == failed_offset and retried_status.get("state") == "ERROR",
+              retried_status)
         r = s.put("/exporters/broken/config",
                   {"schema.registry.url": dst_url, "basic.auth.user.info": "admin:admin-secret"})
         check("update exporter config", r == (200, {"name": "broken"}), r)
@@ -205,6 +211,33 @@ def main():
         check("export resumes after the fix", got == [":.err:e-value"], got)
         check("state back to RUNNING", until(lambda: s.get("/exporters/broken/status")[1]["state"] == "RUNNING"),
               s.get("/exporters/broken/status"))
+        recovered_offset = s.get("/exporters/broken/status")[1].get("offset")
+        check("successful retry advances the durable cursor", recovered_offset > failed_offset,
+              s.get("/exporters/broken/status"))
+
+        print("replaying an event already accepted by the destination is safe")
+        retry_subject = ":.retry:accepted-before-checkpoint"
+        retry_id = registered(s, retry_subject, AVRO_STR)
+        # Model the crash window where the target committed the import, but
+        # the source process died before saving its cursor. A recreated
+        # exporter starts at offset zero and must replay the same import.
+        d.put("/mode/:.retry:?force=true", {"mode": "IMPORT"})
+        seeded = d.post(f"/subjects/{retry_subject}/versions",
+                        {"schema": AVRO_STR, "id": retry_id, "version": 1})
+        check("destination accepted the event before exporter creation",
+              seeded[0] == 200 and seeded[1].get("id") == retry_id, seeded)
+        make_exporter(s, "retry-exp", [retry_subject], "NONE", dst_url)
+
+        def retry_caught_up():
+            status = s.get("/exporters/retry-exp/status")[1]
+            return status if status.get("offset", 0) > 0 and status.get("state") == "RUNNING" else None
+
+        retry_status = until(retry_caught_up)
+        check("replayed accepted event advances cursor", retry_status, s.get("/exporters/retry-exp/status"))
+        check("replay leaves one identical destination version",
+              d.get(f"/subjects/{retry_subject}/versions")[1] == [1] and
+              d.get(f"/subjects/{retry_subject}/versions/1")[1].get("id") == retry_id,
+              d.get(f"/subjects/{retry_subject}/versions/1"))
 
         print("pause, reset and replay are idempotent")
         check("pause", s.put("/exporters/none-exp/pause", {})[1] == {"name": "none-exp"})

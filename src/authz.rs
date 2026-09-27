@@ -257,14 +257,21 @@ impl Principal {
 /// path (see `api::rewrite`), so contexts appear as `:.ctx:` in the subject.
 pub fn target_of(path: &str) -> Target {
     let segs: Vec<&str> = path.trim_matches('/').split('/').collect();
-    let subject = |raw: &str| {
-        let decoded = crate::api::percent_decode(raw);
-        match QualifiedSubject::parse(&decoded) {
-            // `:.eu:` names a context, `:.eu:x` a subject in it.
-            Ok(q) if q.is_context_only() => Target::Context(q.context),
-            Ok(q) => Target::Subject(q),
-            Err(_) => Target::Global,
-        }
+    let parse = |raw: &str| QualifiedSubject::parse(&crate::api::percent_decode(raw));
+    // `/config/{x}` and `/mode/{x}` take either a subject or a context, and
+    // `:.eu:` is how a context is spelled there.
+    let subject_or_context = |raw: &str| match parse(raw) {
+        Ok(q) if q.is_context_only() => Target::Context(q.context),
+        Ok(q) => Target::Subject(q),
+        Err(_) => Target::Global,
+    };
+    // `/subjects/...` and `/compatibility/subjects/...` take only a subject, so
+    // that is what the path is about even when the name is degenerate. Reading
+    // `/subjects/:.eu:/versions` as a context made a writer's registration a
+    // 403 instead of the 422 an invalid subject name earns.
+    let subject_only = |raw: &str| match parse(raw) {
+        Ok(q) => Target::Subject(q),
+        Err(_) => Target::Global,
     };
     match segs.as_slice() {
         ["subjects"] | ["schemas"] | ["contexts"] => Target::Listing,
@@ -275,11 +282,11 @@ pub fn target_of(path: &str) -> Target {
         // decides what the caller may see (backup refuses a scoped admin).
         ["admin"] | ["admin", ""] | ["admin", "api", "overview" | "backup" | "restore"] => Target::Listing,
         ["_admin", ..] => Target::Listing,
-        ["subjects", s, ..] => subject(s),
-        ["compatibility", "subjects", s, ..] => subject(s),
-        ["config" | "mode", s, ..] => subject(s),
+        ["subjects", s, ..] => subject_only(s),
+        ["compatibility", "subjects", s, ..] => subject_only(s),
+        ["config" | "mode", s, ..] => subject_or_context(s),
         ["contexts", c, ..] => Target::Context(crate::context::normalize_context(&crate::api::percent_decode(c)).unwrap_or_default()),
-        ["admin", "api", "subjects", s, ..] => subject(s),
+        ["admin", "api", "subjects", s, ..] => subject_only(s),
         _ => Target::Global,
     }
 }
@@ -475,6 +482,27 @@ mod tests {
         // A writer may do all of them on its own subjects.
         let w = user(&[Role::Write], &[]);
         assert!(authorized(&w, &Method::POST, "/subjects/foo/versions/1/tags"));
+    }
+
+    #[test]
+    fn a_subjects_path_is_about_a_subject_even_when_the_name_is_degenerate() {
+        // The route decides this, not the name: `/subjects/...` only ever takes
+        // a subject. Reading a context-only name there as a context refused a
+        // writer's registration with 403, where an invalid subject name should
+        // reach the handler and earn Confluent's 422.
+        let w = user(&[Role::Write], &[]);
+        for path in ["/subjects/:.eu:/versions", "/subjects//versions", "/subjects/:.eu:/versions/1/tags"] {
+            assert!(matches!(target_of(path), Target::Subject(_)), "{path} is about a subject");
+            assert!(authorized(&w, &Method::POST, path), "a writer must reach the handler for {path}");
+        }
+        // The ambiguous routes keep reading `:.eu:` as the context it is.
+        assert_eq!(target_of("/config/:.eu:"), Target::Context(".eu".into()));
+        assert_eq!(target_of("/mode/%3A.eu%3A"), Target::Context(".eu".into()));
+        // A binding over the context still reaches its subjects, degenerate or not.
+        let eu = user(&[], &[(Role::Admin, &[".eu::*"])]);
+        assert!(authorized(&eu, &Method::POST, "/subjects/:.eu:/versions"));
+        let other = user(&[], &[(Role::Admin, &[".us::*"])]);
+        assert!(!authorized(&other, &Method::POST, "/subjects/:.eu:/versions"));
     }
 
     #[test]

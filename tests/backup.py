@@ -144,7 +144,8 @@ def main():
         r = subprocess.run([BIN, "restore", "--from", dump_path, "--to", url, "--dry-run"], capture_output=True, text=True)
         check("dry run succeeds", r.returncode == 0, r.stderr[-300:])
         check("dry run says what it would do", "would restore" in r.stdout, r.stdout)
-        check("and wrote nothing", c.get("/subjects", subjectPrefix=":*:", deleted="true")[1] == [])
+        check("and wrote nothing", c.get("/subjects", subjectPrefix=":*:", deleted="true")[1] == [],
+              "a dry run performed the restore")
 
         print("restore brings it all back")
         r = subprocess.run([BIN, "restore", "--from", dump_path, "--to", url], capture_output=True, text=True)

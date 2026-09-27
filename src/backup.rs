@@ -274,7 +274,11 @@ pub async fn restore(dump: &Dump, dst: &Endpoint, dry_run: bool) -> anyhow::Resu
     // Our admin restore can install exporter cursors and states in the same
     // operation as the rest of the dump. Other registries do not expose that
     // extension, so they fall through to the public API replay below.
-    if let Some(result) = dst.post_text("/admin/api/restore", &dump.to_ndjson()).await? {
+    // The flag has to travel with it: this shortcut runs before the dry-run
+    // branch below, so posting without it made `--dry-run` perform the restore
+    // and then report what it "would" do.
+    let admin = if dry_run { "/admin/api/restore?dryRun=true" } else { "/admin/api/restore" };
+    if let Some(result) = dst.post_text(admin, &dump.to_ndjson()).await? {
         return Ok(serde_json::from_value(result)?);
     }
     if dry_run {

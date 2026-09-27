@@ -599,6 +599,41 @@ mod tests {
     }
 
     #[test]
+    fn only_subjects_this_exporter_would_have_created_are_deletable() {
+        // `reconcile_bootstrap` hard-deletes what this predicate calls managed,
+        // so it decides what a replay may destroy at the destination. It is
+        // reached only for a context the operator put in IMPORT mode, but
+        // within that context it is the whole safety boundary.
+        let p = |v: &[&str]| v.iter().map(|s| s.to_string()).collect::<Vec<_>>();
+        let none = None;
+
+        // No rename: the destination name is the source name.
+        assert!(subject_matches_renamed(&p(&["abc*"]), ".", &none, "abc-1"));
+        assert!(!subject_matches_renamed(&p(&["abc*"]), ".", &none, "def-1"), "another exporter's subject is not ours");
+        // A pattern bound to one context says nothing about another.
+        assert!(!subject_matches_renamed(&p(&[":.eu:abc*"]), ".", &none, "abc-1"));
+        assert!(subject_matches_renamed(&p(&[":.eu:abc*"]), ".eu", &none, "abc-1"));
+        assert!(subject_matches_renamed(&p(&[":*:abc*"]), ".anything", &none, "abc-1"));
+
+        // With a rename, the destination name is the format around the pattern.
+        let rename = Some("dr-${subject}".to_string());
+        assert!(subject_matches_renamed(&p(&["abc*"]), ".", &rename, "dr-abc-1"));
+        assert!(!subject_matches_renamed(&p(&["abc*"]), ".", &rename, "abc-1"), "the unrenamed name is not ours");
+        assert!(!subject_matches_renamed(&p(&["abc*"]), ".", &rename, "dr-def-1"));
+
+        // A literal in the format is a literal, not a glob: a destination
+        // subject must not become deletable because the format held `*` or `[`.
+        let odd = Some("a[b]*-${subject}".to_string());
+        assert!(subject_matches_renamed(&p(&["x*"]), ".", &odd, "a[b]*-x1"));
+        assert!(!subject_matches_renamed(&p(&["x*"]), ".", &odd, "ab-x1"));
+
+        // `*` over the default context does claim everything in its
+        // destination context - which is what makes pointing an exporter at a
+        // context that holds anything else destructive.
+        assert!(subject_matches_renamed(&p(&["*"]), ".", &none, "anything-at-all"));
+    }
+
+    #[test]
     fn the_log_is_kept_for_the_exporter_that_is_furthest_behind() {
         assert_eq!(prune_floor(at(&[7, 3, 9]), Ok(12)), 3);
         // Caught up, or none at all: the whole log is free.

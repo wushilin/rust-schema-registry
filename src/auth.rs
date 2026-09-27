@@ -34,11 +34,28 @@ pub struct Auth {
     realm: String,
     users: HashMap<String, (String, Arc<Principal>)>,
     verified: RwLock<HashSet<[u8; 32]>>,
-    dummy_hash: String,
+    /// What to verify an unknown username against, so that "no such user"
+    /// costs what "wrong password" costs. `None` when no user is stored as a
+    /// bcrypt hash: every comparison is then a constant-time string compare,
+    /// there is nothing to hide behind, and spending bcrypt on an unknown name
+    /// would be the oracle rather than the cure.
+    dummy_hash: Option<String>,
     bcrypt_slots: Arc<tokio::sync::Semaphore>,
 }
 
 const BCRYPT_CONCURRENCY: usize = 4;
+
+/// What `hash-password` emits, and so what to assume when nothing says
+/// otherwise.
+const DEFAULT_BCRYPT_COST: u32 = 12;
+
+/// The cost in a `$2b$12$...` hash, if it is one.
+fn bcrypt_cost(stored: &str) -> Option<u32> {
+    let mut parts = stored.split('$');
+    parts.next()?;
+    parts.next()?.starts_with('2').then_some(())?;
+    parts.next()?.parse().ok()
+}
 
 impl Auth {
     pub fn new(cfg: &AuthConfig) -> Self {
@@ -49,7 +66,10 @@ impl Auth {
             realm: cfg.realm.clone(),
             users,
             verified: RwLock::new(HashSet::new()),
-            dummy_hash: bcrypt::hash("schema-registry-dummy-password", 10).expect("valid dummy bcrypt cost"),
+            // At the cost the real hashes use. bcrypt doubles per cost, so a
+            // dummy at 10 against users stored at 12 answers in a quarter of
+            // the time - which is the same oracle, just quieter.
+            dummy_hash: dummy_hash_for(cfg),
             bcrypt_slots: Arc::new(tokio::sync::Semaphore::new(BCRYPT_CONCURRENCY)),
         }
     }
@@ -60,7 +80,7 @@ impl Auth {
             realm: String::new(),
             users: HashMap::new(),
             verified: RwLock::new(HashSet::new()),
-            dummy_hash: String::new(),
+            dummy_hash: None,
             bcrypt_slots: Arc::new(tokio::sync::Semaphore::new(BCRYPT_CONCURRENCY)),
         }
     }
@@ -77,7 +97,11 @@ impl Auth {
     fn authenticate(&self, header_value: &str) -> Option<Arc<Principal>> {
         let (user, password) = decode_basic(header_value)?;
         let Some((stored, principal)) = self.users.get(&user) else {
-            let _ = bcrypt::verify(&password, &self.dummy_hash);
+            // Spend what a real verification would, so the answer does not
+            // say whether the name exists.
+            if let Some(dummy) = &self.dummy_hash {
+                let _ = bcrypt::verify(&password, dummy);
+            }
             return None;
         };
         let cache_key = cache_key(&user, &password, stored);
@@ -101,6 +125,13 @@ impl Auth {
             None
         }
     }
+}
+
+/// A hash to verify unknown usernames against, at the highest cost any
+/// configured user uses. `None` when none of them is a bcrypt hash.
+fn dummy_hash_for(cfg: &AuthConfig) -> Option<String> {
+    let cost = cfg.users.iter().filter_map(|u| bcrypt_cost(&u.password)).max()?;
+    bcrypt::hash("schema-registry-dummy-password", cost.clamp(4, DEFAULT_BCRYPT_COST.max(cost))).ok()
 }
 
 fn decode_basic(header_value: &str) -> Option<(String, String)> {
@@ -134,8 +165,11 @@ pub async fn middleware(State(shared): State<crate::api::Shared>, mut req: Reque
     let principal = match auth.cached(&creds) {
         Some(p) => Some(p),
         None => {
-            // Bound bcrypt work before it reaches Tokio's shared blocking pool.
-            let Ok(permit) = auth.bcrypt_slots.clone().try_acquire_owned() else { return challenge(auth) };
+            // Bound bcrypt work before it reaches Tokio's shared blocking pool -
+            // by waiting for a slot, not by refusing. Turning contention away
+            // answered 401, so a flood of wrong passwords made correct
+            // first-time logins fail with "wrong password".
+            let Ok(permit) = auth.bcrypt_slots.clone().acquire_owned().await else { return challenge(auth) };
             let auth2 = shared.auth.clone();
             tokio::task::spawn_blocking(move || {
                 let _permit = permit;
@@ -177,6 +211,16 @@ fn challenge(auth: &Auth) -> Response {
 mod tests {
     use super::*;
 
+    fn user_with(name: &str, password: &str) -> crate::config::UserConfig {
+        crate::config::UserConfig {
+            username: name.into(),
+            password: password.into(),
+            roles: vec![crate::config::Role::Readonly],
+            bindings: Vec::new(),
+            containers: Vec::new(),
+        }
+    }
+
     #[test]
     fn verifies_plain_and_bcrypt() {
         let cfg = AuthConfig {
@@ -213,6 +257,35 @@ mod tests {
         let encoded = base64::engine::general_purpose::STANDARD.encode("a:pw");
         assert_eq!(decode_basic(&format!("BASIC {encoded}")), Some(("a".into(), "pw".into())));
         assert_ne!(cache_key("a", "b\0secret", "same"), cache_key("a\0b", "secret", "same"));
+    }
+
+    #[test]
+    fn an_unknown_username_costs_what_a_known_one_costs() {
+        // The point of the dummy verification is that the two answers take the
+        // same time. bcrypt doubles per cost, so the dummy has to be built at
+        // the cost the real hashes use, or the difference still says whether
+        // the name exists.
+        let cfg = AuthConfig {
+            enabled: true,
+            realm: "r".into(),
+            users: vec![user_with("known", &bcrypt::hash("pw", 6).unwrap()), user_with("other", &bcrypt::hash("pw", 5).unwrap())],
+        };
+        let dummy = dummy_hash_for(&cfg).expect("a bcrypt user means a dummy");
+        assert_eq!(bcrypt_cost(&dummy), Some(6), "the dummy matches the most expensive real hash");
+
+        // Every user in plaintext: there is no bcrypt to hide behind, and
+        // spending some on an unknown name would be the only slow path there is.
+        let plain = AuthConfig { enabled: true, realm: "r".into(), users: vec![user_with("p", "secret")] };
+        assert_eq!(dummy_hash_for(&plain), None);
+    }
+
+    #[test]
+    fn the_cost_is_read_out_of_the_stored_hash() {
+        assert_eq!(bcrypt_cost("$2b$12$abcdefghijklmnopqrstuv"), Some(12));
+        assert_eq!(bcrypt_cost("$2a$04$abcdefghijklmnopqrstuv"), Some(4));
+        assert_eq!(bcrypt_cost("$2y$10$abcdefghijklmnopqrstuv"), Some(10));
+        assert_eq!(bcrypt_cost("plaintext"), None);
+        assert_eq!(bcrypt_cost("$1$md5$whatever"), None, "not bcrypt");
     }
 
     #[test]

@@ -44,11 +44,16 @@ jobs:
         if: runner.os == 'macOS'
         run: |
           set -eu
-          for p in "$(xcode-select -p)/usr/lib" \
-                   "$(xcode-select -p)/Toolchains/XcodeDefault.xctoolchain/usr/lib" \
-                   "$(brew --prefix llvm 2>/dev/null || true)/lib"; do
+          # Homebrew's libclang first: its install name is absolute, so a
+          # build script that links it resolves at runtime. Xcode's is
+          # referenced as @rpath/libclang.dylib, which dyld cannot find on its
+          # own - hence DYLD_FALLBACK_LIBRARY_PATH as well as LIBCLANG_PATH.
+          for p in "$(brew --prefix llvm 2>/dev/null || true)/lib" \
+                   "$(xcode-select -p)/usr/lib" \
+                   "$(xcode-select -p)/Toolchains/XcodeDefault.xctoolchain/usr/lib"; do
             if [ -f "$p/libclang.dylib" ]; then
               echo "LIBCLANG_PATH=$p" >> "$GITHUB_ENV"
+              echo "DYLD_FALLBACK_LIBRARY_PATH=$p" >> "$GITHUB_ENV"
               echo "found libclang in $p"
               exit 0
             fi

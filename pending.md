@@ -47,6 +47,23 @@ anything structural.
 Recommended: either move to `tokio::sync::broadcast`, or say why the crate
 earns its place.
 
+## 3. `GET /subjects` with no prefix lists every context
+
+Measured here: a bare `GET /subjects` returns `[":.eu:in-ctx","plain"]`, the
+same as `?subjectPrefix=:*:`, while `?subjectPrefix=:.:` returns `["plain"]`.
+
+Whether Confluent agrees is **unverified, and the corpus cannot say**: no
+recorded scenario writes into a non-default context and then lists `/subjects`
+without a prefix, so the 1,553 steps pass either way. Confluent's documentation
+for `subjectPrefix` reads as though the default scope is the default context,
+which would make a bare listing default-only - but that is a reading, not
+evidence, and section 1 of the brief asks for evidence.
+
+It matters because it is the listing every client calls, and because a wrong
+answer here is invisible until someone uses contexts. Needs one probe against a
+live Confluent: register into `.eu`, then `GET /subjects`. Whatever it answers
+becomes a scenario in the corpus, or a line in README's deliberate differences.
+
 # Tests that are missing
 
 None of these are known failures. They are guarantees the brief makes, or
@@ -68,6 +85,13 @@ Not covered:
   Making `PRUNE_EVERY` configurable is the cheaper change and unlocks the
   assertion.
 * `DELETE` of an actively RUNNING exporter mid-replay.
+* **`tests/confluent_exporter.py` has never run against a Confluent.** It
+  covers both directions - us exporting into one, and one exporting into us -
+  and both halves pass against another instance of this registry standing in,
+  which proves the suite works but not that Confluent agrees. Point
+  `CONFLUENT_URL` at a real 7.9 and it runs; the second half needs a Confluent
+  Platform build, since community has no `/exporters`, and needs `SELF_URL` to
+  be an address that Confluent can dial back on.
 
 ## Form gaps rather than holes
 

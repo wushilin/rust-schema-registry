@@ -21,16 +21,20 @@
 #                                        references, evolution, deletes
 #   java       tests/java                official Java client + serializers: Avro/JSON/Protobuf serde,
 #                                        references, evolution, production serializer mode, contexts
+#   confluent  tests/confluent_exporter.py  schema linking both ways against a real Confluent
+#                                        (needs CONFLUENT_URL)
 #
 # Prerequisites: cargo, python3 (a venv with confluent-kafka is created in tests/.venv),
-# Maven + JDK 17 for the Java suite, the `confluent` CLI (CONFLUENT_CLI or on PATH)
-# and a Confluent Platform directory (CONFLUENT_HOME). Missing tools skip that suite.
+# Maven + JDK 17 for the Java suite, the `confluent` CLI (CONFLUENT_CLI or on PATH),
+# a Confluent Platform directory (CONFLUENT_HOME) and a running Confluent
+# (CONFLUENT_URL, plus CONFLUENT_AUTH and SELF_URL where they are needed).
+# Missing tools skip that suite.
 set -uo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 R_e2e="not run"; R_exporter="not run"; R_python="not run"; R_java="not run"
-R_cli="not run"; R_tools="not run"; R_migrate="not run"; R_rbac="not run"; R_containers="not run"; R_backup="not run"; R_proxy="not run"
+R_cli="not run"; R_tools="not run"; R_migrate="not run"; R_rbac="not run"; R_containers="not run"; R_backup="not run"; R_proxy="not run"; R_confluent="not run"
 EXTERNAL_URL=""
 EXTERNAL_AUTH=""
 if [[ "${1:-}" == "--against" ]]; then
@@ -93,6 +97,11 @@ if [[ -z "$EXTERNAL_URL" ]]; then
     R_containers=skipped
   fi
 
+  say "schema linking against a real confluent (skipped without CONFLUENT_URL)"
+  out="$(cd tests && python3 confluent_exporter.py ../target/debug/schema-registry 2>&1)"; rc=$?
+  echo "$out" | tail -30
+  case "$out" in *"skipped:"*) R_confluent=skipped;; *) [[ $rc -eq 0 ]] && R_confluent=pass || R_confluent=FAIL;; esac
+
   say "confluent CLI exporter (skipped without the CLI)"
   out="$(tests/exporter_cli.sh 2>&1)"; rc=$?
   echo "$out" | tail -25
@@ -154,8 +163,8 @@ fi
 
 say "summary"
 status=0
-for pair in "e2e:$R_e2e" "exporter:$R_exporter" "migrate:$R_migrate" "rbac:$R_rbac" "containers:$R_containers" "backup:$R_backup" "proxy:$R_proxy" "cli:$R_cli" "tools:$R_tools" "python:$R_python" "java:$R_java"; do
-  printf '  %-8s %s\n' "${pair%%:*}" "${pair#*:}"
+for pair in "e2e:$R_e2e" "exporter:$R_exporter" "migrate:$R_migrate" "rbac:$R_rbac" "containers:$R_containers" "backup:$R_backup" "proxy:$R_proxy" "confluent:$R_confluent" "cli:$R_cli" "tools:$R_tools" "python:$R_python" "java:$R_java"; do
+  printf '  %-10s %s\n' "${pair%%:*}" "${pair#*:}"
   [[ "${pair#*:}" == "FAIL" ]] && status=1
 done
 exit $status

@@ -271,6 +271,50 @@ def main():
         check("but no per-subject mode was forced",
               d.get("/mode/:.src:address")[0] == 404, d.get("/mode/:.src:address"))
 
+        # The deployed `self-to-new` exporter is this shape: one instance, one
+        # process, the default context copied into another context of its own
+        # registry. The destination is reached over HTTP like any other, so the
+        # only thing that makes it special is that a loop is possible - the
+        # export must not become its own source.
+        print("self to self: one registry copying its default context into another")
+        self_proc, self_url, _ = start(tmp, "selfie", auth=False)
+        procs.append(self_proc)
+        me = Client(self_url)
+        registered(me, "orders-value", AVRO_ADDRESS)
+        registered(me, "people-value", AVRO_PERSON,
+                   references=[{"name": "com.x.Address", "subject": "orders-value", "version": 1}])
+        r = me.post("/exporters", {"name": "self-to-new", "subjects": ["*"], "contextType": "CUSTOM",
+                                   "context": ".new", "config": {"schema.registry.url": self_url}})
+        check("create the self-to-self exporter", r == (200, {"name": "self-to-new"}), r)
+        check("the default context arrives in .new",
+              until(lambda: me.get("/subjects/:.new:orders-value/versions")[0] == 200),
+              me.get("/subjects", subjectPrefix=":.new:"))
+        check("with the same id it had at the source",
+              me.get("/subjects/:.new:orders-value/versions/1")[1].get("id")
+              == me.get("/subjects/orders-value/versions/1")[1].get("id"))
+        check("a reference is rewritten into the destination context",
+              until(lambda: me.get("/subjects/:.new:people-value/versions/1")[0] == 200)
+              and me.get("/subjects/:.new:people-value/versions/1")[1]["references"][0]["subject"]
+              == ":.new:orders-value",
+              me.get("/subjects/:.new:people-value/versions/1"))
+        check(".new is left in IMPORT mode", me.get("/mode/:.new:")[1] == {"mode": "IMPORT"},
+              me.get("/mode/:.new:"))
+
+        # The loop: `subjects: ["*"]` names the default context only, so what
+        # lands in `.new` must not be picked up and copied again.
+        registered(me, "later-value", AVRO_STR)
+        check("a later registration reaches .new",
+              until(lambda: me.get("/subjects/:.new:later-value/versions")[0] == 200))
+        time.sleep(2)
+        nested = me.get("/subjects", subjectPrefix=":.new:")[1]
+        check("the export did not become its own source",
+              all(":.new:" not in n.removeprefix(":.new:") for n in nested), nested)
+        check("and .new holds exactly what the default context had",
+              sorted(nested) == [":.new:later-value", ":.new:orders-value", ":.new:people-value"], nested)
+        check("the exporter is still running",
+              me.get("/exporters/self-to-new/status")[1]["state"] == "RUNNING",
+              me.get("/exporters/self-to-new/status"))
+
     finally:
         for p in procs:
             p.terminate()

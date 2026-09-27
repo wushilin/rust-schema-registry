@@ -250,26 +250,25 @@ impl Parser {
 
     fn option_name(&mut self) -> Option<String> {
         let mut name = String::new();
-        loop {
-            if self.is_sym('(') {
-                self.i += 1;
-                name.push('(');
-                name.push_str(&self.ident()?);
-                self.sym(')')?;
-                name.push(')');
-            } else {
-                name.push_str(&self.ident()?);
-            }
-            // `(a).b` continues with an identifier starting with '.'
-            match self.peek() {
-                Some(Tok::Ident(s)) if s.starts_with('.') => {
-                    name.push_str(s);
-                    self.i += 1;
-                    return Some(name);
-                }
-                _ => return Some(name),
-            }
+        if self.is_sym('(') {
+            self.i += 1;
+            name.push('(');
+            name.push_str(&self.ident()?);
+            self.sym(')')?;
+            name.push(')');
+        } else {
+            name.push_str(&self.ident()?);
         }
+        // `(a).b.c` continues with one identifier token that starts with '.':
+        // the lexer takes dots as part of an identifier, so the whole dotted
+        // tail arrives at once and there is nothing to iterate over.
+        if let Some(Tok::Ident(s)) = self.peek()
+            && s.starts_with('.')
+        {
+            name.push_str(s);
+            self.i += 1;
+        }
+        Some(name)
     }
 
     /// `option name = value;` (after the `option` keyword).
@@ -1632,6 +1631,24 @@ impl DescBuilder<'_> {
 #[cfg(test)]
 mod tests {
     use super::canonical;
+
+    #[test]
+    fn a_custom_option_name_keeps_every_dotted_part() {
+        // `option_name` reads the tail after `(a)` as a single token, because
+        // the lexer takes dots as part of an identifier. If that ever stops
+        // being true, the name would be truncated at the first dot rather
+        // than looping - which is why this asserts the whole thing.
+        let src = concat!(
+            "syntax = \"proto3\";\n",
+            "import \"google/protobuf/descriptor.proto\";\n",
+            "message Order {\n",
+            "  option (acme.opts).nested.deeper = true;\n",
+            "  string id = 1;\n",
+            "}\n"
+        );
+        let out = canonical(src).expect("parses");
+        assert!(out.contains("(acme.opts).nested.deeper"), "option name was truncated: {out}");
+    }
 
     #[test]
     fn formats_like_wire() {

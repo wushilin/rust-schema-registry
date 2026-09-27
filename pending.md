@@ -19,12 +19,13 @@ Covered today: `RUNNING->PAUSED`, `PAUSED->PAUSED`, `PAUSED->RUNNING`,
 
 Not covered:
 
-* `PAUSED->FAILED`: an explicitly paused exporter whose destination then
-  acquires a conflict must fail on resume, not loop in ERROR.
+* `PAUSED->FAILED` is now covered in `tests/exporter.py`: an explicitly paused
+  exporter resumes into a destination id conflict and transitions to FAILED.
 * The exporter-specific crash window between destination acknowledgement and
-  cursor persistence has not been simulated. The destination side is verified:
-  an exact IMPORT replay against Confluent 7.9.0 returns 200 and leaves the
-  subject at one version with the original id and schema.
+  cursor persistence is now covered in `tests/exporter.py`: it seeds the exact
+  event at the destination before creating a cursor-behind exporter, then checks
+  replay advances the cursor without duplicating the version. Exact IMPORT
+  replay against Confluent 7.9.0 is also verified.
 * `DELETE` of an actively RUNNING exporter mid-replay.
 * The bootstrap-after-pruning path. Making `PRUNE_EVERY` configurable is the
   cheaper change and unlocks an end-to-end assertion.

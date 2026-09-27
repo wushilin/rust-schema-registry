@@ -192,6 +192,21 @@ def main():
               until(lambda: d.get("/subjects/:.src:conflict2/versions")[0] == 200),
               d.get("/subjects/:.src:conflict2/versions"))
 
+        print("a paused exporter records a conflict as FAILED when resumed")
+        make_exporter(s, "paused-fail", [":.pf:*"], "NONE", dst_url)
+        check("pause before the event", s.put("/exporters/paused-fail/pause", {})[0] == 200)
+        d.put("/mode/:.pf:?force=true", {"mode": "IMPORT"})
+        squatter = d.post("/subjects/:.pf:squatter/versions",
+                          {"schema": AVRO_CONFLICT, "id": 1, "version": 1})
+        check("destination occupies the id with another schema", squatter[0] == 200, squatter)
+        registered(s, ":.pf:conflict", AVRO_STR)
+        check("resume accepted", s.put("/exporters/paused-fail/resume", {})[0] == 200)
+        st = until(lambda: s.get("/exporters/paused-fail/status")[1]
+                   if s.get("/exporters/paused-fail/status")[1].get("state") == "FAILED" else None)
+        check("paused conflict becomes FAILED on resume", st and st.get("state") == "FAILED", st)
+        d.delete("/subjects/:.pf:squatter")
+        d.delete("/subjects/:.pf:squatter", permanent="true")
+
         print("a dead destination goes to ERROR and recovers")
         make_exporter(s, "broken", [":.err:*"], "NONE", "http://127.0.0.1:1")
         registered(s, ":.err:e-value", AVRO_STR)

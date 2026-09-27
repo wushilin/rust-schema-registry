@@ -1,9 +1,23 @@
 # rust-schema-registry
 
+[![ci](https://github.com/wushilin/rust-schema-registry/actions/workflows/ci.yml/badge.svg)](https://github.com/wushilin/rust-schema-registry/actions/workflows/ci.yml)
+
 A Confluent-compatible Schema Registry in Rust: single node, RocksDB storage,
 contexts, schema exporters (schema linking), IMPORT mode, and HTTP Basic auth.
 Speaks the Confluent REST API, so the official Java, Python (and other)
 serializers work against it unchanged.
+
+## Getting it
+
+Prebuilt binaries are on the [releases
+page](https://github.com/wushilin/rust-schema-registry/releases) for Linux,
+macOS and Windows on amd64 and aarch64, and for FreeBSD on amd64, each with a
+`SHA256SUMS` alongside. `aarch64-unknown-freebsd` is not there: Rust ships no
+standard library for it, so it needs `-Zbuild-std` and a cross-compiled
+RocksDB.
+
+Or build it, which needs a C++ toolchain and libclang for RocksDB's bindings
+(`clang libclang-dev` on Debian and Ubuntu):
 
 ```
 cargo build --release

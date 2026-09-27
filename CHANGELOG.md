@@ -1,6 +1,38 @@
 # Changelog
 
-## Unreleased
+## 0.3.0
+
+A release of fixes. Four independent reviews went over the whole
+implementation; what they found is below, and the short version is that the
+authorization layer let callers past their role in three ways, and the change
+log could hold less than what was committed in three more.
+
+**Binaries are now built and published by CI** for Linux, macOS and Windows on
+both amd64 and aarch64, and for FreeBSD on amd64.
+
+### Upgrading
+
+Three changes an operator has to know about:
+
+* **`GET /metrics` now requires the admin role.** It counts and names every
+  host container in the process and their exporters, and containers are meant
+  to share nothing logically. A scraper authenticating as a `readonly` user
+  will start getting 403.
+* **Reading an exporter's record or its config now requires the admin role**
+  (`GET /exporters/{name}` and `.../config`). The config map carries the
+  destination's credentials. `GET /exporters` and `.../status` are unchanged,
+  so monitoring which exporters exist and how each is doing still needs no
+  more than a role.
+* **`[proxy]` replaces `proxy_protocol` and `proxy_trust`** (see below). The
+  version is declared rather than auto-detected, so a mismatch is refused with
+  a warning instead of working by accident.
+
+A data directory from 0.1.0 that was migrated by 0.2.0 has a change log that
+0.2.0 left outside its container - see the migration entry below. The rows are
+still on disk but are not readable, and upgrading does not recover them,
+because the format version is already stamped. If exporters on that instance
+were caught up when it was migrated, nothing was lost.
+
 
 Schema mutations now wake exporters through a bounded `named_queue` broadcast
 after the RocksDB batch and changelog row are durable. The exporter still
@@ -13,8 +45,12 @@ version with the same id and schema. Confluent adds `schema` and `version` to
 the replay response; the first response contains only `id`.
 
 **Additional review fixes.** Basic auth now bounds concurrent bcrypt work to
-four requests and verifies unknown usernames against a dummy bcrypt digest;
-at capacity it returns the same 401 challenge. The auth cache key encodes
+four requests and verifies unknown usernames against a dummy bcrypt digest
+built at the highest cost any configured user uses - a cheaper dummy answers
+faster and is the same oracle. Where no user is stored as a hash there is no
+dummy at all. At capacity a request waits for a slot rather than being refused:
+answering 401 meant a flood of wrong passwords made correct first-time logins
+fail with "wrong password". The auth cache key encodes
 component lengths, and the `Basic` scheme is parsed case-insensitively.
 Bracketed IPv6 host patterns now route with or without a port, zero-length
 proxy reads preserve the pending prefix, alias lookup errors propagate, and
@@ -97,7 +133,29 @@ notices and nothing else does:
 * `backup --out` writes beside the target and renames, so an interrupted
   backup leaves the previous dump intact.
 
+### Found by reviewing the review
+
+The work that closed the first review's list was itself reviewed, and three of
+its own:
+
+* **`restore --dry-run` performed the restore.** The shortcut that posts a dump
+  to our own `/admin/api/restore` was added in front of the dry-run branch and
+  without the flag, so the CLI wrote every subject and then reported what it
+  "would" do.
+* **A path under `/subjects/` is about a subject even when the name is
+  degenerate.** Deciding subject-or-context from the name meant
+  `/subjects/:.eu:/versions` read as naming a context and refused a writer with
+  403, where an invalid subject name should reach the handler and earn
+  Confluent's 422. The route settles it now; `/config/{x}` and `/mode/{x}` are
+  the only places `:.eu:` means a context.
+* The bcrypt dummy-hash and contention behaviour described above.
+
 ### Tested that was not
+
+Exporters in all three directions that had no test: one registry copying a
+context into itself (which is what a self-to-self exporter is, and where a loop
+would show up), and - in a suite that skips without `CONFLUENT_URL` - exporting
+into a real Confluent and being the destination for Confluent's own exporter.
 
 Concurrency (two writers in one context, sixteen across contexts, a reader
 running against a writer), SIGKILL durability, `ServerConfig::validate`'s

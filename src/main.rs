@@ -171,10 +171,17 @@ async fn main() -> anyhow::Result<()> {
             // leaves yesterday's dump intact rather than half of today's.
             let tmp = format!("{out}.partial");
             use std::io::Write;
-            use std::os::unix::fs::PermissionsExt;
             let mut file = std::fs::OpenOptions::new().create(true).truncate(true).write(true).open(&tmp)
                 .map_err(|e| anyhow::anyhow!("opening {tmp}: {e}"))?;
-            file.set_permissions(std::fs::Permissions::from_mode(0o600)).map_err(|e| anyhow::anyhow!("setting permissions on {tmp}: {e}"))?;
+            // A dump carries the exporters' destination credentials, so it is
+            // not world-readable. Only where a mode means something: Windows
+            // has no `from_mode`, and asking for one there does not compile.
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                file.set_permissions(std::fs::Permissions::from_mode(0o600))
+                    .map_err(|e| anyhow::anyhow!("setting permissions on {tmp}: {e}"))?;
+            }
             file.write_all(text.as_bytes()).map_err(|e| anyhow::anyhow!("writing {tmp}: {e}"))?;
             file.sync_all().map_err(|e| anyhow::anyhow!("syncing {tmp}: {e}"))?;
             std::fs::rename(&tmp, out).map_err(|e| anyhow::anyhow!("renaming {tmp} to {out}: {e}"))?;

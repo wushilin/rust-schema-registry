@@ -32,11 +32,15 @@ jobs:
           - name: linux-aarch64
             os: ubuntu-24.04-arm
             target: aarch64-unknown-linux-gnu
+          # Cross-compiled from an arm64 runner: GitHub retired the Intel
+          # macOS image, and a job asking for it simply queues for ever. The
+          # SDK is universal and `cc` passes the target's -arch through, so
+          # RocksDB's C++ cross-compiles here.
           - name: macos-amd64
-            os: macos-13
+            os: macos-latest
             target: x86_64-apple-darwin
           - name: macos-aarch64
-            os: macos-14
+            os: macos-latest
             target: aarch64-apple-darwin
           - name: windows-amd64
             os: windows-latest
@@ -143,11 +147,12 @@ jobs:
             # librocksdb-sys probes pkg-config first, and on FreeBSD that left
             # the link line asking for a `-lrocksdb` that is not installed.
             export ROCKSDB_NO_PKG_CONFIG=1
-            export SNAPPY_NO_PKG_CONFIG=1
-            export LZ4_NO_PKG_CONFIG=1
-            export ZSTD_NO_PKG_CONFIG=1
-            export BZIP2_NO_PKG_CONFIG=1
-            cargo build --release --locked --bin schema-registry --verbose 2>&1 | tail -40
+            echo "--- rocksdb-related environment ---"
+            env | grep -i -E "rocksdb|^CC=|^CXX=|^LIBCLANG" || echo "(none set)"
+            # Build librocksdb-sys alone first, so its build script's decision
+            # is legible instead of buried under 600 other crates.
+            cargo build --release --locked -p librocksdb-sys -vv 2>&1 | grep -E "rustc-link|ROCKSDB|cargo:warning|error" | head -40 || true
+            cargo build --release --locked --bin schema-registry
 
       - name: Package
         shell: bash

@@ -14,13 +14,11 @@ branches that exist, with nothing asserting them.
 ## Exporter state machine
 
 Covered today: `RUNNING->PAUSED`, `PAUSED->PAUSED`, `PAUSED->RUNNING`,
-`RUNNING->FAILED`, `FAILED` resume refused, `FAILED->reset->RUNNING`,
+`PAUSED->FAILED`, `RUNNING->FAILED`, `FAILED` resume refused, `FAILED->reset->RUNNING`,
 `RUNNING->ERROR`, `ERROR->RUNNING`, explicit pause/resume, reset from RUNNING.
 
 Not covered:
 
-* `PAUSED->FAILED` is now covered in `tests/exporter.py`: an explicitly paused
-  exporter resumes into a destination id conflict and transitions to FAILED.
 * The exporter-specific crash window between destination acknowledgement and
   cursor persistence is now covered in `tests/exporter.py`: it seeds the exact
   event at the destination before creating a cursor-behind exporter, then checks
